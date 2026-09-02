@@ -4,25 +4,26 @@
     <meta charset="utf-8" />
     <title>مركز أسيد لتحفيظ القرآن الكريم</title>
     <script>
-      // تطبيق السمة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
+      // تطبيق السمة الفاخرة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
       try {
+        var THEMES = [
+          'snowgold',
+          'pearlobsidian',
+          'platinumtitan',
+          'ivorybronze',
+          'obsidianroyal',
+          'charcoalsilver',
+          'espressobronze',
+          'cybergold',
+          'desertgold',
+          'emeraldroyal',
+        ];
         var t = localStorage.getItem('assid-center:theme');
-        if (t) {
-          var r = document.documentElement;
-          r.setAttribute('data-app-theme', t);
-          var lux = [
-            'snowgold', 'pearlobsidian', 'platinumtitan', 'ivorybronze',
-            'obsidianroyal', 'charcoalsilver', 'espressobronze', 'cybergold',
-            'desertgold', 'emeraldroyal',
-          ];
-          var full = [
-            'obsidian', 'charcoal', 'gunmetal', 'icenavy',
-            'espresso', 'emerald', 'titanium', 'ember',
-          ];
-          var isLux = lux.indexOf(t) >= 0;
-          r.setAttribute('data-app-surface', isLux || full.indexOf(t) >= 0 ? 'full' : 'flat');
-          if (isLux) r.setAttribute('data-app-frame', 'luxury');
-        }
+        if (THEMES.indexOf(t) < 0) t = 'ivorybronze';
+        var r = document.documentElement;
+        r.setAttribute('data-app-theme', t);
+        r.setAttribute('data-app-surface', 'full');
+        r.setAttribute('data-app-frame', 'luxury');
       } catch (e) {}
     </script>
     <base href="/" />

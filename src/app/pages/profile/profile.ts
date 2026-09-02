@@ -4,26 +4,15 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import {
-  FULL_SURFACE_THEMES,
   LUXURY_THEME_GROUPS,
-  STANDARD_THEMES,
   THEME_DESC,
   THEME_GROUP_LABELS,
   THEME_LABELS,
+  THEME_ORDER,
   THEME_PREVIEW,
-  THEME_SWATCHES,
   ThemeService,
-  type AppTheme,
 } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
-
-interface ThemeSection {
-  label: string;
-  themes: readonly AppTheme[];
-  hint?: string;
-  /** عنوان قسم كبير يسبق هذه المجموعة (يبدأ قسم الثيمات الفاخرة) */
-  sectionHead?: string;
-}
 
 @Component({
   selector: 'app-profile',
@@ -37,49 +26,28 @@ interface ThemeSection {
         <span class="muted" style="font-weight:400;font-size:.78rem">{{ totalCount }} سمة</span>
       </div>
       <div class="card">
-        <p class="muted" style="margin-top:0;font-size:.86rem">
-          اختر سمة الواجهة — كلّ الأسماء والأوصاف بالعربية RTL، والتبديل فوريّ.
-        </p>
+        <div class="lux-section-head" style="margin-top:0;padding-top:0;border:0">
+          <span class="lux-section-title">{{ groupLabels.luxury }}</span>
+          <span class="theme-group-hint">
+            سطح كامل فاخر + إطارات معدنية تحيط بالبطاقات والأزرار والتواريخ. التبديل فوريّ.
+          </span>
+        </div>
 
-        @for (s of sections; track s.label; let first = $first) {
-          @if (s.sectionHead) {
-            <div class="lux-section-head">
-              <span class="lux-section-title">{{ s.sectionHead }}</span>
-              @if (s.hint) { <span class="theme-group-hint">{{ s.hint }}</span> }
-            </div>
-          }
-
-          <div
-            class="theme-group-label"
-            [style.margin-top.px]="first ? 10 : s.sectionHead ? 4 : 18"
-          >
-            {{ s.label }}
-            @if (s.hint && !s.sectionHead) {
-              <span class="theme-group-hint">{{ s.hint }}</span>
-            }
-          </div>
-
+        @for (g of groups; track g.key) {
+          <div class="theme-group-label" style="margin-top:16px">{{ g.label }}</div>
           <div class="theme-list">
-            @for (t of s.themes; track t) {
+            @for (t of g.themes; track t) {
               <button
                 type="button"
                 class="theme-row"
                 [class.active]="theme.theme() === t"
                 (click)="theme.set(t)"
               >
-                @if (previews[t]) {
-                  <span
-                    class="theme-swatch grad"
-                    aria-hidden="true"
-                    [style.background]="previews[t]"
-                  ></span>
-                } @else {
-                  <span class="theme-swatch" aria-hidden="true">
-                    <i [style.background]="swatches[t][0]"></i>
-                    <i [style.background]="swatches[t][1]"></i>
-                    <i [style.background]="swatches[t][2]"></i>
-                  </span>
-                }
+                <span
+                  class="theme-swatch grad"
+                  aria-hidden="true"
+                  [style.background]="previews[t]"
+                ></span>
                 <span class="theme-text">
                   <span class="theme-name">{{ labels[t] }}</span>
                   <span class="theme-desc">{{ descriptions[t] }}</span>
@@ -117,9 +85,26 @@ interface ThemeSection {
       </div>
 
       <div class="card">
-        <button class="btn btn-danger btn-block" type="button" (click)="logout()">
+        <button class="btn btn-logout btn-block btn-lg" type="button" (click)="logout()">
+          <svg
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+            <path d="M10 17 5 12l5-5M5 12h11" />
+          </svg>
           تسجيل الخروج
         </button>
+        <p class="hint" style="text-align:center;margin-top:8px">
+          إنهاء الجلسة والعودة إلى شاشة الدخول.
+        </p>
       </div>
 
       <p class="hint" style="text-align:center">مركز أسيد لتحفيظ القرآن الكريم — واجهة المعلّم</p>
@@ -180,7 +165,10 @@ interface ThemeSection {
         background: var(--surface);
         color: var(--text);
         cursor: pointer;
-        transition: border-color var(--ease), box-shadow var(--ease), transform 0.1s ease;
+        transition:
+          border-color var(--ease),
+          box-shadow var(--ease),
+          transform 0.1s ease;
       }
       .theme-row:active {
         transform: scale(0.99);
@@ -235,28 +223,11 @@ export class ProfilePage {
 
   readonly labels = THEME_LABELS;
   readonly descriptions = THEME_DESC;
-  readonly swatches = THEME_SWATCHES;
   readonly previews = THEME_PREVIEW;
+  readonly groupLabels = THEME_GROUP_LABELS;
+  readonly groups = LUXURY_THEME_GROUPS;
 
-  readonly sections: ThemeSection[] = [
-    { label: THEME_GROUP_LABELS.standard, themes: STANDARD_THEMES },
-    {
-      label: THEME_GROUP_LABELS.full,
-      hint: 'تغيّر خلفية التطبيق بالكامل بتدرّج غنيّ',
-      themes: FULL_SURFACE_THEMES,
-    },
-    ...LUXURY_THEME_GROUPS.map((g, i) => ({
-      label: g.label,
-      themes: g.themes,
-      sectionHead: i === 0 ? THEME_GROUP_LABELS.luxury : undefined,
-      hint:
-        i === 0
-          ? 'سطح كامل فاخر + إطارات معدنية تحيط بالبطاقات والأزرار والتواريخ من كل الجهات'
-          : undefined,
-    })),
-  ];
-
-  readonly totalCount = this.sections.reduce((n, s) => n + s.themes.length, 0);
+  readonly totalCount = THEME_ORDER.length;
 
   name = this.auth.teacher()?.name ?? '';
   phone = this.auth.teacher()?.phone ?? '';
@@ -269,7 +240,8 @@ export class ProfilePage {
   }
 
   async logout(): Promise<void> {
-    if (!(await this.notify.confirm('تسجيل الخروج؟', { confirmText: 'خروج', danger: true }))) return;
+    if (!(await this.notify.confirm('تسجيل الخروج؟', { confirmText: 'خروج', danger: true })))
+      return;
     await this.auth.logout();
     await this.router.navigateByUrl('/login');
   }

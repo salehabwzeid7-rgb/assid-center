@@ -34,7 +34,37 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
           <div class="type-grid">
             @for (t of typeOrder; track t) {
               <button type="button" class="type-opt" [class.active]="type === t" (click)="type = t">
-                <span class="type-ico">{{ t === 'memorization' ? '📖' : '🎵' }}</span>
+                <span class="type-ico" aria-hidden="true">
+                  @if (t === 'memorization') {
+                    <!-- مصحف مفتوح — الحفظ -->
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M12 6c-1.9-1.4-4.4-2.1-7.3-2.1v14.2c2.9 0 5.4.7 7.3 2.1 1.9-1.4 4.4-2.1 7.3-2.1V3.9C16.4 3.9 13.9 4.6 12 6Z"
+                      />
+                      <path d="M12 6v14.2" />
+                    </svg>
+                  } @else {
+                    <!-- علامة مصحف — التجويد والتلاوة -->
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="1.7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M6.5 3.5h11a1 1 0 0 1 1 1v16l-6.5-3.8L5.5 20.5v-16a1 1 0 0 1 1-1Z" />
+                      <path d="M9 8h6M9 11.5h4" />
+                    </svg>
+                  }
+                </span>
                 <span>{{ typeLabels[t] }}</span>
               </button>
             }
@@ -117,8 +147,16 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
         border-color: var(--gold);
         box-shadow: var(--ring);
       }
+      .type-opt.active .type-ico {
+        color: var(--gold-deep);
+      }
       .type-ico {
-        font-size: 1.5rem;
+        color: var(--green);
+        line-height: 0;
+      }
+      .type-ico svg {
+        width: 26px;
+        height: 26px;
       }
       .day-grid {
         display: grid;

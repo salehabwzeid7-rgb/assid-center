@@ -44,10 +44,10 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
             class="btn btn-primary btn-block btn-lg"
             [routerLink]="['/student', s.id, 'recitation']"
           >
-            🎙️ تسجيل تسميع
+            📖 تسجيل تسميع
           </a>
           <a class="btn btn-block" [routerLink]="['/student', s.id, 'evaluation']">
-            ⭐ تقييم يومي
+            ✦ تقييم يومي
           </a>
         </div>
 
@@ -122,7 +122,7 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
           @if (recitations() === undefined) {
             <div class="spinner"></div>
           } @else if (recitations()!.length === 0) {
-            <div class="empty"><span class="icon">🎙️</span> لا توجد سجلات تسميع بعد.</div>
+            <div class="empty"><span class="icon">📖</span> لا توجد سجلات تسميع بعد.</div>
           } @else {
             @for (r of recitations(); track r.id) {
               <div class="card">
