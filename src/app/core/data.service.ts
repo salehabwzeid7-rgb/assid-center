@@ -106,6 +106,11 @@ export class DataService {
     return this.live<Session>(q, destroyRef, this.byDateDesc);
   }
 
+  /** كل الجلسات (للجدول واللوحة الرئيسية) — مرتّبة بالأحدث تاريخًا. */
+  allSessions(destroyRef?: DestroyRef): Signal<Session[] | undefined> {
+    return this.live<Session>(query(this.col(COL.sessions)), destroyRef, this.byDateDesc);
+  }
+
   async getSession(id: string): Promise<Session | null> {
     const s = await getDoc(this.ref(COL.sessions, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;

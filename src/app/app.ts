@@ -3,14 +3,16 @@ import { RouterOutlet } from '@angular/router';
 import { Location } from '@angular/common';
 import { App as CapApp } from '@capacitor/app';
 import { ThemeService } from './core/theme.service';
+import { BottomNavComponent } from './shared/bottom-nav';
 import { ToastHostComponent } from './shared/toast-host';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastHostComponent],
+  imports: [RouterOutlet, ToastHostComponent, BottomNavComponent],
   template: `
     <div class="app-shell">
       <router-outlet />
+      <app-bottom-nav />
     </div>
     <app-toast-host />
   `,

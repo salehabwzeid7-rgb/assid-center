@@ -16,6 +16,14 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/dashboard/dashboard').then((m) => m.DashboardPage),
       },
       {
+        path: 'circles',
+        loadComponent: () => import('./pages/circles/circles').then((m) => m.CirclesPage),
+      },
+      {
+        path: 'schedule',
+        loadComponent: () => import('./pages/schedule/schedule').then((m) => m.SchedulePage),
+      },
+      {
         path: 'profile',
         loadComponent: () => import('./pages/profile/profile').then((m) => m.ProfilePage),
       },
