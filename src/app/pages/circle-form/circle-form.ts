@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, OnInit, inject, signal } from '@angular/c
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -55,6 +56,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class CircleFormPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
@@ -87,23 +89,31 @@ export class CircleFormPage implements OnInit {
     }
     this.saving.set(true);
     this.error.set('');
-    try {
-      if (this.editing() && this.id) {
-        await this.data.updateCircle(this.id, { name: this.name.trim(), schedule: this.schedule.trim() });
-        await this.router.navigate(['/circle', this.id]);
-      } else {
-        const id = await this.data.addCircle({ name: this.name, schedule: this.schedule });
-        await this.router.navigate(['/circle', id]);
-      }
-    } catch {
-      this.error.set('تعذّر الحفظ، تحقق من الاتصال');
-      this.saving.set(false);
-    }
+    const editing = this.editing() && this.id;
+    const res = await this.notify.run(
+      () =>
+        editing
+          ? this.data
+              .updateCircle(this.id!, { name: this.name.trim(), schedule: this.schedule.trim() })
+              .then(() => this.id!)
+          : this.data.addCircle({ name: this.name, schedule: this.schedule }),
+      { success: editing ? 'حُفظت التعديلات' : 'أُنشئت الحلقة', error: 'تعذّر حفظ الحلقة' },
+    );
+    this.saving.set(false);
+    if (res) await this.router.navigate(['/circle', res]);
   }
 
   async remove(): Promise<void> {
-    if (!this.id || !confirm('حذف هذه الحلقة؟')) return;
-    await this.data.deleteCircle(this.id);
-    await this.router.navigateByUrl('/');
+    if (!this.id) return;
+    const ok = await this.notify.confirm('حذف هذه الحلقة؟', {
+      message: 'لا يُحذف طلاب الحلقة، لكنها تختفي من قائمتك.',
+      confirmText: 'حذف',
+      danger: true,
+    });
+    if (!ok) return;
+    const done = await this.notify.run(() => this.data.deleteCircle(this.id!).then(() => true), {
+      success: 'حُذفت الحلقة',
+    });
+    if (done) await this.router.navigateByUrl('/');
   }
 }

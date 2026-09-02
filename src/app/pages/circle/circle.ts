@@ -2,6 +2,7 @@ import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angula
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import { SESSION_STATUS_LABELS, type Circle } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -139,6 +140,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class CirclePage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
@@ -201,11 +203,11 @@ export class CirclePage implements OnInit {
   private async start(date: string): Promise<void> {
     if (this.studentTotal() === 0) return;
     this.starting.set(true);
-    try {
-      const sid = await this.data.openSession(this.id, date);
-      await this.router.navigate(['/session', sid]);
-    } finally {
-      this.starting.set(false);
-    }
+    const sid = await this.notify.run(() => this.data.openSession(this.id, date), {
+      loading: 'جارٍ فتح الجلسة…',
+      error: 'تعذّر فتح الجلسة',
+    });
+    this.starting.set(false);
+    if (sid) await this.router.navigate(['/session', sid]);
   }
 }

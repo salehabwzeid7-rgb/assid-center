@@ -197,7 +197,7 @@ textarea {
   padding: var(--safe-top) 14px 0;
   background: var(--header-grad);
   color: #fff;
-  box-shadow: 0 2px 14px rgba(10, 60, 40, 0.28);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.22);
   border-bottom: 2px solid var(--gold);
 }
 
@@ -413,7 +413,7 @@ textarea {
 .btn-primary {
   background: var(--green);
   color: #fff;
-  box-shadow: 0 6px 16px rgba(13, 92, 63, 0.28);
+  box-shadow: var(--shadow-lg);
 }
 
 .btn-primary:active {
@@ -861,4 +861,317 @@ textarea {
 /* بطاقات التقدير في الإعدادات */
 [data-app-theme='heritage'] .tabs button.active {
   color: var(--gold-deep);
+}
+
+/* ==========================================================================
+   سمات إضافية احترافية — مصمَّمة لمراكز تحفيظ القرآن والمراكز التعليمية
+   كلٌّ منها بمجموعة رموز ألوان (فاتح + داكن) تُطبَّق على النظام كاملًا.
+   ========================================================================== */
+
+/* ---------- سكينة: أزرق ليلي هادئ + لمسة فيروزية ---------- */
+:root[data-app-theme='sakina'] {
+  --green: #1e4d6b;
+  --green-deep: #143a52;
+  --green-mid: #2f6b8f;
+  --green-tint: #e7f0f4;
+  --header-grad: linear-gradient(135deg, #235d80 0%, #143a52 100%);
+  --gold: #2a9d8f;
+  --gold-deep: #1f7a6f;
+  --gold-tint: #d9efec;
+  --gold-tint2: #eef8f6;
+  --bg: #f1f6f8;
+  --surface: #ffffff;
+  --surface-2: #e9f1f4;
+  --text: #16303d;
+  --text-soft: #5a7683;
+  --border: #d9e6eb;
+  --ok: #1e8f7a;
+  --ok-bg: #dff2ef;
+  --ring: 0 0 0 3px rgba(42, 157, 143, 0.28);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-app-theme='sakina'] {
+    --green: #4aa3cf;
+    --green-deep: #2f6b8f;
+    --green-mid: #63b7de;
+    --green-tint: #12212a;
+    --header-grad: linear-gradient(135deg, #1f5877 0%, #10222e 100%);
+    --gold: #3fc0b0;
+    --gold-deep: #2f9c8f;
+    --gold-tint: #12241f;
+    --gold-tint2: #0f1f1b;
+    --bg: #0d1720;
+    --surface: #14202a;
+    --surface-2: #1c2c37;
+    --text: #e6eef2;
+    --text-soft: #96b0bd;
+    --border: #263946;
+  }
+}
+
+/* ---------- مِحراب: عنّابي تراثي + ذهبي ---------- */
+:root[data-app-theme='mihrab'] {
+  --green: #7b2d3b;
+  --green-deep: #5a1f2b;
+  --green-mid: #96404f;
+  --green-tint: #f3e4e6;
+  --header-grad: linear-gradient(135deg, #8a3543 0%, #5a1f2b 100%);
+  --gold: #c9a227;
+  --gold-deep: #a5811a;
+  --gold-tint: #f4ead0;
+  --gold-tint2: #fbf4e0;
+  --bg: #faf4e6;
+  --surface: #fffdf8;
+  --surface-2: #f2e9d8;
+  --text: #2e1e1f;
+  --text-soft: #6e5a54;
+  --border: #e6dcc6;
+  --ring: 0 0 0 3px rgba(201, 162, 39, 0.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-app-theme='mihrab'] {
+    --green: #c06274;
+    --green-deep: #8a3543;
+    --green-mid: #d17d8d;
+    --green-tint: #241417;
+    --header-grad: linear-gradient(135deg, #7a2e3b 0%, #3d1a20 100%);
+    --gold: #d8bd77;
+    --gold-deep: #c2a558;
+    --gold-tint: #2a2213;
+    --gold-tint2: #241d10;
+    --bg: #140f0d;
+    --surface: #1c1613;
+    --surface-2: #261d18;
+    --text: #efe6df;
+    --text-soft: #b6a49a;
+    --border: #352a24;
+  }
+}
+
+/* ---------- الرَّوضة: أخضر زيتوني + رملي دافئ ---------- */
+:root[data-app-theme='rawda'] {
+  --green: #5a7247;
+  --green-deep: #43592f;
+  --green-mid: #6f8a56;
+  --green-tint: #eaf0e1;
+  --header-grad: linear-gradient(135deg, #64804f 0%, #43592f 100%);
+  --gold: #b98f57;
+  --gold-deep: #96703f;
+  --gold-tint: #f0e6d3;
+  --gold-tint2: #f7efe0;
+  --bg: #f6f1e6;
+  --surface: #fffef9;
+  --surface-2: #eee7d6;
+  --text: #2b2b22;
+  --text-soft: #6b6656;
+  --border: #e3dbc7;
+  --ring: 0 0 0 3px rgba(185, 143, 87, 0.3);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-app-theme='rawda'] {
+    --green: #8caf6f;
+    --green-deep: #5a7247;
+    --green-mid: #9fc182;
+    --green-tint: #171d12;
+    --header-grad: linear-gradient(135deg, #4c6338 0%, #2c3a20 100%);
+    --gold: #d0a978;
+    --gold-deep: #b08a58;
+    --gold-tint: #241d13;
+    --gold-tint2: #1f1910;
+    --bg: #12130d;
+    --surface: #1a1c13;
+    --surface-2: #23261a;
+    --text: #ecebdf;
+    --text-soft: #b0ad96;
+    --border: #333524;
+  }
+}
+
+/* ---------- نور: أحادي احترافي عالي التباين + لمسة ذهبية واحدة ---------- */
+:root[data-app-theme='noor'] {
+  --green: #2b2b2b;
+  --green-deep: #1a1a1a;
+  --green-mid: #4a4a4a;
+  --green-tint: #eeeae2;
+  --header-grad: linear-gradient(135deg, #333333 0%, #1c1c1c 100%);
+  --gold: #b8952e;
+  --gold-deep: #8f7220;
+  --gold-tint: #efe6ce;
+  --gold-tint2: #f6efdd;
+  --bg: #faf8f4;
+  --surface: #ffffff;
+  --surface-2: #efece4;
+  --text: #1f1f1f;
+  --text-soft: #666666;
+  --border: #e2ded4;
+  --ring: 0 0 0 3px rgba(184, 149, 46, 0.32);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-app-theme='noor'] {
+    --green: #c7a94e;
+    --green-deep: #a5872f;
+    --green-mid: #d8bd6c;
+    --green-tint: #22201a;
+    --header-grad: linear-gradient(135deg, #2a2a2a 0%, #161616 100%);
+    --gold: #d8bd77;
+    --gold-deep: #c2a558;
+    --gold-tint: #22201a;
+    --gold-tint2: #1d1b15;
+    --bg: #111111;
+    --surface: #1a1a1a;
+    --surface-2: #242424;
+    --text: #efece5;
+    --text-soft: #a5a096;
+    --border: #333333;
+  }
+}
+/* في «نور» يكون زرّ الترويسة والنصّ داكنين على تدرّج فحمي */
+[data-app-theme='noor'] .app-header {
+  border-bottom-color: var(--gold);
+}
+[data-app-theme='noor'] .section-title::before {
+  background: var(--gold);
+}
+
+/* ==========================================================================
+   الإشعارات: التوستات + نافذة التأكيد + شريط الاتصال/المزامنة
+   ========================================================================== */
+
+.net-banner {
+  position: fixed;
+  top: calc(var(--safe-top) + 6px);
+  inset-inline: 0;
+  margin: 0 auto;
+  width: max-content;
+  max-width: 92vw;
+  z-index: 90;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+  animation: fade-up var(--ease);
+}
+.net-banner.syncing {
+  background: var(--green-tint);
+  color: var(--green-mid);
+  border-color: var(--green-mid);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.net-banner .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green-mid);
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.toast-stack {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(16px + var(--safe-bottom));
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  padding: 0 12px;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  animation: toast-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.toast .ico {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #fff;
+}
+.toast .msg {
+  flex: 1;
+  line-height: 1.5;
+}
+.toast.t-success .ico { background: var(--ok); }
+.toast.t-error .ico { background: var(--danger); }
+.toast.t-info .ico { background: var(--green-mid); }
+.toast.t-loading .ico { background: transparent; }
+.toast.t-success { border-inline-start: 4px solid var(--ok); }
+.toast.t-error { border-inline-start: 4px solid var(--danger); }
+.toast .spin {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--border);
+  border-top-color: var(--green-mid);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  animation: fade-up 0.15s ease;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 20px;
+  width: 100%;
+  max-width: 360px;
+  animation: toast-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.modal h3 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+.modal p {
+  margin: 0 0 16px;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}
+.modal-actions {
+  display: flex;
+  gap: 10px;
+}
+.modal-actions .btn {
+  flex: 1;
 }

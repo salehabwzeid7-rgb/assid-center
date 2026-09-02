@@ -1,6 +1,7 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import {
   ATTENDANCE_LABELS,
   GRADE_LABELS,
@@ -186,6 +187,7 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
 export class StudentPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
@@ -236,9 +238,11 @@ export class StudentPage implements OnInit {
   }
 
   async delRec(id: string): Promise<void> {
-    if (confirm('حذف سجل التسميع؟')) await this.data.deleteRecitation(id);
+    if (!(await this.notify.confirm('حذف سجل التسميع؟', { confirmText: 'حذف', danger: true }))) return;
+    await this.notify.run(() => this.data.deleteRecitation(id), { success: 'حُذف سجل التسميع' });
   }
   async delEval(id: string): Promise<void> {
-    if (confirm('حذف التقييم؟')) await this.data.deleteEvaluation(id);
+    if (!(await this.notify.confirm('حذف التقييم؟', { confirmText: 'حذف', danger: true }))) return;
+    await this.notify.run(() => this.data.deleteEvaluation(id), { success: 'حُذف التقييم' });
   }
 }

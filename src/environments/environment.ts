@@ -1,17 +1,14 @@
 /**
- * إعدادات البيئة (تطوير) — مركز أسيد (واجهة المعلّم)
+ * إعدادات البيئة (تطوير) — مركز أسيد
  *
- * ── المحاكي المحلي (useEmulator) ────────────────────────────────────────
- * عندما يكون `useEmulator: true` يتصل التطبيق بـ Firebase Emulator Suite
- * المحلي (مصادقة + Firestore حقيقيان يعملان على جهازك بلا سحابة).
- * شغّل كل شيء بأمر واحد:  npm run dev
- * البيانات حقيقية وتُحفَظ في مجلد .emulator-data بين الجلسات.
+ * إعداد Firebase موحّد في ملف واحد: src/environments/firebase.config.ts
+ * (يُملأ مرة واحدة). هنا نختار فقط أين يتّصل التطبيق:
  *
- * ── الإنتاج ────────────────────────────────────────────────────────────
- * لاستخدام مشروع Firebase حقيقي على السحابة: اجعل `useEmulator: false`
- * واملأ قيم `firebase` أدناه (من إعدادات مشروع Firebase → تطبيق ويب).
- * مفاتيح Firebase عامة وليست سرية؛ الحماية عبر قواعد firestore.rules.
+ *   useEmulator: true   → محاكي Firebase المحلي (npm run dev) — بلا سحابة.
+ *   useEmulator: false  → مشروع Firebase الحقيقي على السحابة.
  */
+import { firebaseConfig } from './firebase.config';
+
 export const environment = {
   production: false,
   useEmulator: true,
@@ -20,12 +17,5 @@ export const environment = {
     firestoreHost: '127.0.0.1',
     firestorePort: 8080,
   },
-  firebase: {
-    apiKey: 'demo-assid-center',
-    authDomain: 'demo-assid-center.firebaseapp.com',
-    projectId: 'demo-assid-center',
-    storageBucket: 'demo-assid-center.appspot.com',
-    messagingSenderId: '000000000000',
-    appId: '1:000000000000:web:0000000000000000000000',
-  },
+  firebase: firebaseConfig,
 };

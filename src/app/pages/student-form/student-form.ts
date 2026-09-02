@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, DestroyRef, OnInit, inject, signal } from
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -88,6 +89,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class StudentFormPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
   private cdr = inject(ChangeDetectorRef);
@@ -152,17 +154,15 @@ export class StudentFormPage implements OnInit {
       currentPlan: this.m.currentPlan.trim() || undefined,
       active: this.m.active,
     };
-    try {
-      if (this.editing() && this.id) {
-        await this.data.updateStudent(this.id, payload);
-        await this.router.navigate(['/student', this.id]);
-      } else {
-        const newId = await this.data.addStudent(payload);
-        await this.router.navigate(['/student', newId]);
-      }
-    } catch {
-      this.error.set('تعذّر الحفظ، تحقق من الاتصال');
-      this.saving.set(false);
-    }
+    const editing = this.editing() && this.id;
+    const targetId = await this.notify.run(
+      () =>
+        editing
+          ? this.data.updateStudent(this.id!, payload).then(() => this.id!)
+          : this.data.addStudent(payload),
+      { success: editing ? 'حُفظت بيانات الطالب' : 'أُضيف الطالب', error: 'تعذّر حفظ الطالب' },
+    );
+    this.saving.set(false);
+    if (targetId) await this.router.navigate(['/student', targetId]);
   }
 }

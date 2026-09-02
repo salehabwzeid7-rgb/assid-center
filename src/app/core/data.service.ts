@@ -1,4 +1,4 @@
-import { Injectable, inject, signal, type Signal, type DestroyRef } from '@angular/core';
+import { Injectable, signal, type Signal, type DestroyRef } from '@angular/core';
 import {
   collection,
   doc,
@@ -16,10 +16,8 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { AuthService } from './auth.service';
 import {
-  SUB,
-  TEACHERS,
+  COL,
   type Circle,
   type Student,
   type Session,
@@ -46,19 +44,12 @@ type NewEvaluation = Omit<EvaluationRecord, 'id' | 'createdAt'>;
 
 @Injectable({ providedIn: 'root' })
 export class DataService {
-  private auth = inject(AuthService);
-
-  private get uid(): string {
-    const id = this.auth.user()?.uid;
-    if (!id) throw new Error('لا يوجد مستخدم مسجَّل الدخول');
-    return id;
-  }
-
+  /** مجموعة مشتركة على مستوى الجذر */
   private col(name: string): CollectionReference<DocumentData> {
-    return collection(db, TEACHERS, this.uid, name);
+    return collection(db, name);
   }
   private ref(name: string, id: string) {
-    return doc(db, TEACHERS, this.uid, name, id);
+    return doc(db, name, id);
   }
 
   private byNameAr = (a: { name: string }, b: { name: string }) =>
@@ -96,33 +87,33 @@ export class DataService {
   // ---------- الحلقات والطلاب ----------
 
   circles(destroyRef?: DestroyRef): Signal<Circle[] | undefined> {
-    return this.live<Circle>(query(this.col(SUB.circles)), destroyRef, this.byNameAr);
+    return this.live<Circle>(query(this.col(COL.circles)), destroyRef, this.byNameAr);
   }
 
   studentsByCircle(circleId: string, destroyRef?: DestroyRef): Signal<Student[] | undefined> {
-    const q = query(this.col(SUB.students), where('circleId', '==', circleId));
+    const q = query(this.col(COL.students), where('circleId', '==', circleId));
     return this.live<Student>(q, destroyRef, this.byNameAr);
   }
 
   allStudents(destroyRef?: DestroyRef): Signal<Student[] | undefined> {
-    return this.live<Student>(query(this.col(SUB.students)), destroyRef, this.byNameAr);
+    return this.live<Student>(query(this.col(COL.students)), destroyRef, this.byNameAr);
   }
 
   // ---------- الجلسات ----------
 
   sessionsByCircle(circleId: string, destroyRef?: DestroyRef): Signal<Session[] | undefined> {
-    const q = query(this.col(SUB.sessions), where('circleId', '==', circleId));
+    const q = query(this.col(COL.sessions), where('circleId', '==', circleId));
     return this.live<Session>(q, destroyRef, this.byDateDesc);
   }
 
   async getSession(id: string): Promise<Session | null> {
-    const s = await getDoc(this.ref(SUB.sessions, id));
+    const s = await getDoc(this.ref(COL.sessions, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;
   }
 
   /** يفتح جلسة الحلقة لتاريخ محدّد؛ يُعيد الموجودة إن وُجدت، وإلا ينشئ واحدة */
   async openSession(circleId: string, date: string): Promise<string> {
-    const snap = await getDocs(query(this.col(SUB.sessions), where('circleId', '==', circleId)));
+    const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
     const existing = snap.docs.find((d) => (d.data() as Session).date === date);
     if (existing) {
       if ((existing.data() as Session).status === 'closed') {
@@ -130,7 +121,7 @@ export class DataService {
       }
       return existing.id;
     }
-    const created = await addDoc(this.col(SUB.sessions), {
+    const created = await addDoc(this.col(COL.sessions), {
       circleId,
       date,
       status: 'open' as SessionStatus,
@@ -140,33 +131,33 @@ export class DataService {
   }
 
   async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
-    await updateDoc(this.ref(SUB.sessions, id), {
+    await updateDoc(this.ref(COL.sessions, id), {
       status,
       ...(status === 'closed' ? { closedAt: Date.now() } : {}),
     });
   }
 
   async setSessionNote(id: string, note: string): Promise<void> {
-    await updateDoc(this.ref(SUB.sessions, id), { note });
+    await updateDoc(this.ref(COL.sessions, id), { note });
   }
 
   /** حذف الجلسة وكل حضورها وتسميعها */
   async deleteSession(id: string): Promise<void> {
     const [att, rec] = await Promise.all([
-      getDocs(query(this.col(SUB.attendance), where('sessionId', '==', id))),
-      getDocs(query(this.col(SUB.recitations), where('sessionId', '==', id))),
+      getDocs(query(this.col(COL.attendance), where('sessionId', '==', id))),
+      getDocs(query(this.col(COL.recitations), where('sessionId', '==', id))),
     ]);
     await Promise.all([
       ...att.docs.map((d) => deleteDoc(d.ref)),
       ...rec.docs.map((d) => deleteDoc(d.ref)),
-      deleteDoc(this.ref(SUB.sessions, id)),
+      deleteDoc(this.ref(COL.sessions, id)),
     ]);
   }
 
   // ---------- سجلات ضمن جلسة ----------
 
   sessionAttendance(sessionId: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(SUB.attendance), where('sessionId', '==', sessionId));
+    const q = query(this.col(COL.attendance), where('sessionId', '==', sessionId));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
 
@@ -174,7 +165,7 @@ export class DataService {
     sessionId: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(SUB.recitations), where('sessionId', '==', sessionId));
+    const q = query(this.col(COL.recitations), where('sessionId', '==', sessionId));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
@@ -186,7 +177,7 @@ export class DataService {
     status: AttendanceRecord['status'];
   }): Promise<void> {
     const id = `${input.sessionId}_${input.studentId}`;
-    await setDoc(this.ref(SUB.attendance, id), { ...input, createdAt: Date.now() });
+    await setDoc(this.ref(COL.attendance, id), { ...input, createdAt: Date.now() });
   }
 
   /** تسميع الطالب ضمن جلسة — سجل واحد لكل طالب في الجلسة (قابل للتعديل) */
@@ -196,14 +187,14 @@ export class DataService {
     input: NewRecitation,
   ): Promise<void> {
     const id = `${sessionId}_${studentId}`;
-    await setDoc(this.ref(SUB.recitations, id), { ...clean(input), createdAt: Date.now() });
+    await setDoc(this.ref(COL.recitations, id), { ...clean(input), createdAt: Date.now() });
   }
 
   async getSessionRecitation(
     sessionId: string,
     studentId: string,
   ): Promise<RecitationRecord | null> {
-    const s = await getDoc(this.ref(SUB.recitations, `${sessionId}_${studentId}`));
+    const s = await getDoc(this.ref(COL.recitations, `${sessionId}_${studentId}`));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as RecitationRecord) : null;
   }
 
@@ -213,7 +204,7 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(SUB.recitations), where('studentId', '==', studentId));
+    const q = query(this.col(COL.recitations), where('studentId', '==', studentId));
     return this.live<RecitationRecord>(q, destroyRef, this.byDateDesc);
   }
 
@@ -221,7 +212,7 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(SUB.attendance), where('studentId', '==', studentId));
+    const q = query(this.col(COL.attendance), where('studentId', '==', studentId));
     return this.live<AttendanceRecord>(q, destroyRef, this.byDateDesc);
   }
 
@@ -229,14 +220,14 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<EvaluationRecord[] | undefined> {
-    const q = query(this.col(SUB.evaluations), where('studentId', '==', studentId));
+    const q = query(this.col(COL.evaluations), where('studentId', '==', studentId));
     return this.live<EvaluationRecord>(q, destroyRef, this.byDateDesc);
   }
 
   // ---------- سجلات الحلقة (للإحصائيات) ----------
 
   circleAttendance(circleId: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(SUB.attendance), where('circleId', '==', circleId));
+    const q = query(this.col(COL.attendance), where('circleId', '==', circleId));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
 
@@ -244,38 +235,38 @@ export class DataService {
     circleId: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(SUB.recitations), where('circleId', '==', circleId));
+    const q = query(this.col(COL.recitations), where('circleId', '==', circleId));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
   // ---------- للوحة الرئيسية ----------
 
   attendanceForDate(date: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(SUB.attendance), where('date', '==', date));
+    const q = query(this.col(COL.attendance), where('date', '==', date));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
 
   recitationsForDate(date: string, destroyRef?: DestroyRef): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(SUB.recitations), where('date', '==', date));
+    const q = query(this.col(COL.recitations), where('date', '==', date));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
   // ---------- قراءات لمرة واحدة ----------
 
   async getCircle(id: string): Promise<Circle | null> {
-    const s = await getDoc(this.ref(SUB.circles, id));
+    const s = await getDoc(this.ref(COL.circles, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Circle) : null;
   }
 
   async getStudent(id: string): Promise<Student | null> {
-    const s = await getDoc(this.ref(SUB.students, id));
+    const s = await getDoc(this.ref(COL.students, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Student) : null;
   }
 
   // ---------- كتابة ----------
 
   async addCircle(input: NewCircle): Promise<string> {
-    const created = await addDoc(this.col(SUB.circles), {
+    const created = await addDoc(this.col(COL.circles), {
       name: input.name.trim(),
       schedule: input.schedule?.trim() ?? '',
       createdAt: Date.now(),
@@ -284,15 +275,15 @@ export class DataService {
   }
 
   async updateCircle(id: string, patch: Partial<NewCircle>): Promise<void> {
-    await updateDoc(this.ref(SUB.circles, id), clean(patch));
+    await updateDoc(this.ref(COL.circles, id), clean(patch));
   }
 
   async deleteCircle(id: string): Promise<void> {
-    await deleteDoc(this.ref(SUB.circles, id));
+    await deleteDoc(this.ref(COL.circles, id));
   }
 
   async addStudent(input: NewStudent): Promise<string> {
-    const created = await addDoc(this.col(SUB.students), {
+    const created = await addDoc(this.col(COL.students), {
       ...clean(input),
       name: input.name.trim(),
       createdAt: Date.now(),
@@ -301,15 +292,15 @@ export class DataService {
   }
 
   async updateStudent(id: string, patch: Partial<NewStudent>): Promise<void> {
-    await updateDoc(this.ref(SUB.students, id), clean(patch));
+    await updateDoc(this.ref(COL.students, id), clean(patch));
   }
 
   async setStudentActive(id: string, active: boolean): Promise<void> {
-    await updateDoc(this.ref(SUB.students, id), { active });
+    await updateDoc(this.ref(COL.students, id), { active });
   }
 
   async addRecitation(input: NewRecitation): Promise<string> {
-    const created = await addDoc(this.col(SUB.recitations), {
+    const created = await addDoc(this.col(COL.recitations), {
       ...clean(input),
       createdAt: Date.now(),
     });
@@ -317,7 +308,7 @@ export class DataService {
   }
 
   async addEvaluation(input: NewEvaluation): Promise<string> {
-    const created = await addDoc(this.col(SUB.evaluations), {
+    const created = await addDoc(this.col(COL.evaluations), {
       ...clean(input),
       createdAt: Date.now(),
     });
@@ -325,11 +316,11 @@ export class DataService {
   }
 
   async deleteRecitation(id: string): Promise<void> {
-    await deleteDoc(this.ref(SUB.recitations, id));
+    await deleteDoc(this.ref(COL.recitations, id));
   }
 
   async deleteEvaluation(id: string): Promise<void> {
-    await deleteDoc(this.ref(SUB.evaluations, id));
+    await deleteDoc(this.ref(COL.evaluations, id));
   }
 }
 

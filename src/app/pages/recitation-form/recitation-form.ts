@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, OnInit, inject, signal } from '@angular/c
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import {
   RECITATION_KIND_LABELS,
   type Grade,
@@ -142,6 +143,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class RecitationFormPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
   private cdr = inject(ChangeDetectorRef);
 
@@ -238,19 +240,20 @@ export class RecitationFormPage implements OnInit {
       promptCount: Number(this.m.promptCount) || 0,
       notes: this.m.notes.trim() || undefined,
     };
-    try {
-      if (this.sessionId) {
-        await this.data.upsertSessionRecitation(this.sessionId, s.id, payload);
-        await this.router.navigate(['/session', this.sessionId], {
-          queryParams: { step: 'recitation' },
-        });
-      } else {
-        await this.data.addRecitation(payload);
-        await this.router.navigate(['/student', s.id]);
-      }
-    } catch {
-      this.error.set('تعذّر حفظ السجل، تحقق من الاتصال');
-      this.saving.set(false);
+    const sid = this.sessionId;
+    const ok = await this.notify.run(
+      () =>
+        sid
+          ? this.data.upsertSessionRecitation(sid, s.id, payload).then(() => true)
+          : this.data.addRecitation(payload).then(() => true),
+      { success: 'حُفظ التسميع', error: 'تعذّر حفظ سجل التسميع' },
+    );
+    this.saving.set(false);
+    if (!ok) return;
+    if (sid) {
+      await this.router.navigate(['/session', sid], { queryParams: { step: 'recitation' } });
+    } else {
+      await this.router.navigate(['/student', s.id]);
     }
   }
 }

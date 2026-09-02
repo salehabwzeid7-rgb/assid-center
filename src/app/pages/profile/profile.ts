@@ -1,8 +1,14 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
-import { ThemeService, THEME_LABELS, type AppTheme } from '../../core/theme.service';
+import { NotifyService } from '../../core/notify.service';
+import {
+  ThemeService,
+  THEME_LABELS,
+  THEME_ORDER,
+  THEME_SWATCHES,
+} from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -14,7 +20,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <div class="page">
       <div class="section-title">المظهر</div>
       <div class="card">
-        <p class="muted" style="margin-top:0;font-size:.86rem">اختر سمة الواجهة</p>
+        <p class="muted" style="margin-top:0;font-size:.86rem">
+          اختر سمة الواجهة — كلّها تدعم العربية RTL والوضعين الفاتح والداكن.
+        </p>
         <div class="theme-grid">
           @for (t of themes; track t) {
             <button
@@ -23,8 +31,10 @@ import { PageHeaderComponent } from '../../shared/page-header';
               [class.active]="theme.theme() === t"
               (click)="theme.set(t)"
             >
-              <span class="theme-swatch" [attr.data-t]="t">
-                <i></i><i></i><i></i>
+              <span class="theme-swatch">
+                <i [style.background]="swatches[t][0]"></i>
+                <i [style.background]="swatches[t][1]"></i>
+                <i [style.background]="swatches[t][2]"></i>
               </span>
               <span class="theme-name">{{ labels[t] }}</span>
             </button>
@@ -43,16 +53,17 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <input id="phone" name="phone" type="tel" inputmode="tel" dir="ltr" [(ngModel)]="phone" />
         </div>
         <div class="field">
-          <label>البريد الإلكتروني</label>
+          <label>معرّف الدخول</label>
           <input [value]="auth.teacher()?.email || ''" dir="ltr" disabled />
         </div>
 
-        @if (saved()) {
-          <div class="alert alert-ok">تم حفظ البيانات</div>
-        }
-
-        <button class="btn btn-primary btn-block" type="button" [disabled]="saving()" (click)="save()">
-          {{ saving() ? 'جارٍ الحفظ…' : 'حفظ' }}
+        <button
+          class="btn btn-primary btn-block"
+          type="button"
+          [disabled]="notify.syncing()"
+          (click)="save()"
+        >
+          حفظ البيانات
         </button>
       </div>
 
@@ -81,6 +92,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
         background: var(--surface);
+        color: var(--text);
         cursor: pointer;
         transition: all var(--ease);
       }
@@ -103,52 +115,31 @@ import { PageHeaderComponent } from '../../shared/page-header';
       .theme-swatch i {
         flex: 1;
       }
-      .theme-swatch[data-t='default'] i:nth-child(1) {
-        background: #0d5c3f;
-      }
-      .theme-swatch[data-t='default'] i:nth-child(2) {
-        background: #c9a14a;
-      }
-      .theme-swatch[data-t='default'] i:nth-child(3) {
-        background: #f6f4ec;
-      }
-      .theme-swatch[data-t='heritage'] i:nth-child(1) {
-        background: #e0980f;
-      }
-      .theme-swatch[data-t='heritage'] i:nth-child(2) {
-        background: #1f7a3a;
-      }
-      .theme-swatch[data-t='heritage'] i:nth-child(3) {
-        background: #faf5e8;
-      }
     `,
   ],
 })
 export class ProfilePage {
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
+  readonly notify = inject(NotifyService);
   private router = inject(Router);
 
-  readonly themes: AppTheme[] = ['default', 'heritage'];
+  readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;
+  readonly swatches = THEME_SWATCHES;
 
   name = this.auth.teacher()?.name ?? '';
   phone = this.auth.teacher()?.phone ?? '';
-  readonly saving = signal(false);
-  readonly saved = signal(false);
 
   async save(): Promise<void> {
-    this.saving.set(true);
-    this.saved.set(false);
-    try {
-      await this.auth.updateTeacher({ name: this.name.trim(), phone: this.phone.trim() });
-      this.saved.set(true);
-    } finally {
-      this.saving.set(false);
-    }
+    await this.notify.run(
+      () => this.auth.updateTeacher({ name: this.name.trim(), phone: this.phone.trim() }),
+      { loading: 'جارٍ حفظ البيانات…', success: 'تم حفظ بيانات المعلّم', error: 'تعذّر الحفظ' },
+    );
   }
 
   async logout(): Promise<void> {
+    if (!(await this.notify.confirm('تسجيل الخروج؟', { confirmText: 'خروج', danger: true }))) return;
     await this.auth.logout();
     await this.router.navigateByUrl('/login');
   }

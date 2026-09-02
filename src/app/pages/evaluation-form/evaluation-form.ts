@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import type { Grade, Student } from '../../core/models';
 import { GradePickerComponent } from '../../shared/grade-picker';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -53,6 +54,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class EvaluationFormPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
 
   readonly studentId = this.route.snapshot.paramMap.get('id')!;
@@ -80,22 +82,24 @@ export class EvaluationFormPage implements OnInit {
     }
     this.saving.set(true);
     this.error.set('');
-    try {
-      await this.data.addEvaluation({
-        studentId: s.id,
-        circleId: s.circleId,
-        date: this.date,
-        memorization: this.memorization(),
-        review: this.review(),
-        tajweed: this.tajweed(),
-        attention: this.attention(),
-        behavior: this.behavior(),
-        notes: this.notes.trim() || undefined,
-      });
-      await this.router.navigate(['/student', s.id]);
-    } catch {
-      this.error.set('تعذّر حفظ التقييم، تحقق من الاتصال');
-      this.saving.set(false);
-    }
+    const ok = await this.notify.run(
+      () =>
+        this.data
+          .addEvaluation({
+            studentId: s.id,
+            circleId: s.circleId,
+            date: this.date,
+            memorization: this.memorization(),
+            review: this.review(),
+            tajweed: this.tajweed(),
+            attention: this.attention(),
+            behavior: this.behavior(),
+            notes: this.notes.trim() || undefined,
+          })
+          .then(() => true),
+      { success: 'حُفظ التقييم اليومي', error: 'تعذّر حفظ التقييم' },
+    );
+    this.saving.set(false);
+    if (ok) await this.router.navigate(['/student', s.id]);
   }
 }

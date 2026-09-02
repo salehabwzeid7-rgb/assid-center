@@ -1,14 +1,14 @@
 /* ==========================================================================
    نماذج البيانات — مركز أسيد (واجهة المعلّم)
 
-   تُخزَّن كل بيانات المعلّم داخل مجموعات فرعية تحت مستنده:
-     teachers/{uid}
-       ├─ circles/{id}
-       ├─ students/{id}
-       ├─ sessions/{id}        ← جلسة الحلقة (حصّة بتاريخ محدّد)
-       ├─ attendance/{id}      ← id = sessionId_studentId
-       ├─ recitations/{id}
-       └─ evaluations/{id}
+   مجموعات مشتركة على مستوى الجذر (كل معلّم مسجَّل يصل إليها):
+     circles/{id}
+     students/{id}
+     sessions/{id}          ← جلسة الحلقة (حصّة بتاريخ محدّد)
+     attendance/{id}        ← id = sessionId_studentId
+     recitations/{id}
+     evaluations/{id}
+     teachers/{uid}         ← ملف المعلّم فقط (اسم/جوال)
    ========================================================================== */
 
 /** حالة الحضور */
@@ -170,8 +170,8 @@ export interface EvaluationRecord {
   createdAt: number;
 }
 
-/** أسماء المجموعات الفرعية تحت مستند المعلّم */
-export const SUB = {
+/** أسماء المجموعات المشتركة على مستوى الجذر */
+export const COL = {
   circles: 'circles',
   students: 'students',
   sessions: 'sessions',
@@ -180,5 +180,5 @@ export const SUB = {
   evaluations: 'evaluations',
 } as const;
 
-/** المجموعة الجذر للمعلّمين */
+/** مجموعة ملفّات المعلّمين (اسم/جوال فقط) */
 export const TEACHERS = 'teachers';

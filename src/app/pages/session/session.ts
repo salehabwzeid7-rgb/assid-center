@@ -2,6 +2,7 @@ import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angula
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_ORDER,
@@ -181,9 +182,6 @@ type Step = 'attendance' | 'recitation' | 'summary';
                   placeholder="ملاحظة عامة عن سير الجلسة…"
                 ></textarea>
               </div>
-              @if (noteSaved()) {
-                <div class="alert alert-ok" style="margin-top:8px">تم حفظ الملاحظة</div>
-              }
             </div>
 
             <a class="btn btn-block" style="margin-top:12px" [routerLink]="['/circle', session()!.circleId, 'stats']">
@@ -218,6 +216,7 @@ type Step = 'attendance' | 'recitation' | 'summary';
 export class SessionPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
@@ -232,7 +231,6 @@ export class SessionPage implements OnInit {
   }
   readonly circleId = signal('');
   note = '';
-  readonly noteSaved = signal(false);
 
   readonly attLabels = ATTENDANCE_LABELS;
   readonly attOrder = ATTENDANCE_ORDER;
@@ -317,28 +315,37 @@ export class SessionPage implements OnInit {
   async setAttendance(studentId: string, status: AttendanceStatus): Promise<void> {
     const s = this.session();
     if (!s) return;
-    await this.data.upsertSessionAttendance({
-      sessionId: this.id,
-      studentId,
-      circleId: s.circleId,
-      date: s.date,
-      status,
-    });
+    try {
+      await this.data.upsertSessionAttendance({
+        sessionId: this.id,
+        studentId,
+        circleId: s.circleId,
+        date: s.date,
+        status,
+      });
+    } catch (e) {
+      console.error(e);
+      this.notify.error('تعذّر حفظ الحضور — سيُعاد المحاولة تلقائيًا');
+    }
   }
 
   async markAllPresent(): Promise<void> {
     const s = this.session();
     if (!s) return;
-    await Promise.all(
-      (this.students() ?? []).map((st) =>
-        this.data.upsertSessionAttendance({
-          sessionId: this.id,
-          studentId: st.id,
-          circleId: s.circleId,
-          date: s.date,
-          status: 'present',
-        }),
-      ),
+    await this.notify.run(
+      () =>
+        Promise.all(
+          (this.students() ?? []).map((st) =>
+            this.data.upsertSessionAttendance({
+              sessionId: this.id,
+              studentId: st.id,
+              circleId: s.circleId,
+              date: s.date,
+              status: 'present',
+            }),
+          ),
+        ),
+      { success: 'سُجّل حضور الجميع', error: 'تعذّر حفظ الحضور' },
     );
   }
 
@@ -347,14 +354,19 @@ export class SessionPage implements OnInit {
   }
 
   async setStatus(status: 'open' | 'closed'): Promise<void> {
-    await this.data.setSessionStatus(this.id, status);
+    const done = await this.notify.run(
+      () => this.data.setSessionStatus(this.id, status).then(() => true),
+      { success: status === 'closed' ? 'أُنهيت الجلسة' : 'أُعيد فتح الجلسة' },
+    );
+    if (!done) return;
     const s = this.session();
     if (s) this.session.set({ ...s, status });
   }
 
   async saveNote(): Promise<void> {
-    await this.data.setSessionNote(this.id, this.note.trim());
-    this.noteSaved.set(true);
-    setTimeout(() => this.noteSaved.set(false), 1500);
+    await this.notify.run(() => this.data.setSessionNote(this.id, this.note.trim()), {
+      loading: 'جارٍ حفظ الملاحظة…',
+      success: 'حُفظت ملاحظة الجلسة',
+    });
   }
 }
