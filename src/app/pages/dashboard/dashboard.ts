@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { DataService, today } from '../../core/data.service';
 import { dmy, relativeDay, weekdayAr } from '../../core/format';
+import { fmtRange } from '../../core/time';
 import { SchedulerService } from '../../core/scheduler.service';
 import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
 
@@ -177,7 +178,7 @@ import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
             <span class="avatar">{{ circleInitial(s.circleId) }}</span>
             <span class="grow">
               <span class="primary">{{ circleName(s.circleId) }}</span>
-              <span class="secondary">{{ weekdayAr(s.date) }}{{ sessionTime(s) }}</span>
+              <span class="secondary">{{ weekdayAr(s.date) }}{{ timeLabel(s) }}</span>
             </span>
             <span class="when">
               <span class="day">{{ relDay(s.date) }}</span>
@@ -283,8 +284,9 @@ export class DashboardPage {
   circleInitial(id: string): string {
     return this.circleName(id).charAt(0);
   }
-  sessionTime(s: Session): string {
-    return s.time ? ' · ' + s.time : '';
+  timeLabel(s: Session): string {
+    const r = fmtRange(s.fromTime, s.toTime);
+    return r ? ' · ' + r : '';
   }
 
   relDay(date: string): string {

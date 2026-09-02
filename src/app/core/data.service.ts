@@ -16,6 +16,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { SessionLockedError, sessionWindow } from './time';
 import {
   COL,
   type Circle,
@@ -38,6 +39,16 @@ export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/** يرمي SessionLockedError إذا كانت الحصّة خارج نافذتها الزمنية. */
+function assertWithinWindow(s: {
+  date: string;
+  fromTime?: string | null;
+  toTime?: string | null;
+}): void {
+  const w = sessionWindow(s);
+  if (w.state === 'before' || w.state === 'after') throw new SessionLockedError(w.state, w);
+}
+
 /** تواريخ الأيام المتكرّرة القادمة (من اليوم حتى +horizonDays) الموافقة لأيام الأسبوع المختارة */
 export function upcomingDatesFor(weekdays: number[], horizonDays: number): string[] {
   const set = new Set(weekdays);
@@ -55,7 +66,8 @@ type NewCircle = {
   name: string;
   type: CircleType;
   weekdays: number[];
-  time?: string;
+  fromTime: string;
+  toTime: string;
 };
 type NewStudent = Omit<Student, 'id' | 'createdAt'>;
 type NewRecitation = Omit<RecitationRecord, 'id' | 'createdAt'>;
@@ -139,25 +151,39 @@ export class DataService {
    * يفتح جلسة الحلقة لتاريخ محدّد ويُعيد معرّفها.
    * يُعيد الموجودة (المجدولة/المنتهية → تُفتح)، وإلا ينشئ واحدة بمعرّف ثابت.
    */
-  async openSession(circleId: string, date: string, time?: string): Promise<string> {
+  async openSession(
+    circleId: string,
+    date: string,
+    bounds?: { fromTime?: string; toTime?: string },
+  ): Promise<string> {
     const id = `${circleId}_${date}`;
     const ref = this.ref(COL.sessions, id);
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      if ((snap.data() as Session).status !== 'open') await updateDoc(ref, { status: 'open' });
+      const s = snap.data() as Session;
+      if (s.status !== 'open') {
+        assertWithinWindow(s);
+        await updateDoc(ref, { status: 'open' });
+      }
       return id;
     }
     // توافقيّة: قد توجد جلسة قديمة بمعرّف عشوائيّ لنفس اليوم
     const legacy = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
     const old = legacy.docs.find((d) => (d.data() as Session).date === date);
     if (old) {
-      if ((old.data() as Session).status !== 'open') await updateDoc(old.ref, { status: 'open' });
+      const s = old.data() as Session;
+      if (s.status !== 'open') {
+        assertWithinWindow(s);
+        await updateDoc(old.ref, { status: 'open' });
+      }
       return old.id;
     }
+    assertWithinWindow({ date, fromTime: bounds?.fromTime, toTime: bounds?.toTime });
     await setDoc(ref, {
       circleId,
       date,
-      time: time ?? '',
+      fromTime: bounds?.fromTime ?? '',
+      toTime: bounds?.toTime ?? '',
       status: 'open' as SessionStatus,
       createdAt: Date.now(),
     });
@@ -318,7 +344,8 @@ export class DataService {
       name: input.name.trim(),
       type: input.type,
       weekdays: [...input.weekdays].sort((a, b) => a - b),
-      time: input.time?.trim() ?? '',
+      fromTime: input.fromTime,
+      toTime: input.toTime,
       createdAt: Date.now(),
     });
     return created.id;
@@ -328,7 +355,6 @@ export class DataService {
     const next: Record<string, unknown> = { ...patch };
     if (patch.name !== undefined) next['name'] = patch.name.trim();
     if (patch.weekdays !== undefined) next['weekdays'] = [...patch.weekdays].sort((a, b) => a - b);
-    if (patch.time !== undefined) next['time'] = patch.time.trim();
     await updateDoc(this.ref(COL.circles, id), clean(next));
   }
 
@@ -371,7 +397,8 @@ export class DataService {
         setDoc(this.ref(COL.sessions, `${circle.id}_${date}`), {
           circleId: circle.id,
           date,
-          time: circle.time ?? '',
+          fromTime: circle.fromTime ?? '',
+          toTime: circle.toTime ?? '',
           status: 'scheduled' as SessionStatus,
           createdAt: Date.now(),
         }),

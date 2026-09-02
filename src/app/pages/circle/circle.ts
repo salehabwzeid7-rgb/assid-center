@@ -1,9 +1,8 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
 import { dmy, weekdayAr } from '../../core/format';
-import { NotifyService } from '../../core/notify.service';
+import { fmt12, fmtRange, sessionWindow, untilLabel } from '../../core/time';
 import {
   CIRCLE_TYPE_SINGULAR,
   SESSION_STATUS_LABELS,
@@ -16,7 +15,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
   selector: 'app-circle',
-  imports: [FormsModule, RouterLink, PageHeaderComponent],
+  imports: [RouterLink, PageHeaderComponent],
   template: `
     <app-page-header [title]="circle()?.name || 'الحلقة'">
       <button
@@ -41,8 +40,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
           @if (c.weekdays?.length) {
             <span class="muted">{{ weekdaysLabel(c.weekdays!) }}</span>
           }
-          @if (c.time) {
-            <span class="muted">⏰ {{ c.time }}</span>
+          @if (rangeLabel(c)) {
+            <span class="muted">⏰ {{ rangeLabel(c) }}</span>
           }
           @if (!c.weekdays?.length && c.schedule) {
             <span class="muted">🕌 {{ c.schedule }}</span>
@@ -53,59 +52,69 @@ import { PageHeaderComponent } from '../../shared/page-header';
       <!-- حصّة اليوم -->
       <div class="card">
         <div class="section-title" style="margin:0 0 10px">حصّة اليوم — {{ todayLabel }}</div>
+
         @if (todaySession(); as ts) {
-          @if (ts.status === 'open') {
-            <p class="muted" style="margin:0 0 10px">
-              الحصّة مفتوحة · الحضور {{ presentCount() }}/{{ studentTotal() }}
-            </p>
-            <button class="btn btn-primary btn-block btn-lg" type="button" (click)="go(ts.id)">
-              متابعة حصّة اليوم ›
-            </button>
-          } @else if (ts.status === 'scheduled') {
-            <p class="muted" style="margin:0 0 10px">هذه الحصّة مجدولة لهذا اليوم.</p>
-            <button
-              class="btn btn-primary btn-block btn-lg"
-              type="button"
-              [disabled]="studentTotal() === 0"
-              (click)="go(ts.id)"
-            >
-              بدء حصّة اليوم ›
-            </button>
-          } @else {
-            <p class="muted" style="margin:0 0 10px">
-              انتهت حصّة اليوم · الحضور {{ presentCount() }}/{{ studentTotal() }}
-            </p>
-            <button class="btn btn-block btn-lg" type="button" (click)="go(ts.id)">
-              مراجعة حصّة اليوم ›
-            </button>
+          @switch (cardState()) {
+            @case ('open') {
+              <p class="muted" style="margin:0 0 10px">
+                الحصّة مفتوحة · الحضور {{ presentCount() }}/{{ studentTotal() }}
+              </p>
+              <button class="btn btn-primary btn-block btn-lg" type="button" (click)="go(ts.id)">
+                متابعة حصّة اليوم ›
+              </button>
+            }
+            @case ('closed') {
+              <p class="muted" style="margin:0 0 10px">
+                انتهت الحصّة · الحضور {{ presentCount() }}/{{ studentTotal() }}
+              </p>
+              <button class="btn btn-block btn-lg" type="button" (click)="go(ts.id)">
+                مراجعة حصّة اليوم ›
+              </button>
+            }
+            @case ('ready') {
+              <button
+                class="btn btn-primary btn-block btn-lg"
+                type="button"
+                [disabled]="studentTotal() === 0"
+                (click)="go(ts.id)"
+              >
+                بدء حصّة اليوم ›
+              </button>
+            }
+            @case ('before') {
+              <div class="locked">
+                <span class="lock-ico">🔒</span>
+                <div>
+                  <b>تُفتح الساعة {{ fmt12(ts.fromTime) }}</b>
+                  <span class="muted">{{ untilOpen() }}</span>
+                </div>
+              </div>
+              <button class="btn btn-block btn-lg" type="button" disabled>غير متاحة الآن</button>
+            }
+            @case ('after') {
+              <div class="locked">
+                <span class="lock-ico">⛔</span>
+                <div>
+                  <b>انتهى وقت حصّة اليوم</b>
+                  <span class="muted">لبدء حصّة خارج موعدها، عدّل توقيت الحلقة من التعديل.</span>
+                </div>
+              </div>
+              <button class="btn btn-block btn-lg" type="button" disabled>مُقفلة</button>
+            }
           }
         } @else {
-          <button
-            class="btn btn-primary btn-block btn-lg"
-            type="button"
-            [disabled]="starting() || studentTotal() === 0"
-            (click)="startToday()"
-          >
-            {{ starting() ? '…' : '＋ بدء حصّة اليوم' }}
-          </button>
+          <p class="muted" style="margin:0">لا توجد حصّة لهذه الحلقة اليوم.</p>
+          @if (upcoming()[0]; as next) {
+            <p class="muted" style="margin:6px 0 0">
+              الحصّة القادمة: {{ weekdayAr(next.date) }} {{ dmy(next.date) }} ·
+              {{ fmtRange(next.fromTime, next.toTime) }}
+            </p>
+          }
         }
+
         @if (studentTotal() === 0) {
           <p class="hint">أضف طلابًا إلى الحلقة أولًا لبدء حصّة.</p>
         }
-
-        <details style="margin-top:10px">
-          <summary class="muted" style="cursor:pointer;font-size:.86rem">
-            بدء حصّة بتاريخ آخر
-          </summary>
-          <div class="field-row" style="margin-top:8px;align-items:end">
-            <div class="field" style="margin:0">
-              <input type="date" name="otherDate" [(ngModel)]="otherDate" [max]="todayIso" />
-            </div>
-            <button class="btn" type="button" [disabled]="starting()" (click)="startOther()">
-              فتح
-            </button>
-          </div>
-        </details>
       </div>
 
       <!-- بلاطات -->
@@ -127,9 +136,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <span class="avatar">{{ dayNum(s.date) }}</span>
             <span class="grow">
               <span class="primary">{{ dmy(s.date) }}</span>
-              <span class="secondary"
-                >{{ weekdayAr(s.date) }}{{ s.time ? ' · ' + s.time : '' }}</span
-              >
+              <span class="secondary">
+                {{ weekdayAr(s.date) }}
+                @if (fmtRange(s.fromTime, s.toTime)) {
+                  · {{ fmtRange(s.fromTime, s.toTime) }}
+                }
+              </span>
             </span>
             <span class="badge b-grade">{{ statusLabels[s.status] }}</span>
           </button>
@@ -158,15 +170,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
         }
       }
     </div>
-
-    <button
-      class="fab"
-      type="button"
-      [disabled]="starting() || studentTotal() === 0"
-      (click)="startToday()"
-    >
-      ＋ حصّة
-    </button>
   `,
   styles: [
     `
@@ -189,6 +192,23 @@ import { PageHeaderComponent } from '../../shared/page-header';
       .tag.t-tajweed {
         background: var(--gold-tint);
         color: var(--gold-deep);
+      }
+      .locked {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xs);
+        background: var(--surface-2);
+      }
+      .locked > div {
+        display: flex;
+        flex-direction: column;
+      }
+      .lock-ico {
+        font-size: 1.3rem;
       }
       .tiles {
         display: grid;
@@ -226,7 +246,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class CirclePage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
-  private notify = inject(NotifyService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
@@ -234,18 +253,22 @@ export class CirclePage implements OnInit {
   readonly circle = signal<Circle | null>(null);
   readonly statusLabels = SESSION_STATUS_LABELS;
   readonly typeSingular = CIRCLE_TYPE_SINGULAR;
-  readonly starting = signal(false);
   readonly todayIso = today();
+  readonly todayLabel = dmy(this.todayIso);
+
   readonly dmy = dmy;
   readonly weekdayAr = weekdayAr;
-  otherDate = today();
+  readonly fmt12 = fmt12;
+  readonly fmtRange = fmtRange;
+
+  /** لحظة حيّة تتحدّث كل ٣٠ ثانية لفتح/إقفال الزرّ تلقائيًّا */
+  private readonly now = signal(Date.now());
 
   readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   readonly sessions = this.data.sessionsByCircle(this.id, this.destroyRef);
   private readonly attendance = this.data.circleAttendance(this.id, this.destroyRef);
   private readonly recitations = this.data.circleRecitations(this.id, this.destroyRef);
 
-  readonly todayLabel = dmy(this.todayIso);
   readonly studentTotal = computed(() => this.students()?.filter((s) => s.active).length ?? 0);
   readonly todaySession = computed(
     () => this.sessions()?.find((s) => s.date === this.todayIso) ?? null,
@@ -255,21 +278,48 @@ export class CirclePage implements OnInit {
     return sid ? this.countPresent(sid) : 0;
   });
 
-  /** حصص قادمة (بعد اليوم) — تصاعديًّا */
+  private readonly todayWindow = computed(() => {
+    const ts = this.todaySession();
+    return ts ? sessionWindow(ts, new Date(this.now())) : null;
+  });
+
+  /** الحالة المعروضة في بطاقة «حصّة اليوم» */
+  readonly cardState = computed<'open' | 'closed' | 'ready' | 'before' | 'after'>(() => {
+    const ts = this.todaySession();
+    if (!ts) return 'ready';
+    if (ts.status === 'open') return 'open';
+    if (ts.status === 'closed') return 'closed';
+    const w = this.todayWindow();
+    if (!w || w.state === 'unscheduled' || w.state === 'now') return 'ready';
+    return w.state; // 'before' | 'after'
+  });
+
+  readonly untilOpen = computed(() => {
+    const w = this.todayWindow();
+    return w?.opensAt ? untilLabel(w.opensAt, new Date(this.now())) : '';
+  });
+
   readonly upcoming = computed<Session[]>(() =>
     (this.sessions() ?? [])
       .filter((s) => s.date > this.todayIso)
       .sort((a, b) => a.date.localeCompare(b.date)),
   );
-  /** حصص سابقة (قبل اليوم) — القائمة مرتّبة تنازليًّا من الخدمة */
   readonly past = computed<Session[]>(() =>
     (this.sessions() ?? []).filter((s) => s.date < this.todayIso),
   );
+
+  constructor() {
+    const timer = setInterval(() => this.now.set(Date.now()), 30_000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
+  }
 
   async ngOnInit(): Promise<void> {
     this.circle.set(await this.data.getCircle(this.id));
   }
 
+  rangeLabel(c: Circle): string {
+    return fmtRange(c.fromTime, c.toTime) || (c.time ? fmt12(c.time) : '');
+  }
   countPresent(sessionId: string): number {
     return (
       this.attendance()?.filter(
@@ -288,25 +338,7 @@ export class CirclePage implements OnInit {
       .map((d) => WEEKDAY_LABELS[d])
       .join('، ');
   }
-
   go(sessionId: string): void {
     void this.router.navigate(['/session', sessionId]);
-  }
-
-  async startToday(): Promise<void> {
-    await this.start(this.todayIso);
-  }
-  async startOther(): Promise<void> {
-    if (this.otherDate) await this.start(this.otherDate);
-  }
-  private async start(date: string): Promise<void> {
-    if (this.studentTotal() === 0) return;
-    this.starting.set(true);
-    const sid = await this.notify.run(
-      () => this.data.openSession(this.id, date, this.circle()?.time),
-      { loading: 'جارٍ فتح الحصّة…', error: 'تعذّر فتح الحصّة' },
-    );
-    this.starting.set(false);
-    if (sid) await this.router.navigate(['/session', sid]);
   }
 }

@@ -16,6 +16,7 @@ import {
   type Session,
 } from '../../core/models';
 import { dmy } from '../../core/format';
+import { fmt12, sessionWindow, untilLabel } from '../../core/time';
 import { surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -30,6 +31,22 @@ type Step = 'attendance' | 'recitation' | 'summary';
     <div class="page">
       @if (notFound()) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الجلسة.</div>
+      } @else if (locked(); as lk) {
+        <div class="empty">
+          <span class="icon">{{ lk.reason === 'before' ? '🔒' : '⛔' }}</span>
+          @if (lk.reason === 'before') {
+            <p style="font-weight:700;margin:6px 0">لم يحن موعد هذه الحصّة بعد.</p>
+            <p class="muted">
+              تُفتح تلقائيًّا الساعة {{ fmt12(session()!.fromTime) }} · {{ untilOpen() }}
+            </p>
+          } @else {
+            <p style="font-weight:700;margin:6px 0">انتهى وقت هذه الحصّة.</p>
+            <p class="muted">لبدء حصّة خارج موعدها، عدّل توقيت الحلقة من إعداداتها.</p>
+          }
+          <a class="btn btn-ghost" style="margin-top:12px" [routerLink]="['/circle', circleId()]">
+            رجوع إلى الحلقة
+          </a>
+        </div>
       } @else if (session(); as s) {
         <div class="card row-between">
           <span>
@@ -285,6 +302,24 @@ export class SessionPage implements OnInit {
   readonly gradeOrder = GRADE_ORDER;
   readonly statusLabels = SESSION_STATUS_LABELS;
   readonly surahName = surahName;
+  readonly fmt12 = fmt12;
+
+  /** لحظة حيّة لإعادة تقييم قفل الوقت */
+  private readonly now = signal(Date.now());
+
+  /** حصّة مجدولة خارج نافذتها → معروضة كمقفلة بدل فتحها */
+  readonly locked = computed<{ reason: 'before' | 'after' } | null>(() => {
+    const s = this.session();
+    if (!s || s.status !== 'scheduled') return null;
+    const w = sessionWindow(s, new Date(this.now()));
+    return w.state === 'before' || w.state === 'after' ? { reason: w.state } : null;
+  });
+  readonly untilOpen = computed(() => {
+    const s = this.session();
+    if (!s) return '';
+    const w = sessionWindow(s, new Date(this.now()));
+    return w.opensAt ? untilLabel(w.opensAt, new Date(this.now())) : '';
+  });
 
   private readonly allStudents = this.data.allStudents(this.destroyRef);
   readonly students = computed(() => {
@@ -325,24 +360,38 @@ export class SessionPage implements OnInit {
     return (this.students() ?? []).filter((s) => !done.has(s.id)).map((s) => s.name);
   });
 
+  constructor() {
+    const timer = setInterval(() => {
+      this.now.set(Date.now());
+      // فتح تلقائيّ عند دخول النافذة الزمنية دون إعادة تحميل
+      const s = this.session();
+      if (s?.status === 'scheduled' && !this.locked()) void this.tryOpen();
+    }, 20_000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
+  }
+
   async ngOnInit(): Promise<void> {
     const s = await this.data.getSession(this.id);
     if (!s) {
       this.notFound.set(true);
       return;
     }
-    // زيارة حصّة مجدولة = بدؤها
-    if (s.status === 'scheduled') {
-      try {
-        await this.data.setSessionStatus(this.id, 'open');
-        s.status = 'open';
-      } catch (e) {
-        console.error(e);
-      }
-    }
     this.session.set(s);
     this.circleId.set(s.circleId);
     this.note = s.note ?? '';
+    // زيارة حصّة مجدولة داخل نافذتها = بدؤها؛ خارجها تبقى مقفلة
+    if (s.status === 'scheduled' && !this.locked()) await this.tryOpen();
+  }
+
+  private async tryOpen(): Promise<void> {
+    if (this.session()?.status !== 'scheduled') return;
+    try {
+      await this.data.setSessionStatus(this.id, 'open');
+      const cur = this.session();
+      if (cur) this.session.set({ ...cur, status: 'open' });
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   statusOf(studentId: string): AttendanceStatus | null {

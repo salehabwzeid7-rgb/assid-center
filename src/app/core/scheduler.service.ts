@@ -22,7 +22,7 @@ export class SchedulerService {
     if (!scheduled.length) return;
 
     const signature = scheduled
-      .map((c) => `${c.id}:${(c.weekdays ?? []).join('')}:${c.time ?? ''}`)
+      .map((c) => `${c.id}:${(c.weekdays ?? []).join('')}:${c.fromTime ?? ''}-${c.toTime ?? ''}`)
       .sort()
       .join('|');
     if (this.running || signature === this.lastSignature) return;

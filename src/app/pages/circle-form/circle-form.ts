@@ -11,11 +11,13 @@ import {
   WEEKDAY_ORDER,
   type CircleType,
 } from '../../core/models';
+import { isValidHHMM, minutesOfDay } from '../../core/time';
 import { PageHeaderComponent } from '../../shared/page-header';
+import { TimeRangePickerComponent } from '../../shared/time-range-picker';
 
 @Component({
   selector: 'app-circle-form',
-  imports: [FormsModule, PageHeaderComponent],
+  imports: [FormsModule, PageHeaderComponent, TimeRangePickerComponent],
   template: `
     <app-page-header [title]="editing() ? 'تعديل الحلقة' : 'حلقة جديدة'" />
 
@@ -59,11 +61,13 @@ import { PageHeaderComponent } from '../../shared/page-header';
           </div>
         </div>
 
-        <!-- التوقيت -->
+        <!-- نافذة وقت الحصّة -->
         <div class="field">
-          <label for="time">توقيت الحلقة</label>
-          <input id="time" name="time" type="time" [(ngModel)]="time" />
-          <p class="hint">اختياريّ — يظهر مع كل حصّة مجدولة.</p>
+          <label>وقت الحصّة *</label>
+          <p class="hint" style="margin:0 0 8px">
+            تُفتح الحصّة تلقائيًّا داخل هذا الموعد فقط، وتُقفل خارجه.
+          </p>
+          <app-time-range [(from)]="fromTime" [(to)]="toTime" />
         </div>
 
         @if (error()) {
@@ -159,7 +163,8 @@ export class CircleFormPage implements OnInit {
   name = '';
   type: CircleType | null = null;
   readonly days = signal<number[]>([]);
-  time = '';
+  fromTime = '';
+  toTime = '';
   readonly saving = signal(false);
   readonly error = signal('');
 
@@ -176,7 +181,8 @@ export class CircleFormPage implements OnInit {
       this.name = c.name;
       this.type = c.type ?? null;
       this.days.set(c.weekdays ?? []);
-      this.time = c.time ?? '';
+      this.fromTime = c.fromTime ?? '';
+      this.toTime = c.toTime ?? '';
     } else {
       this.error.set('لم يتم العثور على الحلقة');
     }
@@ -188,6 +194,12 @@ export class CircleFormPage implements OnInit {
     if (!this.type) return void this.error.set('اختر نوع الحلقة');
     if (this.days().length === 0)
       return void this.error.set('اختر يومًا واحدًا على الأقل لتكرار الحلقة');
+    if (
+      !isValidHHMM(this.fromTime) ||
+      !isValidHHMM(this.toTime) ||
+      minutesOfDay(this.toTime) <= minutesOfDay(this.fromTime)
+    )
+      return void this.error.set('حدّد وقت بداية ونهاية صحيحين للحصّة');
 
     this.saving.set(true);
     this.error.set('');
@@ -195,7 +207,8 @@ export class CircleFormPage implements OnInit {
       name: this.name.trim(),
       type: this.type,
       weekdays: this.days(),
-      time: this.time.trim(),
+      fromTime: this.fromTime,
+      toTime: this.toTime,
     };
     const editing = this.editing() && this.id;
     const res = await this.notify.run(
@@ -215,7 +228,8 @@ export class CircleFormPage implements OnInit {
         name: payload.name,
         type: payload.type,
         weekdays: payload.weekdays,
-        time: payload.time,
+        fromTime: payload.fromTime,
+        toTime: payload.toTime,
         createdAt: Date.now(),
       },
     ]);

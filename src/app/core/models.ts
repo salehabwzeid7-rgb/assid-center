@@ -117,7 +117,11 @@ export interface Circle {
   type?: CircleType;
   /** أيام التكرار الأسبوعيّ — قيم ‏getDay()‎ (مطلوب للحلقات الجديدة) */
   weekdays?: number[];
-  /** توقيت الحلقة «HH:MM» (اختياريّ) */
+  /** بداية نافذة الحصّة «HH:MM» 24 ساعة (مطلوب للحلقات الجديدة) */
+  fromTime?: string;
+  /** نهاية نافذة الحصّة «HH:MM» 24 ساعة (مطلوب للحلقات الجديدة) */
+  toTime?: string;
+  /** توقيت مفرد قديم — للتوافق مع الحلقات المُنشأة قبل نظام النوافذ الزمنية */
   time?: string;
   /** نصّ حرّ قديم للتوقيت — للتوافق مع الحلقات المُنشأة قبل الجدولة التلقائية */
   schedule?: string;
@@ -146,7 +150,10 @@ export interface Session {
   circleId: string;
   /** التاريخ بصيغة YYYY-MM-DD */
   date: string;
-  /** توقيت الحصّة «HH:MM» (منسوخ من الحلقة عند الجدولة) */
+  /** نافذة الحصّة «HH:MM» (منسوخة من الحلقة عند الجدولة) */
+  fromTime?: string;
+  toTime?: string;
+  /** توقيت مفرد قديم — للتوافق */
   time?: string;
   status: SessionStatus;
   note?: string;
