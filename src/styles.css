@@ -337,38 +337,6 @@ textarea {
   font-size: 0.82rem;
 }
 
-/* ---------- بطاقة ترحيب ---------- */
-.hero {
-  background: var(--header-grad);
-  color: #fff;
-  border-radius: var(--radius);
-  padding: 18px;
-  box-shadow: var(--shadow-lg);
-  position: relative;
-  overflow: hidden;
-}
-
-.hero::before {
-  content: '﴾﴿';
-  position: absolute;
-  inset-inline-end: 12px;
-  bottom: -14px;
-  font-size: 4.5rem;
-  color: rgba(255, 255, 255, 0.08);
-  font-family: 'Amiri Quran', serif;
-}
-
-.hero h1 {
-  font-size: 1.15rem;
-  margin: 0 0 4px;
-}
-
-.hero p {
-  margin: 0;
-  opacity: 0.85;
-  font-size: 0.88rem;
-}
-
 /* ---------- نماذج ---------- */
 .field {
   margin-bottom: 13px;
@@ -849,10 +817,9 @@ textarea {
   }
 }
 
-/* بطاقة الترحيب كشريط أخضر */
-[data-app-theme='heritage'] .hero {
-  background: linear-gradient(160deg, #2b8f48 0%, #0f5a27 100%);
-  border: 1px solid var(--gold);
+/* التبويبات المرقّمة داخل الجلسة */
+[data-app-theme='heritage'] .tile-num {
+  color: var(--gold-deep);
 }
 
 /* عناوين الأقسام: معيّن ذهبي بدل الشريط */

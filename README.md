@@ -83,7 +83,21 @@ npm run dev
 - **سمة الشعار**: مستوحاة من شعار المركز — ترويسة القوس الذهبي بأشعّة،
   وشريط أخضر، وأرضية عاجية.
 
-كلتاهما تدعمان الوضعين الفاتح والداكن، ويُحفَظ الاختيار محليًا.
+كلتاهما تدعمان الوضعين الفاتح والداكن، ويُحفَظ الاختيار محليًا. شعار المركز في
+`public/logo.svg` (استبدله بملفك للحصول على الأصل بدقّته).
+
+---
+
+## سير عمل الحلقة والجلسات
+
+الحلقة تُدار عبر **جلسات** (حصص)؛ عند دخول المعلّم إلى حلقته:
+
+1. **بدء/متابعة جلسة اليوم** (أو جلسة بتاريخ آخر) — من صفحة الحلقة.
+2. داخل الجلسة، ثلاث خطوات متسلسلة:
+   - **١ · الحضور** — تحديد حالة كل طالب من القائمة المُسبقة (حاضر/متأخر/مأذون/غائب) بحفظ فوري.
+   - **٢ · التسميع** — تسجيل ما سمّعه كل طالب (من/إلى سورة وآية، الأوجه، التقدير…).
+   - **٣ · الملخّص** — يُولَّد آليًا: نسبة الحضور، الغائبون، عدد المسمّعين، متوسط التقدير، توزيع التقديرات، من لم يسمّع، وملاحظة الجلسة.
+3. **إحصائيات الحلقة** (`/circle/:id/stats`) — تجميع كل الجلسات: عدد الجلسات، نسبة الحضور العامة، مجموع الأوجه، وتفصيل لكل طالب.
 
 ---
 
@@ -114,39 +128,43 @@ src/app/
     quran-data.ts      أسماء سور القرآن الـ114 وعدد آياتها
     auth.service.ts    الدخول / إنشاء حساب / إعادة تعيين كلمة المرور / ملف المعلّم
     auth.guard.ts      حماية المسارات
-    data.service.ts    قراءة/كتابة الحلقات والطلاب والحضور والتسميع والتقييم
+    data.service.ts    قراءة/كتابة الحلقات والطلاب والجلسات والحضور والتسميع
   shared/
     page-header.ts     الشريط العلوي الموحّد
     grade-picker.ts    منتقي التقدير (ممتاز → ضعيف)
   pages/
-    login/ dashboard/ profile/ circle-form/ circle/
-    attendance/ student-form/ student/ recitation-form/ evaluation-form/
+    login/ dashboard/ profile/
+    circle-form/ circle/ circle-students/ circle-stats/
+    session/ recitation-form/
+    student-form/ student/ evaluation-form/
 ```
 
 ### نموذج البيانات في Firestore
 ```
-teachers/{uid}                  { name, email, phone, createdAt }
-  circles/{id}                  { name, session, createdAt }
-  students/{id}                 { name, circleId, level, birthDate,
-                                  guardianPhone, phone, currentPlan, active }
-  attendance/{studentId_date}   { studentId, circleId, date, status }
-  recitations/{id}              { studentId, circleId, date, kind, fromSurah,
-                                  fromAyah, toSurah, toAyah, pages, grade,
-                                  hifzErrors, tajweedErrors, promptCount, notes }
-  evaluations/{id}              { studentId, circleId, date, memorization,
-                                  review, tajweed, attention, behavior, notes }
+teachers/{uid}                   { name, email, phone, createdAt }
+  circles/{id}                   { name, schedule, createdAt }
+  students/{id}                  { name, circleId, level, birthDate,
+                                   guardianPhone, phone, currentPlan, active }
+  sessions/{id}                  { circleId, date, status(open|closed), note }
+  attendance/{sessionId_stuId}   { sessionId, studentId, circleId, date, status }
+  recitations/{id}               { studentId, circleId, sessionId?, date, kind,
+                                   fromSurah, fromAyah, toSurah, toAyah, pages,
+                                   grade, hifzErrors, tajweedErrors, promptCount, notes }
+  evaluations/{id}               { studentId, circleId, date, memorization,
+                                   review, tajweed, attention, behavior, notes }
 ```
 
 ---
 
 ## الميزات
 
-- **حساب المعلّم**: إنشاء حساب من الصفر، تسجيل دخول، إعادة تعيين كلمة المرور، تعديل الاسم/الجوال.
-- **لوحة المعلّم**: عدد الحلقات والطلاب، وحضور/تسميع اليوم.
-- **الحلقات والطلاب**: إنشاء حلقات، وإضافة/تعديل طلاب بأرقام أولياء الأمور.
-- **التحضير الجماعي**: حالة كل طالب (حاضر/متأخر/مأذون/غائب) لتاريخ محدّد + «تعيين الكل حاضر».
-- **تسجيل التسميع**: النوع، من/إلى سورة وآية، عدد الأوجه، التقدير، أخطاء الحفظ والتجويد، مرات التلقين، ملاحظات.
-- **التقييم اليومي**: الحفظ، المراجعة، التجويد، الانتباه، السلوك + ملاحظة.
-- **ملف الطالب**: إحصائيات مجمّعة وسجل كامل بكل تبويب.
+- **حساب المعلّم**: إنشاء حساب من الصفر، تسجيل دخول ببريد أو اسم بسيط، إعادة تعيين كلمة المرور، تعديل الاسم/الجوال.
+- **الحلقات والطلاب**: إنشاء/تعديل/حذف حلقة، وإدارة قائمة الطلاب المُسبقة بأرقام أولياء الأمور.
+- **الجلسات**: بدء/متابعة جلسة اليوم أو أي تاريخ، وإنهاؤها وإعادة فتحها.
+- **الحضور**: تحديد حالة كل طالب داخل الجلسة بحفظ فوري + «تعيين الكل حاضر».
+- **التسميع**: من/إلى سورة وآية، عدد الأوجه، التقدير، أخطاء الحفظ والتجويد، مرات التلقين، ملاحظات — سجل واحد لكل طالب في الجلسة قابل للتعديل.
+- **ملخّص الجلسة الآلي**: نسبة الحضور، الغائبون، عدد المسمّعين، متوسط التقدير، توزيع التقديرات، من لم يسمّع.
+- **إحصائيات الحلقة**: تجميع كل الجلسات + تفصيل لكل طالب (حضور٪، جلسات تسميع، أوجه).
+- **ملف الطالب**: إحصائيات مجمّعة وسجل كامل، وتقييم يومي (خمسة محاور).
 - **مزامنة لحظية** و**عمل دون اتصال** مع مزامنة تلقائية عند عودة الشبكة.
-- **سمتان للواجهة** قابلتان للتبديل الفوري.
+- **سمتان للواجهة** قابلتان للتبديل الفوري (فاتح/داكن لكلٍّ).

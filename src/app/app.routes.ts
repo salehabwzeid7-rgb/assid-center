@@ -24,6 +24,10 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),
       },
       {
+        path: 'circle/:id/edit',
+        loadComponent: () => import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),
+      },
+      {
         path: 'students/new',
         loadComponent: () =>
           import('./pages/student-form/student-form').then((m) => m.StudentFormPage),
@@ -33,8 +37,23 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/circle/circle').then((m) => m.CirclePage),
       },
       {
-        path: 'circle/:id/attendance',
-        loadComponent: () => import('./pages/attendance/attendance').then((m) => m.AttendancePage),
+        path: 'circle/:id/students',
+        loadComponent: () =>
+          import('./pages/circle-students/circle-students').then((m) => m.CircleStudentsPage),
+      },
+      {
+        path: 'circle/:id/stats',
+        loadComponent: () =>
+          import('./pages/circle-stats/circle-stats').then((m) => m.CircleStatsPage),
+      },
+      {
+        path: 'session/:id',
+        loadComponent: () => import('./pages/session/session').then((m) => m.SessionPage),
+      },
+      {
+        path: 'session/:sessionId/recite/:studentId',
+        loadComponent: () =>
+          import('./pages/recitation-form/recitation-form').then((m) => m.RecitationFormPage),
       },
       {
         path: 'student/:id',

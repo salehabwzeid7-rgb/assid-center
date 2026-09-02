@@ -5,12 +5,13 @@
      teachers/{uid}
        ├─ circles/{id}
        ├─ students/{id}
-       ├─ attendance/{id}
+       ├─ sessions/{id}        ← جلسة الحلقة (حصّة بتاريخ محدّد)
+       ├─ attendance/{id}      ← id = sessionId_studentId
        ├─ recitations/{id}
        └─ evaluations/{id}
    ========================================================================== */
 
-/** حالة الحضور اليومي */
+/** حالة الحضور */
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 
 export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
@@ -21,6 +22,14 @@ export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
 };
 
 export const ATTENDANCE_ORDER: AttendanceStatus[] = ['present', 'late', 'excused', 'absent'];
+
+/** حالة الجلسة */
+export type SessionStatus = 'open' | 'closed';
+
+export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
+  open: 'مفتوحة',
+  closed: 'منتهية',
+};
 
 /** نوع التسميع */
 export type RecitationKind = 'new' | 'near_review' | 'far_review';
@@ -44,6 +53,20 @@ export const GRADE_LABELS: Record<Grade, string> = {
 
 export const GRADE_ORDER: Grade[] = ['excellent', 'very_good', 'good', 'fair', 'weak'];
 
+/** قيمة رقمية للتقدير (لحساب المتوسط) */
+export const GRADE_VALUE: Record<Grade, number> = {
+  excellent: 5,
+  very_good: 4,
+  good: 3,
+  fair: 2,
+  weak: 1,
+};
+
+export function gradeFromValue(v: number): Grade {
+  const r = Math.round(v);
+  return (GRADE_ORDER.find((g) => GRADE_VALUE[g] === r) ?? 'good') as Grade;
+}
+
 /** المعلّم */
 export interface Teacher {
   id: string;
@@ -57,8 +80,8 @@ export interface Teacher {
 export interface Circle {
   id: string;
   name: string;
-  /** الفترة/التوقيت: صباحية، مسائية… */
-  session?: string;
+  /** الفترة/التوقيت: مثال «بعد المغرب — من الأحد إلى الخميس» */
+  schedule?: string;
   createdAt: number;
 }
 
@@ -78,12 +101,25 @@ export interface Student {
   createdAt: number;
 }
 
-/** سجل الحضور */
-export interface AttendanceRecord {
+/** جلسة الحلقة (حصّة) */
+export interface Session {
   id: string;
-  studentId: string;
   circleId: string;
   /** التاريخ بصيغة YYYY-MM-DD */
+  date: string;
+  status: SessionStatus;
+  note?: string;
+  createdAt: number;
+  closedAt?: number;
+}
+
+/** سجل الحضور (ضمن جلسة) */
+export interface AttendanceRecord {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  circleId: string;
+  /** تاريخ الجلسة بصيغة YYYY-MM-DD */
   date: string;
   status: AttendanceStatus;
   note?: string;
@@ -95,6 +131,8 @@ export interface RecitationRecord {
   id: string;
   studentId: string;
   circleId: string;
+  /** الجلسة المرتبطة (إن وُجدت) */
+  sessionId?: string;
   date: string;
   kind: RecitationKind;
   fromSurah: number;
@@ -119,6 +157,7 @@ export interface EvaluationRecord {
   id: string;
   studentId: string;
   circleId: string;
+  sessionId?: string;
   date: string;
   memorization: Grade;
   review: Grade;
@@ -135,6 +174,7 @@ export interface EvaluationRecord {
 export const SUB = {
   circles: 'circles',
   students: 'students',
+  sessions: 'sessions',
   attendance: 'attendance',
   recitations: 'recitations',
   evaluations: 'evaluations',

@@ -1,8 +1,13 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
-import { RECITATION_KIND_LABELS, type Grade, type RecitationKind, type Student } from '../../core/models';
+import {
+  RECITATION_KIND_LABELS,
+  type Grade,
+  type RecitationKind,
+  type Student,
+} from '../../core/models';
 import { SURAHS, surah } from '../../core/quran-data';
 import { GradePickerComponent } from '../../shared/grade-picker';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -11,7 +16,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
   selector: 'app-recitation-form',
   imports: [FormsModule, PageHeaderComponent, GradePickerComponent],
   template: `
-    <app-page-header title="تسجيل تسميع" />
+    <app-page-header [title]="editing() ? 'تعديل التسميع' : 'تسجيل تسميع'" />
 
     <div class="page">
       <form class="card" (ngSubmit)="submit()">
@@ -19,10 +24,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <p class="muted" style="margin-top:0">الطالب: <b>{{ s.name }}</b></p>
         }
 
-        <div class="field">
-          <label for="date">التاريخ</label>
-          <input id="date" name="date" type="date" [(ngModel)]="m.date" required />
-        </div>
+        @if (!sessionId) {
+          <div class="field">
+            <label for="date">التاريخ</label>
+            <input id="date" name="date" type="date" [(ngModel)]="m.date" />
+          </div>
+        }
 
         <div class="field">
           <label>نوع التسميع</label>
@@ -126,7 +133,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
         }
 
         <button class="btn btn-primary btn-block btn-lg" type="submit" [disabled]="saving() || !student()">
-          {{ saving() ? 'جارٍ الحفظ…' : 'حفظ سجل التسميع' }}
+          {{ saving() ? 'جارٍ الحفظ…' : editing() ? 'حفظ التعديلات' : 'حفظ سجل التسميع' }}
         </button>
       </form>
     </div>
@@ -136,10 +143,15 @@ export class RecitationFormPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private router = inject(Router);
+  private cdr = inject(ChangeDetectorRef);
 
-  readonly studentId = this.route.snapshot.paramMap.get('id')!;
+  readonly studentId =
+    this.route.snapshot.paramMap.get('studentId') ?? this.route.snapshot.paramMap.get('id')!;
+  readonly sessionId = this.route.snapshot.paramMap.get('sessionId') ?? undefined;
+
   readonly student = signal<Student | null>(null);
   readonly saving = signal(false);
+  readonly editing = signal(false);
   readonly error = signal('');
 
   readonly surahs = SURAHS;
@@ -163,6 +175,30 @@ export class RecitationFormPage implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.student.set(await this.data.getStudent(this.studentId));
+
+    if (this.sessionId) {
+      const session = await this.data.getSession(this.sessionId);
+      if (session) this.m.date = session.date;
+      const existing = await this.data.getSessionRecitation(this.sessionId, this.studentId);
+      if (existing) {
+        this.editing.set(true);
+        this.m = {
+          date: existing.date,
+          kind: existing.kind,
+          fromSurah: existing.fromSurah,
+          fromAyah: existing.fromAyah,
+          toSurah: existing.toSurah,
+          toAyah: existing.toAyah,
+          pages: existing.pages,
+          hifzErrors: existing.hifzErrors,
+          tajweedErrors: existing.tajweedErrors,
+          promptCount: existing.promptCount,
+          notes: existing.notes ?? '',
+        };
+        this.grade.set(existing.grade);
+      }
+    }
+    this.cdr.markForCheck();
   }
 
   maxAyah(surahNo: number | string): number {
@@ -185,24 +221,33 @@ export class RecitationFormPage implements OnInit {
     }
     this.saving.set(true);
     this.error.set('');
+    const payload = {
+      studentId: s.id,
+      circleId: s.circleId,
+      sessionId: this.sessionId,
+      date: this.m.date,
+      kind: this.m.kind,
+      fromSurah,
+      fromAyah,
+      toSurah,
+      toAyah,
+      pages: Number(this.m.pages) || 0,
+      grade: this.grade(),
+      hifzErrors: Number(this.m.hifzErrors) || 0,
+      tajweedErrors: Number(this.m.tajweedErrors) || 0,
+      promptCount: Number(this.m.promptCount) || 0,
+      notes: this.m.notes.trim() || undefined,
+    };
     try {
-      await this.data.addRecitation({
-        studentId: s.id,
-        circleId: s.circleId,
-        date: this.m.date,
-        kind: this.m.kind,
-        fromSurah,
-        fromAyah,
-        toSurah,
-        toAyah,
-        pages: Number(this.m.pages) || 0,
-        grade: this.grade(),
-        hifzErrors: Number(this.m.hifzErrors) || 0,
-        tajweedErrors: Number(this.m.tajweedErrors) || 0,
-        promptCount: Number(this.m.promptCount) || 0,
-        notes: this.m.notes.trim() || undefined,
-      });
-      await this.router.navigate(['/student', s.id]);
+      if (this.sessionId) {
+        await this.data.upsertSessionRecitation(this.sessionId, s.id, payload);
+        await this.router.navigate(['/session', this.sessionId], {
+          queryParams: { step: 'recitation' },
+        });
+      } else {
+        await this.data.addRecitation(payload);
+        await this.router.navigate(['/student', s.id]);
+      }
     } catch {
       this.error.set('تعذّر حفظ السجل، تحقق من الاتصال');
       this.saving.set(false);

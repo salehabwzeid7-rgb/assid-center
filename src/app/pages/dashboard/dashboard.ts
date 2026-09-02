@@ -1,6 +1,5 @@
 import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '../../core/auth.service';
 import { DataService, today } from '../../core/data.service';
 import { ThemeService } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -19,10 +18,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
     </app-page-header>
 
     <div class="page">
-      <div class="hero">
-        <h1>السلام عليكم، {{ auth.displayName() }}</h1>
-        <p>{{ todayLabel }}</p>
-      </div>
+      <p class="muted" style="margin:6px 2px 2px">{{ todayLabel }}</p>
 
       <div class="stat-grid" style="margin-top:12px">
         <div class="stat">
@@ -34,7 +30,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <div class="label">إجمالي الطلاب</div>
         </div>
         <div class="stat">
-          <div class="num">{{ presentToday() }}<span style="font-size:.9rem">/{{ markedToday() }}</span></div>
+          <div class="num">
+            {{ presentToday() }}<span style="font-size:.9rem">/{{ markedToday() }}</span>
+          </div>
           <div class="label">حضور اليوم</div>
         </div>
         <div class="stat">
@@ -66,8 +64,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
               <span class="primary">{{ c.name }}</span>
               <span class="secondary">
                 {{ studentCount(c.id) }} طالب
-                @if (c.session) {
-                  · {{ c.session }}
+                @if (c.schedule) {
+                  · {{ c.schedule }}
                 }
               </span>
             </span>
@@ -83,7 +81,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class DashboardPage {
   private destroyRef = inject(DestroyRef);
   private data = inject(DataService);
-  readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
 
   readonly todayLabel = new Date().toLocaleDateString('ar', {

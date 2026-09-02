@@ -22,6 +22,8 @@ import {
   TEACHERS,
   type Circle,
   type Student,
+  type Session,
+  type SessionStatus,
   type AttendanceRecord,
   type RecitationRecord,
   type EvaluationRecord,
@@ -29,16 +31,18 @@ import {
 
 /** التاريخ الحالي بصيغة YYYY-MM-DD (توقيت الجهاز المحلي) */
 export function today(): string {
-  const d = new Date();
+  return toDateStr(new Date());
+}
+
+export function toDateStr(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-type NewCircle = { name: string; session?: string };
+type NewCircle = { name: string; schedule?: string };
 type NewStudent = Omit<Student, 'id' | 'createdAt'>;
 type NewRecitation = Omit<RecitationRecord, 'id' | 'createdAt'>;
 type NewEvaluation = Omit<EvaluationRecord, 'id' | 'createdAt'>;
-type NewAttendance = Omit<AttendanceRecord, 'id' | 'createdAt'>;
 
 @Injectable({ providedIn: 'root' })
 export class DataService {
@@ -50,9 +54,11 @@ export class DataService {
     return id;
   }
 
-  /** مرجع مجموعة فرعية تحت مستند المعلّم الحالي */
   private col(name: string): CollectionReference<DocumentData> {
     return collection(db, TEACHERS, this.uid, name);
+  }
+  private ref(name: string, id: string) {
+    return doc(db, TEACHERS, this.uid, name, id);
   }
 
   private byNameAr = (a: { name: string }, b: { name: string }) =>
@@ -63,8 +69,7 @@ export class DataService {
   ) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt;
 
   // ======================================================================
-  //  اشتراكات لحظية (Real-time)
-  //  استعلامات بحقل مساواة واحد فقط + ترتيب في المتصفح، فلا حاجة لفهارس مركّبة.
+  //  اشتراكات لحظية — استعلامات بحقل مساواة واحد فقط (بلا فهارس مركّبة)
   // ======================================================================
 
   private live<T extends { id: string }>(
@@ -88,21 +93,121 @@ export class DataService {
     return out;
   }
 
-  /** كل حلقات المعلّم */
+  // ---------- الحلقات والطلاب ----------
+
   circles(destroyRef?: DestroyRef): Signal<Circle[] | undefined> {
     return this.live<Circle>(query(this.col(SUB.circles)), destroyRef, this.byNameAr);
   }
 
-  /** طلاب حلقة معيّنة */
   studentsByCircle(circleId: string, destroyRef?: DestroyRef): Signal<Student[] | undefined> {
     const q = query(this.col(SUB.students), where('circleId', '==', circleId));
     return this.live<Student>(q, destroyRef, this.byNameAr);
   }
 
-  /** كل طلاب المعلّم */
   allStudents(destroyRef?: DestroyRef): Signal<Student[] | undefined> {
     return this.live<Student>(query(this.col(SUB.students)), destroyRef, this.byNameAr);
   }
+
+  // ---------- الجلسات ----------
+
+  sessionsByCircle(circleId: string, destroyRef?: DestroyRef): Signal<Session[] | undefined> {
+    const q = query(this.col(SUB.sessions), where('circleId', '==', circleId));
+    return this.live<Session>(q, destroyRef, this.byDateDesc);
+  }
+
+  async getSession(id: string): Promise<Session | null> {
+    const s = await getDoc(this.ref(SUB.sessions, id));
+    return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;
+  }
+
+  /** يفتح جلسة الحلقة لتاريخ محدّد؛ يُعيد الموجودة إن وُجدت، وإلا ينشئ واحدة */
+  async openSession(circleId: string, date: string): Promise<string> {
+    const snap = await getDocs(query(this.col(SUB.sessions), where('circleId', '==', circleId)));
+    const existing = snap.docs.find((d) => (d.data() as Session).date === date);
+    if (existing) {
+      if ((existing.data() as Session).status === 'closed') {
+        await updateDoc(existing.ref, { status: 'open' });
+      }
+      return existing.id;
+    }
+    const created = await addDoc(this.col(SUB.sessions), {
+      circleId,
+      date,
+      status: 'open' as SessionStatus,
+      createdAt: Date.now(),
+    });
+    return created.id;
+  }
+
+  async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
+    await updateDoc(this.ref(SUB.sessions, id), {
+      status,
+      ...(status === 'closed' ? { closedAt: Date.now() } : {}),
+    });
+  }
+
+  async setSessionNote(id: string, note: string): Promise<void> {
+    await updateDoc(this.ref(SUB.sessions, id), { note });
+  }
+
+  /** حذف الجلسة وكل حضورها وتسميعها */
+  async deleteSession(id: string): Promise<void> {
+    const [att, rec] = await Promise.all([
+      getDocs(query(this.col(SUB.attendance), where('sessionId', '==', id))),
+      getDocs(query(this.col(SUB.recitations), where('sessionId', '==', id))),
+    ]);
+    await Promise.all([
+      ...att.docs.map((d) => deleteDoc(d.ref)),
+      ...rec.docs.map((d) => deleteDoc(d.ref)),
+      deleteDoc(this.ref(SUB.sessions, id)),
+    ]);
+  }
+
+  // ---------- سجلات ضمن جلسة ----------
+
+  sessionAttendance(sessionId: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
+    const q = query(this.col(SUB.attendance), where('sessionId', '==', sessionId));
+    return this.live<AttendanceRecord>(q, destroyRef);
+  }
+
+  sessionRecitations(
+    sessionId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<RecitationRecord[] | undefined> {
+    const q = query(this.col(SUB.recitations), where('sessionId', '==', sessionId));
+    return this.live<RecitationRecord>(q, destroyRef);
+  }
+
+  async upsertSessionAttendance(input: {
+    sessionId: string;
+    studentId: string;
+    circleId: string;
+    date: string;
+    status: AttendanceRecord['status'];
+  }): Promise<void> {
+    const id = `${input.sessionId}_${input.studentId}`;
+    await setDoc(this.ref(SUB.attendance, id), { ...input, createdAt: Date.now() });
+  }
+
+  /** تسميع الطالب ضمن جلسة — سجل واحد لكل طالب في الجلسة (قابل للتعديل) */
+  async upsertSessionRecitation(
+    sessionId: string,
+    studentId: string,
+    input: NewRecitation,
+  ): Promise<void> {
+    const id = `${sessionId}_${studentId}`;
+    await setDoc(this.ref(SUB.recitations, id), { ...clean(input), createdAt: Date.now() });
+  }
+
+  async getSessionRecitation(
+    sessionId: string,
+    studentId: string,
+  ): Promise<RecitationRecord | null> {
+    const s = await getDoc(this.ref(SUB.recitations, `${sessionId}_${studentId}`));
+    return s.exists() ? ({ id: s.id, ...(s.data() as object) } as RecitationRecord) : null;
+  }
+
+  // ---------- سجلات الطالب (للملف الشخصي) ----------
 
   studentRecitations(
     studentId: string,
@@ -128,95 +233,103 @@ export class DataService {
     return this.live<EvaluationRecord>(q, destroyRef, this.byDateDesc);
   }
 
-  /** حضور يوم محدد (كل الحلقات) — نُرشّح الحلقة في المتصفح */
+  // ---------- سجلات الحلقة (للإحصائيات) ----------
+
+  circleAttendance(circleId: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
+    const q = query(this.col(SUB.attendance), where('circleId', '==', circleId));
+    return this.live<AttendanceRecord>(q, destroyRef);
+  }
+
+  circleRecitations(
+    circleId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<RecitationRecord[] | undefined> {
+    const q = query(this.col(SUB.recitations), where('circleId', '==', circleId));
+    return this.live<RecitationRecord>(q, destroyRef);
+  }
+
+  // ---------- للوحة الرئيسية ----------
+
   attendanceForDate(date: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
     const q = query(this.col(SUB.attendance), where('date', '==', date));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
 
-  /** تسميع يوم محدد (كل الحلقات) */
   recitationsForDate(date: string, destroyRef?: DestroyRef): Signal<RecitationRecord[] | undefined> {
     const q = query(this.col(SUB.recitations), where('date', '==', date));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
-  // ======================================================================
-  //  قراءات لمرة واحدة
-  // ======================================================================
+  // ---------- قراءات لمرة واحدة ----------
 
   async getCircle(id: string): Promise<Circle | null> {
-    const s = await getDoc(doc(db, TEACHERS, this.uid, SUB.circles, id));
+    const s = await getDoc(this.ref(SUB.circles, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Circle) : null;
   }
 
   async getStudent(id: string): Promise<Student | null> {
-    const s = await getDoc(doc(db, TEACHERS, this.uid, SUB.students, id));
+    const s = await getDoc(this.ref(SUB.students, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Student) : null;
   }
 
-  /** حضور حلقة في يوم محدد (قراءة واحدة) — للتحضير الجماعي */
-  async loadCircleAttendance(circleId: string, date: string): Promise<AttendanceRecord[]> {
-    const snap = await getDocs(query(this.col(SUB.attendance), where('date', '==', date)));
-    return snap.docs
-      .map((d) => ({ id: d.id, ...(d.data() as object) }) as AttendanceRecord)
-      .filter((a) => a.circleId === circleId);
-  }
-
-  // ======================================================================
-  //  كتابة
-  // ======================================================================
+  // ---------- كتابة ----------
 
   async addCircle(input: NewCircle): Promise<string> {
-    const ref = await addDoc(this.col(SUB.circles), {
+    const created = await addDoc(this.col(SUB.circles), {
       name: input.name.trim(),
-      session: input.session?.trim() ?? '',
+      schedule: input.schedule?.trim() ?? '',
       createdAt: Date.now(),
     });
-    return ref.id;
+    return created.id;
+  }
+
+  async updateCircle(id: string, patch: Partial<NewCircle>): Promise<void> {
+    await updateDoc(this.ref(SUB.circles, id), clean(patch));
+  }
+
+  async deleteCircle(id: string): Promise<void> {
+    await deleteDoc(this.ref(SUB.circles, id));
   }
 
   async addStudent(input: NewStudent): Promise<string> {
-    const ref = await addDoc(this.col(SUB.students), {
+    const created = await addDoc(this.col(SUB.students), {
       ...clean(input),
       name: input.name.trim(),
       createdAt: Date.now(),
     });
-    return ref.id;
+    return created.id;
   }
 
   async updateStudent(id: string, patch: Partial<NewStudent>): Promise<void> {
-    await updateDoc(doc(db, TEACHERS, this.uid, SUB.students, id), clean(patch));
+    await updateDoc(this.ref(SUB.students, id), clean(patch));
   }
 
   async setStudentActive(id: string, active: boolean): Promise<void> {
-    await updateDoc(doc(db, TEACHERS, this.uid, SUB.students, id), { active });
+    await updateDoc(this.ref(SUB.students, id), { active });
   }
 
   async addRecitation(input: NewRecitation): Promise<string> {
-    const ref = await addDoc(this.col(SUB.recitations), { ...clean(input), createdAt: Date.now() });
-    return ref.id;
-  }
-
-  async addEvaluation(input: NewEvaluation): Promise<string> {
-    const ref = await addDoc(this.col(SUB.evaluations), { ...clean(input), createdAt: Date.now() });
-    return ref.id;
-  }
-
-  /** حضور واحد لكل طالب في اليوم — معرّف ثابت حتى يُحدَّث عند إعادة التحضير */
-  async upsertAttendance(input: NewAttendance): Promise<void> {
-    const id = `${input.studentId}_${input.date}`;
-    await setDoc(doc(db, TEACHERS, this.uid, SUB.attendance, id), {
+    const created = await addDoc(this.col(SUB.recitations), {
       ...clean(input),
       createdAt: Date.now(),
     });
+    return created.id;
+  }
+
+  async addEvaluation(input: NewEvaluation): Promise<string> {
+    const created = await addDoc(this.col(SUB.evaluations), {
+      ...clean(input),
+      createdAt: Date.now(),
+    });
+    return created.id;
   }
 
   async deleteRecitation(id: string): Promise<void> {
-    await deleteDoc(doc(db, TEACHERS, this.uid, SUB.recitations, id));
+    await deleteDoc(this.ref(SUB.recitations, id));
   }
 
   async deleteEvaluation(id: string): Promise<void> {
-    await deleteDoc(doc(db, TEACHERS, this.uid, SUB.evaluations, id));
+    await deleteDoc(this.ref(SUB.evaluations, id));
   }
 }
 
