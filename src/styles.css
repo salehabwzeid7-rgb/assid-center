@@ -1,5 +1,5 @@
 /* ==========================================================================
-   مركز أَصيد لتحفيظ القرآن الكريم — الأنماط العامة (عربي / RTL)
+   مركز أسيد لتحفيظ القرآن الكريم — الأنماط العامة (عربي / RTL)
    لوحة الألوان مستوحاة من هوية المركز: أخضر قرآني غنيّ + ذهبي أنيق + خلفية هادئة.
    ========================================================================== */
 
@@ -697,32 +697,6 @@ textarea {
   font-size: 0.9rem;
 }
 
-/* ---------- شريط وضع المعاينة ---------- */
-.preview-banner {
-  background: var(--gold-tint2);
-  color: var(--gold-deep);
-  border-bottom: 1px solid var(--gold);
-  font-size: 0.82rem;
-  font-weight: 600;
-  padding: 7px 14px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-  text-align: center;
-}
-
-.preview-banner button {
-  background: var(--gold-deep);
-  color: #fff;
-  border: none;
-  border-radius: 7px;
-  padding: 3px 10px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
 /* ---------- مساعدات ---------- */
 .quran-font {
   font-family: 'Amiri Quran', 'Tajawal', serif;
@@ -746,4 +720,157 @@ textarea {
 }
 .stack-12 > * + * {
   margin-top: 12px;
+}
+
+/* ==========================================================================
+   السمة البديلة "سمة الشعار" — مستوحاة من شعار المركز
+   قوس ذهبي + شريط أخضر + أرضية عاجية، مع أشعّة خفيفة في الترويسة.
+   تُفعَّل عبر: <html data-app-theme="heritage">
+   ========================================================================== */
+
+:root[data-app-theme='heritage'] {
+  --green: #1f7a3a;
+  --green-deep: #0f5a27;
+  --green-mid: #2b8f48;
+  --green-tint: #e4f0e2;
+  --header-grad: linear-gradient(160deg, #f6bf3f 0%, #e0980f 55%, #c9820b 100%);
+
+  --gold: #d9970d;
+  --gold-deep: #a86f07;
+  --gold-tint: #f6e9c8;
+  --gold-tint2: #fbf2dc;
+
+  --brand: var(--green);
+  --brand-dark: var(--green-deep);
+  --accent: var(--gold);
+
+  --bg: #faf5e8;
+  --surface: #fffdf6;
+  --surface-2: #f4ecd8;
+  --text: #23301d;
+  --text-soft: #6e6a4c;
+  --border: #e9dcbf;
+
+  --ok: #1e8f4e;
+  --ok-bg: #e3f2e5;
+  --warn: #b9770e;
+  --warn-bg: #fbf0d8;
+
+  --shadow: 0 2px 12px rgba(120, 85, 10, 0.1);
+  --shadow-lg: 0 14px 36px rgba(120, 85, 10, 0.2);
+  --ring: 0 0 0 3px rgba(217, 151, 13, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-app-theme='heritage'] {
+    --green: #3fae63;
+    --green-deep: #248046;
+    --green-mid: #46b36c;
+    --green-tint: #14251a;
+    --header-grad: linear-gradient(160deg, #b9860f 0%, #83610a 100%);
+
+    --gold: #e0b64f;
+    --gold-deep: #c99f3f;
+    --gold-tint: #2a2213;
+    --gold-tint2: #241d10;
+
+    --bg: #12140c;
+    --surface: #1b1d12;
+    --surface-2: #24261a;
+    --text: #eef0e0;
+    --text-soft: #b0ae8f;
+    --border: #34351f;
+
+    --ok: #46b779;
+    --ok-bg: #16311f;
+    --warn: #d9a441;
+    --warn-bg: #322612;
+
+    --shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* ترويسة القوس الذهبي مع أشعّة خفيفة */
+[data-app-theme='heritage'] .app-header {
+  background:
+    repeating-conic-gradient(
+      from 0deg at 50% 135%,
+      rgba(255, 255, 255, 0.14) 0deg 2.5deg,
+      transparent 2.5deg 8deg
+    ),
+    var(--header-grad);
+  color: #17421f;
+  border-bottom: 3px solid var(--green);
+  box-shadow: 0 3px 16px rgba(170, 120, 15, 0.4);
+}
+
+[data-app-theme='heritage'] .app-header .title {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+[data-app-theme='heritage'] .app-header .icon-btn {
+  background: rgba(23, 66, 31, 0.16);
+  color: #17421f;
+}
+
+[data-app-theme='heritage'] .app-header .icon-btn:active {
+  background: rgba(23, 66, 31, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-app-theme='heritage'] .app-header {
+    color: #fdf6e3;
+  }
+  [data-app-theme='heritage'] .app-header .icon-btn {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+  }
+}
+
+/* بطاقة الترحيب كشريط أخضر */
+[data-app-theme='heritage'] .hero {
+  background: linear-gradient(160deg, #2b8f48 0%, #0f5a27 100%);
+  border: 1px solid var(--gold);
+}
+
+/* عناوين الأقسام: معيّن ذهبي بدل الشريط */
+[data-app-theme='heritage'] .section-title::before {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  transform: rotate(45deg);
+  background: var(--gold);
+}
+
+/* الصور الرمزية: ذهبية بإطار أخضر */
+[data-app-theme='heritage'] .list-item .avatar {
+  background: var(--gold-tint);
+  color: var(--gold-deep);
+  box-shadow: inset 0 0 0 2px rgba(31, 122, 58, 0.45);
+}
+
+/* شارة التقدير بالأخضر */
+[data-app-theme='heritage'] .badge.b-grade {
+  background: var(--green-tint);
+  color: var(--green-deep);
+}
+
+/* الزر العائم ذهبي بإطار أخضر */
+[data-app-theme='heritage'] .fab {
+  background: linear-gradient(160deg, #e7a41a 0%, #c9820b 100%);
+  color: #17421f;
+  border-color: var(--green);
+}
+
+/* شعار شاشة الدخول: قوس ذهبي ونصّ أخضر */
+[data-app-theme='heritage'] .auth-logo .mark {
+  background: var(--header-grad);
+  color: #17421f;
+  border-color: var(--green);
+}
+
+/* بطاقات التقدير في الإعدادات */
+[data-app-theme='heritage'] .tabs button.active {
+  color: var(--gold-deep);
 }

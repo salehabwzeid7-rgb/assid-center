@@ -1,17 +1,26 @@
 /**
- * إعدادات بيئة الإنتاج — مركز أَصيد (واجهة المعلّم)
- * انسخ نفس قيم Firebase الموجودة في environment.ts هنا أيضًا،
- * واترك preview = false في الإنتاج.
+ * إعدادات بيئة الإنتاج — مركز أسيد (واجهة المعلّم)
+ *
+ * 1) أنشئ مشروع Firebase وفعّل Authentication (Email/Password) و Cloud Firestore.
+ * 2) من إعدادات المشروع → تطبيقاتك → تطبيق ويب، انسخ القيم إلى `firebase` أدناه.
+ * 3) انشر القواعد:  firebase deploy --only firestore:rules
+ *
+ * مفاتيح Firebase عامة (client-side) وليست سرية.
  */
 export const environment = {
   production: true,
-  preview: false,
+  useEmulator: false,
+  emulator: {
+    authUrl: 'http://127.0.0.1:9099',
+    firestoreHost: '127.0.0.1',
+    firestorePort: 8080,
+  },
   firebase: {
     apiKey: 'ضع_API_KEY_هنا',
-    authDomain: 'assid-center.firebaseapp.com',
-    projectId: 'assid-center',
-    storageBucket: 'assid-center.appspot.com',
-    messagingSenderId: 'ضع_SENDER_ID_هنا',
-    appId: 'ضع_APP_ID_هنا',
+    authDomain: 'ضع_authDomain_هنا',
+    projectId: 'ضع_projectId_هنا',
+    storageBucket: 'ضع_storageBucket_هنا',
+    messagingSenderId: 'ضع_messagingSenderId_هنا',
+    appId: 'ضع_appId_هنا',
   },
 };

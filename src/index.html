@@ -2,7 +2,14 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="utf-8" />
-    <title>مركز أَصيد لتحفيظ القرآن الكريم</title>
+    <title>مركز أسيد لتحفيظ القرآن الكريم</title>
+    <script>
+      // تطبيق السمة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
+      try {
+        var t = localStorage.getItem('assid-center:theme');
+        if (t) document.documentElement.setAttribute('data-app-theme', t);
+      } catch (e) {}
+    </script>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />

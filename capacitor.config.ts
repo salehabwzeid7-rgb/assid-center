@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.assidcenter.teacher',
-  appName: 'مركز أَصيد',
+  appName: 'مركز أسيد',
   webDir: 'dist/assid-center/browser',
   backgroundColor: '#0f6b3f',
   android: {

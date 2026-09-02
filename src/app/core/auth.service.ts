@@ -1,17 +1,16 @@
 import { Injectable, signal, computed } from '@angular/core';
 import {
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendPasswordResetEmail,
   type User,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { environment } from '../../environments/environment';
 import { auth, db } from './firebase';
 import { TEACHERS, type Teacher } from './models';
-
-const PREVIEW_KEY = 'assid-center:preview:teacher';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -31,16 +30,7 @@ export class AuthService {
     () => this.teacher()?.name || this.user()?.displayName || this.user()?.email || 'المعلّم',
   );
 
-  /** وضع المعاينة: بلا Firebase، ودخول تلقائي بمعلّم تجريبي */
-  readonly preview = environment.preview;
-
   constructor() {
-    if (this.preview) {
-      this.restorePreviewTeacher();
-      this.ready.set(true);
-      this.resolveReady();
-      return;
-    }
     onAuthStateChanged(auth, async (u) => {
       this.user.set(u);
       if (u) {
@@ -53,67 +43,37 @@ export class AuthService {
     });
   }
 
+  /** تسجيل الدخول ببريد وكلمة مرور */
   async login(email: string, password: string): Promise<void> {
-    if (this.preview) {
-      const name = email.trim() ? email.trim().split('@')[0] : 'معلّم المعاينة';
-      const t: Teacher = {
-        id: 'preview-teacher',
-        name,
-        email: email.trim() || 'preview@assid.center',
-        phone: '',
-        createdAt: Date.now(),
-      };
-      this.setPreviewTeacher(t);
-      return;
-    }
     const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
     await this.loadOrCreateTeacher(cred.user);
   }
 
+  /** إنشاء حساب معلّم جديد من الصفر */
+  async register(name: string, email: string, password: string): Promise<void> {
+    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    await updateProfile(cred.user, { displayName: name.trim() });
+    const fresh: Omit<Teacher, 'id'> = {
+      name: name.trim(),
+      email: cred.user.email ?? email.trim(),
+      phone: '',
+      createdAt: Date.now(),
+    };
+    await setDoc(doc(db, TEACHERS, cred.user.uid), fresh);
+    this.teacher.set({ id: cred.user.uid, ...fresh });
+  }
+
+  /** إرسال رابط إعادة تعيين كلمة المرور */
+  async resetPassword(email: string): Promise<void> {
+    await sendPasswordResetEmail(auth, email.trim());
+  }
+
   async logout(): Promise<void> {
-    if (this.preview) {
-      this.user.set(null);
-      this.teacher.set(null);
-      try {
-        localStorage.removeItem(PREVIEW_KEY);
-      } catch {
-        /* لا شيء */
-      }
-      return;
-    }
     await signOut(auth);
     this.teacher.set(null);
   }
 
-  private setPreviewTeacher(t: Teacher): void {
-    this.user.set({ uid: t.id, displayName: t.name, email: t.email } as User);
-    this.teacher.set(t);
-    try {
-      localStorage.setItem(PREVIEW_KEY, JSON.stringify(t));
-    } catch {
-      /* لا شيء */
-    }
-  }
-
-  private restorePreviewTeacher(): void {
-    let t: Teacher = {
-      id: 'preview-teacher',
-      name: 'معلّم المعاينة',
-      email: 'preview@assid.center',
-      phone: '',
-      createdAt: Date.now(),
-    };
-    try {
-      const raw = localStorage.getItem(PREVIEW_KEY);
-      if (raw) t = JSON.parse(raw) as Teacher;
-    } catch {
-      /* استخدم الافتراضي */
-    }
-    this.user.set({ uid: t.id, displayName: t.name, email: t.email } as User);
-    this.teacher.set(t);
-  }
-
-  /** يقرأ ملف المعلّم، وينشئه تلقائيًا عند أول دخول إن لم يكن موجودًا */
+  /** يقرأ ملف المعلّم، وينشئه تلقائيًا إن لم يكن موجودًا */
   private async loadOrCreateTeacher(u: User): Promise<void> {
     const ref = doc(db, TEACHERS, u.uid);
     const snap = await getDoc(ref);
@@ -137,10 +97,6 @@ export class AuthService {
     const current = this.teacher();
     if (!u || !current) return;
     const next: Teacher = { ...current, ...patch };
-    if (this.preview) {
-      this.setPreviewTeacher(next);
-      return;
-    }
     await setDoc(doc(db, TEACHERS, u.uid), {
       name: next.name,
       email: next.email,

@@ -1,23 +1,31 @@
 /**
- * إعدادات البيئة — مركز أَصيد (واجهة المعلّم)
+ * إعدادات البيئة (تطوير) — مركز أسيد (واجهة المعلّم)
  *
- * ── وضع المعاينة (preview) ──────────────────────────────────────────────
- * عندما يكون `preview: true` يعمل التطبيق ببيانات تجريبية محليًا (localStorage)
- * دون أي اتصال بـ Firebase — لمعاينة الواجهة وتجربتها فورًا.
- * بعد إنشاء مشروع Firebase وإدخال إعداداته أدناه، اجعل `preview: false`.
+ * ── المحاكي المحلي (useEmulator) ────────────────────────────────────────
+ * عندما يكون `useEmulator: true` يتصل التطبيق بـ Firebase Emulator Suite
+ * المحلي (مصادقة + Firestore حقيقيان يعملان على جهازك بلا سحابة).
+ * شغّل كل شيء بأمر واحد:  npm run dev
+ * البيانات حقيقية وتُحفَظ في مجلد .emulator-data بين الجلسات.
  *
- * ملاحظة: مفاتيح Firebase عامة (client-side) وليست سرية، والحماية عبر
- * قواعد أمان Firestore في ملف firestore.rules.
+ * ── الإنتاج ────────────────────────────────────────────────────────────
+ * لاستخدام مشروع Firebase حقيقي على السحابة: اجعل `useEmulator: false`
+ * واملأ قيم `firebase` أدناه (من إعدادات مشروع Firebase → تطبيق ويب).
+ * مفاتيح Firebase عامة وليست سرية؛ الحماية عبر قواعد firestore.rules.
  */
 export const environment = {
   production: false,
-  preview: true,
+  useEmulator: true,
+  emulator: {
+    authUrl: 'http://127.0.0.1:9099',
+    firestoreHost: '127.0.0.1',
+    firestorePort: 8080,
+  },
   firebase: {
-    apiKey: 'ضع_API_KEY_هنا',
-    authDomain: 'assid-center.firebaseapp.com',
-    projectId: 'assid-center',
-    storageBucket: 'assid-center.appspot.com',
-    messagingSenderId: 'ضع_SENDER_ID_هنا',
-    appId: 'ضع_APP_ID_هنا',
+    apiKey: 'demo-assid-center',
+    authDomain: 'demo-assid-center.firebaseapp.com',
+    projectId: 'demo-assid-center',
+    storageBucket: 'demo-assid-center.appspot.com',
+    messagingSenderId: '000000000000',
+    appId: '1:000000000000:web:0000000000000000000000',
   },
 };

@@ -1,10 +1,8 @@
-# مركز أَصيد لتحفيظ القرآن الكريم — واجهة المعلّم
+# مركز أسيد لتحفيظ القرآن الكريم — واجهة المعلّم
 
-تطبيق جوّال (Android / APK) مخصّص لمعلّمي مركز أَصيد لتسجيل متابعة الطلاب:
-**مقدار الحفظ وما سُمِع**، و**الحضور**، و**التقييم اليومي** — مع مزامنة لحظية عبر
+تطبيق جوّال (Android / APK) لمعلّمي **مركز أسيد** لتسجيل متابعة الطلاب:
+**مقدار الحفظ وما سُمِع**، و**الحضور**، و**التقييم اليومي** — بمزامنة لحظية عبر
 Firebase ودعم العمل دون اتصال.
-
-> هذه **الخطوة الثانية** من المشروع، وتركّز حصريًا على **واجهة المعلّم**.
 
 ---
 
@@ -14,7 +12,8 @@ Firebase ودعم العمل دون اتصال.
 | --- | --- |
 | الواجهة | Angular 22 (Standalone + Signals، بلا Zone.js) |
 | اللغة | عربية بالكامل مع تخطيط RTL |
-| الخلفية وقاعدة البيانات | Firebase — Authentication + Cloud Firestore (مزامنة لحظية + تخزين محلي دائم) |
+| الخلفية | Firebase — Authentication (Email/Password) + Cloud Firestore |
+| التطوير المحلي | Firebase Emulator Suite (مصادقة + Firestore حقيقيان على الجهاز) |
 | التغليف كتطبيق Android | Capacitor 8 |
 
 ---
@@ -22,104 +21,81 @@ Firebase ودعم العمل دون اتصال.
 ## المتطلبات
 
 - Node.js 20+ و npm
-- **JDK 21** لبناء APK (Gradle 8.14 لا يدعم JDK 25 المرفق حديثًا مع Android Studio):
+- **JDK 21** — لبناء APK وتشغيل المحاكي (Gradle 8.14 لا يدعم JDK 25 المرفق مع Android Studio):
   ```
   winget install EclipseAdoptium.Temurin.21.JDK
   ```
-- Android SDK (مع Android Studio): `platform-tools` و `platforms;android-36` و `build-tools`
-- (اختياري) Firebase CLI لنشر قواعد الأمان: `npm i -g firebase-tools`
+- Android SDK (مع Android Studio) لبناء APK فقط.
+
+`firebase-tools` و `concurrently` مثبّتان محليًا ضمن المشروع (لا حاجة لتثبيت عام).
 
 ---
 
-## الإعداد الأول
+## التشغيل والتطوير (بلا إعداد سحابي)
 
-### 1) تثبيت الحزم
 ```
 npm install
+npm run dev
 ```
 
-### 2) تهيئة مشروع Firebase
-1. أنشئ مشروعًا في <https://console.firebase.google.com> (اسم مقترح: `assid-center`).
-2. فعّل **Authentication → Sign-in method → Email/Password**.
-3. أنشئ قاعدة **Cloud Firestore** (وضع الإنتاج).
-4. من **إعدادات المشروع → تطبيقاتك → إضافة تطبيق ويب**، وانسخ كائن الإعداد.
-5. ضع القيم في الملفَّين `src/environments/environment.ts` و `src/environments/environment.prod.ts`:
-   ```ts
-   firebase: {
-     apiKey: '...',
-     authDomain: 'assid-center.firebaseapp.com',
-     projectId: 'assid-center',
-     storageBucket: 'assid-center.appspot.com',
-     messagingSenderId: '...',
-     appId: '...',
-   }
-   ```
+`npm run dev` يشغّل **بأمر واحد**:
+- محاكيات Firebase المحلية (مصادقة `:9099`، Firestore `:8080`، واجهة `:4000`)
+- خادم Angular على <http://localhost:4200>
 
-### 3) نشر قواعد الأمان
-```
-firebase login
-firebase use assid-center
-firebase deploy --only firestore:rules
-```
-القواعد في `firestore.rules`: كل معلّم يصل إلى شجرته فقط تحت `teachers/{uid}/…`.
-لا حاجة لفهارس مركّبة (كل الاستعلامات بحقل مساواة واحد + ترتيب داخل التطبيق).
+كل شيء حقيقي: أنشئ حسابًا من شاشة **«حساب جديد»**، ثم أنشئ حلقات وطلابًا وسجّل
+التسميع والحضور والتقييم. البيانات تُحفَظ في `./.emulator-data` وتُستعاد عند إعادة
+التشغيل. لا توجد أي بيانات وهمية.
 
-### 4) إنشاء حساب معلّم
-من Firebase Console → Authentication → **Add user** (بريد + كلمة مرور).
-عند أول دخول يُنشئ التطبيق تلقائيًا ملف المعلّم في Firestore.
+> لتشغيل الواجهة فقط بلا محاكي: `npm start` (لن تعمل المصادقة/الحفظ حتى يعمل المحاكي
+> أو يُضبط مشروع Firebase حقيقي).
 
 ---
 
-## المعاينة قبل إعداد Firebase (وضع المعاينة)
+## الربط بمشروع Firebase حقيقي (للإنتاج / APK)
 
-```
-npm start        →  http://localhost:4200
-```
+1. أنشئ مشروعًا في <https://console.firebase.google.com>.
+2. فعّل **Authentication → Email/Password**، وأنشئ قاعدة **Cloud Firestore**.
+3. من **إعدادات المشروع → تطبيقاتك → تطبيق ويب**، انسخ الإعداد إلى
+   `src/environments/environment.prod.ts` (كائن `firebase`)، وابقِ `useEmulator: false`.
+4. اضبط اسم المشروع في `.firebaserc` ثم انشر القواعد:
+   ```
+   npx firebase login
+   npm run firebase:rules
+   ```
 
-يبدأ التطبيق في **وضع المعاينة** (`environment.preview = true`): دخول تلقائي بمعلّم
-تجريبي، وبيانات واقعية (حلقتان وستة طلاب وسجلات حضور/تسميع/تقييم) مخزّنة محليًا في
-`localStorage` بلا أي اتصال بـ Firebase. كل الإضافة/التعديل يعمل ويُحفَظ محليًا.
+قواعد `firestore.rules`: كل معلّم يصل إلى شجرته فقط تحت `teachers/{uid}/…`.
+لا حاجة لفهارس مركّبة (استعلامات بحقل واحد + ترتيب داخل التطبيق).
 
-- شريط علوي بلون ذهبي يوضّح أنك في وضع المعاينة، وفيه زر **«إعادة الضبط»** لاسترجاع
-  البيانات الأصلية.
-- شاشة الدخول تقبل أي بريد/كلمة مرور.
+للتطوير على مشروع سحابي بدل المحاكي: اجعل `useEmulator: false` في
+`src/environments/environment.ts` واملأ قيم `firebase` فيه.
 
-بعد إدخال إعدادات Firebase، غيّر `preview` إلى `false` في
-`src/environments/environment.ts` (و`environment.prod.ts`) ليعمل التطبيق على Firebase
-فعليًا. **بناء APK للإنتاج يستخدم `preview = false` أصلًا.**
+---
+
+## السمات (المظهر)
+
+سمتان قابلتان للتبديل من **حساب المعلّم ← المظهر**، أو بزر 🎨 في ترويسة اللوحة:
+
+- **الأساسية**: أخضر قرآني + ذهبي + خلفية هادئة.
+- **سمة الشعار**: مستوحاة من شعار المركز — ترويسة القوس الذهبي بأشعّة،
+  وشريط أخضر، وأرضية عاجية.
+
+كلتاهما تدعمان الوضعين الفاتح والداكن، ويُحفَظ الاختيار محليًا.
 
 ---
 
 ## بناء ملف APK
 
-### الطريقة السريعة
 ```
-npm run apk:debug
+npm run apk:debug      # يبني ويُخرج إلى apk/AssidCenter-Teacher-debug-<التاريخ>.apk
+npm run apk:release    # نسخة غير موقّعة للنشر
+npm run android:open   # فتح المشروع في Android Studio
 ```
-ينفّذ: بناء Angular للإنتاج ← `cap sync` ← `gradlew assembleDebug`، ثم ينسخ الناتج إلى:
-```
-apk/AssidCenter-Teacher-debug-<التاريخ>.apk
-```
-السكربت `scripts/build-apk.mjs` يجد JDK 21 و Android SDK تلقائيًا، ويمكن تجاوزهما عبر
-`JAVA_HOME` و `ANDROID_SDK_ROOT`.
 
-### عبر Android Studio
-```
-npm run android:open
-```
-ثم: **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+`scripts/build-apk.mjs` يجد JDK 21 و Android SDK تلقائيًا (أو عبر `JAVA_HOME` /
+`ANDROID_SDK_ROOT`). التثبيت على جهاز: `adb install -r <ملف APK>`.
 
-### نسخة موقّعة للنشر
-```
-npm run apk:release
-```
-تُنتج APK غير موقّع؛ وقّعه بمفتاحك عبر `apksigner` أو `signingConfig` في
-`android/app/build.gradle`.
-
-### التثبيت على الجهاز
-```
-adb install -r apk/AssidCenter-Teacher-debug-<التاريخ>.apk
-```
+> بناء APK يستخدم `environment.prod.ts` (`useEmulator: false`) — أي أنه يتطلب
+> إعدادات Firebase حقيقية لتعمل المصادقة والحفظ على الجهاز.
 
 ---
 
@@ -128,26 +104,19 @@ adb install -r apk/AssidCenter-Teacher-debug-<التاريخ>.apk
 ```
 src/app/
   core/
-    firebase.ts        تهيئة Firebase (Auth + Firestore + كاش دائم)
+    firebase.ts        تهيئة Firebase + ربط المحاكي عند useEmulator
+    theme.service.ts   إدارة السمة والتبديل بينها
     models.ts          نماذج البيانات ومسمّيات الحقول العربية
     quran-data.ts      أسماء سور القرآن الـ114 وعدد آياتها
-    auth.service.ts    تسجيل الدخول وملف المعلّم
+    auth.service.ts    الدخول / إنشاء حساب / إعادة تعيين كلمة المرور / ملف المعلّم
     auth.guard.ts      حماية المسارات
     data.service.ts    قراءة/كتابة الحلقات والطلاب والحضور والتسميع والتقييم
   shared/
     page-header.ts     الشريط العلوي الموحّد
     grade-picker.ts    منتقي التقدير (ممتاز → ضعيف)
   pages/
-    login/             تسجيل دخول المعلّم
-    dashboard/         لوحة المعلّم + إحصائيات اليوم
-    profile/           بيانات المعلّم وتسجيل الخروج
-    circle-form/       إضافة حلقة
-    circle/            حلقة: قائمة الطلاب + تحضير اليوم
-    attendance/        التحضير الجماعي لتاريخ محدّد
-    student-form/      إضافة/تعديل طالب
-    student/           ملف الطالب: نظرة عامة / التسميع / الحضور / التقييم
-    recitation-form/   تسجيل جلسة تسميع
-    evaluation-form/   تقييم يومي
+    login/ dashboard/ profile/ circle-form/ circle/
+    attendance/ student-form/ student/ recitation-form/ evaluation-form/
 ```
 
 ### نموذج البيانات في Firestore
@@ -157,10 +126,9 @@ teachers/{uid}                  { name, email, phone, createdAt }
   students/{id}                 { name, circleId, level, birthDate,
                                   guardianPhone, phone, currentPlan, active }
   attendance/{studentId_date}   { studentId, circleId, date, status }
-  recitations/{id}              { studentId, circleId, date, kind,
-                                  fromSurah, fromAyah, toSurah, toAyah,
-                                  pages, grade, hifzErrors, tajweedErrors,
-                                  promptCount, notes }
+  recitations/{id}              { studentId, circleId, date, kind, fromSurah,
+                                  fromAyah, toSurah, toAyah, pages, grade,
+                                  hifzErrors, tajweedErrors, promptCount, notes }
   evaluations/{id}              { studentId, circleId, date, memorization,
                                   review, tajweed, attention, behavior, notes }
 ```
@@ -169,11 +137,12 @@ teachers/{uid}                  { name, email, phone, createdAt }
 
 ## الميزات
 
+- **حساب المعلّم**: إنشاء حساب من الصفر، تسجيل دخول، إعادة تعيين كلمة المرور، تعديل الاسم/الجوال.
 - **لوحة المعلّم**: عدد الحلقات والطلاب، وحضور/تسميع اليوم.
-- **الحلقات والطلاب**: إنشاء حلقات، وإضافة طلاب ببياناتهم وأرقام أولياء الأمور.
-- **التحضير الجماعي**: حالة كل طالب (حاضر/متأخر/مأذون/غائب) لتاريخ محدّد، وزر «تعيين الكل حاضر».
-- **تسجيل التسميع**: النوع، ومن سورة/آية إلى سورة/آية، وعدد الأوجه، والتقدير،
-  وأخطاء الحفظ والتجويد، ومرات التلقين، والملاحظات.
-- **التقييم اليومي**: خمسة محاور (الحفظ، المراجعة، التجويد، الانتباه، السلوك) + ملاحظة.
-- **ملف الطالب**: إحصائيات مجمّعة (جلسات، مجموع الأوجه، نسبة الحضور) وسجل كامل بكل تبويب.
-- **مزامنة لحظية** بين أجهزة المعلّم، و**عمل دون اتصال** مع مزامنة تلقائية عند عودة الشبكة.
+- **الحلقات والطلاب**: إنشاء حلقات، وإضافة/تعديل طلاب بأرقام أولياء الأمور.
+- **التحضير الجماعي**: حالة كل طالب (حاضر/متأخر/مأذون/غائب) لتاريخ محدّد + «تعيين الكل حاضر».
+- **تسجيل التسميع**: النوع، من/إلى سورة وآية، عدد الأوجه، التقدير، أخطاء الحفظ والتجويد، مرات التلقين، ملاحظات.
+- **التقييم اليومي**: الحفظ، المراجعة، التجويد، الانتباه، السلوك + ملاحظة.
+- **ملف الطالب**: إحصائيات مجمّعة وسجل كامل بكل تبويب.
+- **مزامنة لحظية** و**عمل دون اتصال** مع مزامنة تلقائية عند عودة الشبكة.
+- **سمتان للواجهة** قابلتان للتبديل الفوري.

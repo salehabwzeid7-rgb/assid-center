@@ -4,9 +4,12 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "dev": "concurrently -k -n emulators,web -c green,cyan \"npm:emulators\" \"npm:start\"",
+    "emulators": "node scripts/emulators.mjs",
     "build": "ng build",
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
+    "firebase:rules": "firebase deploy --only firestore:rules",
     "cap:sync": "npm run build:prod && npx cap sync android",
     "android:open": "npm run cap:sync && npx cap open android",
     "apk:debug": "npm run cap:sync && node scripts/build-apk.mjs debug",
@@ -33,6 +36,8 @@
     "@angular/cli": "^22.1.6",
     "@angular/compiler-cli": "^22.1.0",
     "@capacitor/cli": "^8.5.1",
+    "concurrently": "^10.0.5",
+    "firebase-tools": "^15.28.2",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2"
   }

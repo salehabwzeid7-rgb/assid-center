@@ -2,16 +2,20 @@ import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { DataService, today } from '../../core/data.service';
+import { ThemeService } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
   selector: 'app-dashboard',
   imports: [RouterLink, PageHeaderComponent],
   template: `
-    <app-page-header title="مركز أَصيد" [back]="false">
-      <button actions class="icon-btn" type="button" routerLink="/profile" aria-label="الحساب">
-        ⚙
-      </button>
+    <app-page-header title="مركز أسيد" [back]="false">
+      <span actions style="display:flex;gap:8px">
+        <button class="icon-btn" type="button" (click)="theme.toggle()" aria-label="تبديل السمة">
+          🎨
+        </button>
+        <button class="icon-btn" type="button" routerLink="/profile" aria-label="الحساب">⚙</button>
+      </span>
     </app-page-header>
 
     <div class="page">
@@ -80,6 +84,7 @@ export class DashboardPage {
   private destroyRef = inject(DestroyRef);
   private data = inject(DataService);
   readonly auth = inject(AuthService);
+  readonly theme = inject(ThemeService);
 
   readonly todayLabel = new Date().toLocaleDateString('ar', {
     weekday: 'long',

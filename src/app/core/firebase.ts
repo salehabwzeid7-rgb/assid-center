@@ -1,34 +1,36 @@
 /* ==========================================================================
-   تهيئة Firebase — مركز أَصيد
-   المصادقة (Auth) + قاعدة بيانات Firestore مع مزامنة لحظية ودعم العمل دون اتصال
+   تهيئة Firebase — مركز أسيد
+   المصادقة (Auth) + قاعدة بيانات Firestore مع مزامنة لحظية ودعم العمل دون اتصال.
 
-   في وضع المعاينة (environment.preview) لا تُهيَّأ Firebase إطلاقًا،
-   ويعمل التطبيق ببيانات تجريبية محلية (انظر preview-db.ts).
+   في التطوير (environment.useEmulator) يتصل التطبيق بـ Firebase Emulator Suite
+   المحلي — مصادقة و Firestore حقيقيان على الجهاز. شغّل: npm run dev
    ========================================================================== */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
 import {
   initializeFirestore,
+  connectFirestoreEmulator,
   persistentLocalCache,
   persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 
-let _app: FirebaseApp | undefined;
-let _auth: Auth | undefined;
-let _db: Firestore | undefined;
+export const firebaseApp: FirebaseApp = initializeApp(environment.firebase);
 
-if (!environment.preview) {
-  _app = initializeApp(environment.firebase);
-  _auth = getAuth(_app);
-  _db = initializeFirestore(_app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  });
+export const auth: Auth = getAuth(firebaseApp);
+
+export const db: Firestore = initializeFirestore(firebaseApp, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});
+
+if (environment.useEmulator) {
+  connectAuthEmulator(auth, environment.emulator.authUrl, { disableWarnings: true });
+  connectFirestoreEmulator(
+    db,
+    environment.emulator.firestoreHost,
+    environment.emulator.firestorePort,
+  );
+  console.info('%c[مركز أسيد] متصل بمحاكي Firebase المحلي', 'color:#0d5c3f;font-weight:bold');
 }
-
-/** كائنات Firebase — غير معرّفة في وضع المعاينة، ولا تُستخدَم حينها. */
-export const firebaseApp = _app as FirebaseApp;
-export const auth = _auth as Auth;
-export const db = _db as Firestore;
