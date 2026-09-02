@@ -1,21 +1,14 @@
 import { Injectable, signal } from '@angular/core';
 
-/** السمات المتاحة — مصمَّمة لمراكز تحفيظ القرآن والمراكز التعليمية والخدمية */
-export type AppTheme =
-  | 'default'
-  | 'heritage'
-  | 'sakina'
-  | 'mihrab'
-  | 'rawda'
-  | 'noor'
-  | 'azraq'
-  | 'idara'
-  | 'fayrouz'
-  | 'layl'
-  | 'kahraman'
-  | 'zumurrud';
+/* ==========================================================================
+   إدارة سمات الواجهة — أسماء ومنطق بالإنجليزية، ونصوص المستخدم بالعربية.
+   ── القسم الأول: ثيمات قياسية (تغيّر الألوان فقط).
+   ── القسم الثاني: ثيمات احترافية «كاملة السطح» (تغيّر خلفية التطبيق بالكامل
+      بتدرّجات غنيّة + أسطح زجاجية).
+   ========================================================================== */
 
-export const THEME_ORDER: AppTheme[] = [
+/** ثيمات قياسية */
+export const STANDARD_THEMES = [
   'default',
   'heritage',
   'sakina',
@@ -28,7 +21,35 @@ export const THEME_ORDER: AppTheme[] = [
   'layl',
   'kahraman',
   'zumurrud',
-];
+] as const;
+
+/** ثيمات احترافية كاملة السطح */
+export const FULL_SURFACE_THEMES = [
+  'obsidian',
+  'charcoal',
+  'gunmetal',
+  'icenavy',
+  'espresso',
+  'emerald',
+  'titanium',
+  'ember',
+] as const;
+
+export type AppTheme = (typeof STANDARD_THEMES)[number] | (typeof FULL_SURFACE_THEMES)[number];
+
+/** ترتيب التدوير الكامل (زر 🎨) */
+export const THEME_ORDER: AppTheme[] = [...STANDARD_THEMES, ...FULL_SURFACE_THEMES];
+
+const FULL_SURFACE_SET = new Set<string>(FULL_SURFACE_THEMES);
+export function isFullSurface(t: AppTheme): boolean {
+  return FULL_SURFACE_SET.has(t);
+}
+
+/** عناوين القسمين في شاشة الإعدادات */
+export const THEME_GROUP_LABELS = {
+  standard: 'الثيمات القياسية',
+  full: 'الثيمات الاحترافية المتقدّمة',
+} as const;
 
 export const THEME_LABELS: Record<AppTheme, string> = {
   default: 'الأساسية',
@@ -43,6 +64,14 @@ export const THEME_LABELS: Record<AppTheme, string> = {
   layl: 'ليل حديث',
   kahraman: 'كهرمان',
   zumurrud: 'زُمُرّد',
+  obsidian: 'سَبَج أزرق',
+  charcoal: 'فحميّ ملكيّ',
+  gunmetal: 'فولاذ فيروزيّ',
+  icenavy: 'كحليّ جليديّ',
+  espresso: 'بُنّ إسبريسو',
+  emerald: 'زمرّد الغابة',
+  titanium: 'تيتانيوم فاتح',
+  ember: 'جمر الغروب',
 };
 
 /** وصف موجز لكل سمة (يظهر تحت الاسم في شاشة الإعدادات) */
@@ -53,15 +82,23 @@ export const THEME_DESC: Record<AppTheme, string> = {
   mihrab: 'عنّابي تراثي + ذهبي على أرضية عاجية',
   rawda: 'أخضر زيتوني + رملي دافئ',
   noor: 'أحادي احترافي عالي التباين + لمسة ذهبية',
-  azraq: 'رمادي فاتح ناعم + أزرق هادئ + لمسات خضراء — إحساس خدمات محلّية منعش',
-  idara: 'أبيض مائل + بطاقات رمادية + كحلي غامق ومؤشّرات حالة خضراء/كهرمانية',
-  fayrouz: 'خلفية كريمية + نصّ فحمي عالي التباين + فيروزي هادئ وبطاقات واسعة',
-  layl: 'فحمي عميق + نيلي هادئ + نصّ أبيض ولمسات نيون — وضع ليلي عصريّ',
-  kahraman: 'بيج دافئ + بنّي عميق + كهرماني برتقالي — أجواء متجر ودود',
+  azraq: 'رمادي فاتح ناعم + أزرق هادئ + لمسات خضراء',
+  idara: 'أبيض مائل + بطاقات رمادية + كحلي ومؤشّرات حالة خضراء/كهرمانية',
+  fayrouz: 'خلفية كريمية + نصّ فحمي عالي التباين + فيروزي وبطاقات واسعة',
+  layl: 'فحمي عميق + نيلي هادئ + نصّ أبيض ولمسات نيون',
+  kahraman: 'بيج دافئ + بنّي عميق + كهرماني برتقالي',
   zumurrud: 'أبيض ناصع + حدود رمادية خفيفة + أخضر غابيّ وشارات زمرّدية',
+  obsidian: 'تدرّج أسود مزرقّ عميق مع أسطح زجاجية وإبراز أزرق',
+  charcoal: 'فحميّ داكن غنيّ بلمسة ملكيّة بنفسجية وأسطح شفّافة',
+  gunmetal: 'رماديّ فولاذيّ متدرّج بلمحة فيروزية',
+  icenavy: 'كحليّ عميق متدرّج مع إبرازات زرقاء جليدية',
+  espresso: 'بنّيّ قهوة دافئ متدرّج بأسطح داكنة ولمسة فستقية',
+  emerald: 'أخضر غابيّ عميق متدرّج مع توهّج زمرّديّ',
+  titanium: 'رماديّ فضّيّ فاتح متدرّج بإحساس معدنيّ ناعم',
+  ember: 'تدرّج غروب دافئ من الأرجوانيّ إلى الجمر البرتقاليّ',
 };
 
-/** ألوان مصغّرة لبطاقة الاختيار (أساسي · مميّز · خلفية) */
+/** ألوان مصغّرة لعيّنة الاختيار (أساسي · مميّز · خلفية) */
 export const THEME_SWATCHES: Record<AppTheme, [string, string, string]> = {
   default: ['#0d6b3f', '#c9a14a', '#f6f4ec'],
   heritage: ['#e0980f', '#1f7a3a', '#faf5e8'],
@@ -75,14 +112,35 @@ export const THEME_SWATCHES: Record<AppTheme, [string, string, string]> = {
   layl: ['#5b57c9', '#22d3ee', '#141922'],
   kahraman: ['#c67a1e', '#8a5a20', '#f7f1e6'],
   zumurrud: ['#0b6b46', '#0f9d63', '#ffffff'],
+  obsidian: ['#5b8def', '#d9b25a', '#0d1426'],
+  charcoal: ['#8163cf', '#c9a24a', '#1b191e'],
+  gunmetal: ['#26a89b', '#c7b06a', '#182022'],
+  icenavy: ['#4fb0e8', '#5fd0d8', '#102a47'],
+  espresso: ['#c98a4e', '#9aa878', '#221610'],
+  emerald: ['#2bb673', '#d8c06a', '#0d2418'],
+  titanium: ['#5c7186', '#a9772e', '#eaeef2'],
+  ember: ['#e8813f', '#c96fa0', '#3a1f2e'],
+};
+
+/** تدرّج معاينة لعيّنة الثيمات كاملة السطح */
+export const THEME_PREVIEW: Partial<Record<AppTheme, string>> = {
+  obsidian: 'linear-gradient(135deg, #0a0f1e 0%, #16224a 60%, #0c1428 100%)',
+  charcoal: 'linear-gradient(135deg, #17161a 0%, #2a2333 55%, #17151b 100%)',
+  gunmetal: 'linear-gradient(135deg, #14191b 0%, #1d3033 55%, #131b1d 100%)',
+  icenavy: 'linear-gradient(135deg, #0b1c33 0%, #164a75 55%, #0c2138 100%)',
+  espresso: 'linear-gradient(135deg, #1a120d 0%, #3a271b 55%, #170f0a 100%)',
+  emerald: 'linear-gradient(135deg, #08160f 0%, #0f3a26 55%, #091d13 100%)',
+  titanium: 'linear-gradient(135deg, #eef1f4 0%, #d8dee4 55%, #f4f6f8 100%)',
+  ember: 'linear-gradient(135deg, #1e1220 0%, #6b2f34 55%, #944a2c 100%)',
 };
 
 const KEY = 'assid-center:theme';
 
 /**
  * إدارة سمة الواجهة والتبديل بينها.
- * تُطبَّق عبر السمة data-app-theme على عنصر <html>، وتُحفَظ في localStorage،
- * وتُطبَّق مبكرًا عبر سكربت صغير في index.html لتفادي وميض الألوان.
+ * تُطبَّق عبر السمتين data-app-theme و data-app-surface على عنصر <html>،
+ * وتُحفَظ في localStorage، وتُطبَّق مبكرًا عبر سكربت صغير في index.html
+ * لتفادي وميض الألوان.
  */
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
@@ -109,7 +167,9 @@ export class ThemeService {
   }
 
   private apply(t: AppTheme): void {
-    document.documentElement.setAttribute('data-app-theme', t);
+    const root = document.documentElement;
+    root.setAttribute('data-app-theme', t);
+    root.setAttribute('data-app-surface', isFullSurface(t) ? 'full' : 'flat');
   }
 }
 

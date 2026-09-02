@@ -7,7 +7,15 @@
       // تطبيق السمة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
       try {
         var t = localStorage.getItem('assid-center:theme');
-        if (t) document.documentElement.setAttribute('data-app-theme', t);
+        if (t) {
+          var r = document.documentElement;
+          r.setAttribute('data-app-theme', t);
+          var full = [
+            'obsidian', 'charcoal', 'gunmetal', 'icenavy',
+            'espresso', 'emerald', 'titanium', 'ember',
+          ];
+          r.setAttribute('data-app-surface', full.indexOf(t) >= 0 ? 'full' : 'flat');
+        }
       } catch (e) {}
     </script>
     <base href="/" />

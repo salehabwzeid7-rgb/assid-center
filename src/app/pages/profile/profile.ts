@@ -4,11 +4,15 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import {
-  ThemeService,
+  FULL_SURFACE_THEMES,
+  STANDARD_THEMES,
   THEME_DESC,
+  THEME_GROUP_LABELS,
   THEME_LABELS,
-  THEME_ORDER,
+  THEME_PREVIEW,
   THEME_SWATCHES,
+  ThemeService,
+  isFullSurface,
 } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -21,14 +25,17 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <div class="page">
       <div class="row-between section-title">
         <span>المظهر</span>
-        <span class="muted" style="font-weight:400;font-size:.78rem">{{ themes.length }} سمة</span>
+        <span class="muted" style="font-weight:400;font-size:.78rem">{{ totalCount }} سمة</span>
       </div>
       <div class="card">
         <p class="muted" style="margin-top:0;font-size:.86rem">
-          اختر سمة الواجهة — كلّها بالعربية RTL وتدعم الوضعين الفاتح والداكن، والتبديل فوريّ.
+          اختر سمة الواجهة — كلّها بالعربية RTL، والتبديل فوريّ.
         </p>
+
+        <!-- القسم الأول: الثيمات القياسية -->
+        <div class="theme-group-label">{{ groupLabels.standard }}</div>
         <div class="theme-list">
-          @for (t of themes; track t) {
+          @for (t of standardThemes; track t) {
             <button
               type="button"
               class="theme-row"
@@ -40,6 +47,29 @@ import { PageHeaderComponent } from '../../shared/page-header';
                 <i [style.background]="swatches[t][1]"></i>
                 <i [style.background]="swatches[t][2]"></i>
               </span>
+              <span class="theme-text">
+                <span class="theme-name">{{ labels[t] }}</span>
+                <span class="theme-desc">{{ descriptions[t] }}</span>
+              </span>
+              <span class="theme-check">{{ theme.theme() === t ? '✓' : '' }}</span>
+            </button>
+          }
+        </div>
+
+        <!-- القسم الثاني: الثيمات الاحترافية المتقدّمة -->
+        <div class="theme-group-label" style="margin-top:18px">
+          {{ groupLabels.full }}
+          <span class="theme-group-hint">تغيّر خلفية التطبيق بالكامل بتدرّج غنيّ</span>
+        </div>
+        <div class="theme-list">
+          @for (t of fullSurfaceThemes; track t) {
+            <button
+              type="button"
+              class="theme-row"
+              [class.active]="theme.theme() === t"
+              (click)="theme.set(t)"
+            >
+              <span class="theme-swatch grad" aria-hidden="true" [style.background]="previews[t]"></span>
               <span class="theme-text">
                 <span class="theme-name">{{ labels[t] }}</span>
                 <span class="theme-desc">{{ descriptions[t] }}</span>
@@ -86,6 +116,21 @@ import { PageHeaderComponent } from '../../shared/page-header';
   `,
   styles: [
     `
+      .theme-group-label {
+        font-weight: 700;
+        font-size: 0.86rem;
+        color: var(--text-soft);
+        margin: 10px 2px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .theme-group-hint {
+        font-weight: 400;
+        font-size: 0.75rem;
+        color: var(--text-soft);
+        opacity: 0.85;
+      }
       .theme-list {
         display: flex;
         flex-direction: column;
@@ -156,10 +201,15 @@ export class ProfilePage {
   readonly notify = inject(NotifyService);
   private router = inject(Router);
 
-  readonly themes = THEME_ORDER;
+  readonly standardThemes = STANDARD_THEMES;
+  readonly fullSurfaceThemes = FULL_SURFACE_THEMES;
+  readonly totalCount = STANDARD_THEMES.length + FULL_SURFACE_THEMES.length;
+  readonly groupLabels = THEME_GROUP_LABELS;
   readonly labels = THEME_LABELS;
   readonly descriptions = THEME_DESC;
   readonly swatches = THEME_SWATCHES;
+  readonly previews = THEME_PREVIEW;
+  readonly isFull = isFullSurface;
 
   name = this.auth.teacher()?.name ?? '';
   phone = this.auth.teacher()?.phone ?? '';

@@ -1323,6 +1323,252 @@ textarea {
 }
 
 /* ==========================================================================
+   القسم الثاني — الثيمات الاحترافية «كاملة السطح»
+   عند اختيار أيّ منها تتحوّل خلفية التطبيق بالكامل إلى تدرّج غنيّ،
+   وتصبح البطاقات أسطحًا زجاجية شفّافة (backdrop-filter).
+   كلٌّ منها بهويّة لونية ثابتة (لا تتبع فاتح/داكن النظام).
+   ========================================================================== */
+
+/* --- قواعد مشتركة لكل الثيمات كاملة السطح --- */
+:root[data-app-surface='full'] {
+  background: var(--bg);
+}
+:root[data-app-surface='full'] body {
+  background: var(--surface-gradient);
+  background-repeat: no-repeat;
+  min-height: 100dvh;
+}
+:root[data-app-surface='full'] .app-header {
+  background: var(--header-grad);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  backdrop-filter: blur(14px) saturate(1.4);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 2px 18px rgba(0, 0, 0, 0.28);
+}
+:root[data-app-surface='full'] .card,
+:root[data-app-surface='full'] .list-item,
+:root[data-app-surface='full'] .stat,
+:root[data-app-surface='full'] .tabs,
+:root[data-app-surface='full'] .modal,
+:root[data-app-surface='full'] .toast,
+:root[data-app-surface='full'] .net-banner,
+:root[data-app-surface='full'] .theme-row,
+:root[data-app-surface='full'] .field input,
+:root[data-app-surface='full'] .field select,
+:root[data-app-surface='full'] .field textarea,
+:root[data-app-surface='full'] .chip,
+:root[data-app-surface='full'] .btn:not(.btn-primary):not(.btn-danger) {
+  -webkit-backdrop-filter: blur(9px) saturate(1.3);
+  backdrop-filter: blur(9px) saturate(1.3);
+}
+:root[data-app-surface='full'] .modal-backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+/* عيّنة متدرّجة في شاشة الإعدادات */
+.theme-swatch.grad {
+  border: 1px solid var(--border);
+}
+
+/* --- سَبَج أزرق: تدرّج أسود مزرقّ عميق --- */
+:root[data-app-theme='obsidian'] {
+  --surface-gradient: linear-gradient(155deg, #0a0f1e 0%, #111a33 45%, #0c1428 100%);
+  --bg: #0d1426;
+  --surface: rgba(120, 150, 210, 0.07);
+  --surface-2: rgba(120, 150, 210, 0.12);
+  --border: rgba(150, 175, 230, 0.16);
+  --text: #e8ecf6;
+  --text-soft: #9aa6c4;
+  --green: #5b8def;
+  --green-deep: #4374d4;
+  --green-mid: #7aa5f5;
+  --green-tint: rgba(91, 141, 239, 0.16);
+  --gold: #d9b25a;
+  --gold-deep: #c19a44;
+  --gold-tint: rgba(217, 178, 90, 0.16);
+  --gold-tint2: rgba(217, 178, 90, 0.1);
+  --header-grad: linear-gradient(135deg, rgba(30, 45, 85, 0.72), rgba(16, 26, 52, 0.72));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px rgba(91, 141, 239, 0.38);
+}
+
+/* --- فحميّ ملكيّ: فحميّ داكن بلمسة بنفسجية --- */
+:root[data-app-theme='charcoal'] {
+  --surface-gradient: linear-gradient(155deg, #17161a 0%, #201d23 50%, #17151b 100%);
+  --bg: #1b191e;
+  --surface: rgba(255, 240, 220, 0.055);
+  --surface-2: rgba(255, 240, 220, 0.1);
+  --border: rgba(255, 235, 210, 0.14);
+  --text: #efe9e2;
+  --text-soft: #b3a99c;
+  --green: #8163cf;
+  --green-deep: #6849b3;
+  --green-mid: #9a7fe0;
+  --green-tint: rgba(129, 99, 207, 0.18);
+  --gold: #c9a24a;
+  --gold-deep: #a9822f;
+  --gold-tint: rgba(201, 162, 74, 0.16);
+  --gold-tint2: rgba(201, 162, 74, 0.1);
+  --header-grad: linear-gradient(135deg, rgba(38, 34, 44, 0.74), rgba(26, 23, 30, 0.74));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px rgba(129, 99, 207, 0.4);
+}
+
+/* --- فولاذ فيروزيّ: رماديّ فولاذيّ بلمحة فيروزية --- */
+:root[data-app-theme='gunmetal'] {
+  --surface-gradient: linear-gradient(155deg, #14191b 0%, #1a2528 50%, #131b1d 100%);
+  --bg: #182022;
+  --surface: rgba(160, 200, 205, 0.06);
+  --surface-2: rgba(160, 200, 205, 0.11);
+  --border: rgba(170, 210, 215, 0.15);
+  --text: #e7edee;
+  --text-soft: #9db0b2;
+  --green: #26a89b;
+  --green-deep: #1c8a80;
+  --green-mid: #3cc0b2;
+  --green-tint: rgba(38, 168, 155, 0.16);
+  --gold: #c7b06a;
+  --gold-deep: #a9924f;
+  --gold-tint: rgba(199, 176, 106, 0.15);
+  --gold-tint2: rgba(199, 176, 106, 0.09);
+  --header-grad: linear-gradient(135deg, rgba(30, 42, 45, 0.74), rgba(20, 28, 30, 0.74));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px rgba(38, 168, 155, 0.38);
+}
+
+/* --- كحليّ جليديّ: كحليّ عميق + إبرازات جليدية --- */
+:root[data-app-theme='icenavy'] {
+  --surface-gradient: linear-gradient(155deg, #0b1c33 0%, #123252 45%, #0c2138 100%);
+  --bg: #102a47;
+  --surface: rgba(180, 215, 245, 0.08);
+  --surface-2: rgba(180, 215, 245, 0.13);
+  --border: rgba(190, 225, 250, 0.17);
+  --text: #eef4fb;
+  --text-soft: #a8c0d6;
+  --green: #4fb0e8;
+  --green-deep: #3892cc;
+  --green-mid: #72c4f2;
+  --green-tint: rgba(79, 176, 232, 0.16);
+  --gold: #5fd0d8;
+  --gold-deep: #43b3bb;
+  --gold-tint: rgba(95, 208, 216, 0.16);
+  --gold-tint2: rgba(95, 208, 216, 0.1);
+  --header-grad: linear-gradient(135deg, rgba(20, 55, 90, 0.72), rgba(12, 33, 56, 0.72));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px rgba(79, 176, 232, 0.4);
+}
+
+/* --- بُنّ إسبريسو: بنّيّ قهوة دافئ --- */
+:root[data-app-theme='espresso'] {
+  --surface-gradient: linear-gradient(155deg, #1a120d 0%, #2a1c14 50%, #170f0a 100%);
+  --bg: #221610;
+  --surface: rgba(230, 200, 175, 0.06);
+  --surface-2: rgba(230, 200, 175, 0.11);
+  --border: rgba(235, 205, 180, 0.14);
+  --text: #f2e7dc;
+  --text-soft: #bda893;
+  --green: #c98a4e;
+  --green-deep: #a96f38;
+  --green-mid: #dda368;
+  --green-tint: rgba(201, 138, 78, 0.18);
+  --gold: #9aa878;
+  --gold-deep: #7f8d5f;
+  --gold-tint: rgba(154, 168, 120, 0.16);
+  --gold-tint2: rgba(154, 168, 120, 0.1);
+  --header-grad: linear-gradient(135deg, rgba(46, 32, 24, 0.76), rgba(28, 19, 13, 0.76));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.58);
+  --ring: 0 0 0 3px rgba(201, 138, 78, 0.4);
+}
+
+/* --- زمرّد الغابة: أخضر غابيّ عميق --- */
+:root[data-app-theme='emerald'] {
+  --surface-gradient: linear-gradient(155deg, #08160f 0%, #0e2c1e 48%, #091d13 100%);
+  --bg: #0d2418;
+  --surface: rgba(150, 220, 180, 0.07);
+  --surface-2: rgba(150, 220, 180, 0.12);
+  --border: rgba(160, 230, 190, 0.16);
+  --text: #e8f3ec;
+  --text-soft: #9fbdac;
+  --green: #2bb673;
+  --green-deep: #1e9a5f;
+  --green-mid: #45cd8b;
+  --green-tint: rgba(43, 182, 115, 0.16);
+  --gold: #d8c06a;
+  --gold-deep: #bba64f;
+  --gold-tint: rgba(216, 192, 106, 0.15);
+  --gold-tint2: rgba(216, 192, 106, 0.09);
+  --header-grad: linear-gradient(135deg, rgba(16, 52, 34, 0.74), rgba(8, 26, 17, 0.74));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px rgba(43, 182, 115, 0.4);
+}
+[data-app-theme='emerald'] .fab {
+  box-shadow: 0 0 20px rgba(43, 182, 115, 0.4), var(--shadow-lg);
+}
+
+/* --- تيتانيوم فاتح: رماديّ فضّيّ فاتح (السمة الفاتحة الوحيدة كاملة السطح) --- */
+:root[data-app-theme='titanium'] {
+  --surface-gradient: linear-gradient(155deg, #eef1f4 0%, #e2e7ec 45%, #f4f6f8 100%);
+  --bg: #eaeef2;
+  --surface: rgba(255, 255, 255, 0.62);
+  --surface-2: rgba(255, 255, 255, 0.42);
+  --border: rgba(120, 135, 150, 0.2);
+  --text: #252b31;
+  --text-soft: #5e6874;
+  --green: #5c7186;
+  --green-deep: #47596b;
+  --green-mid: #748a9f;
+  --green-tint: rgba(92, 113, 134, 0.14);
+  --gold: #a9772e;
+  --gold-deep: #8c611f;
+  --gold-tint: rgba(169, 119, 46, 0.14);
+  --gold-tint2: rgba(169, 119, 46, 0.08);
+  --header-grad: linear-gradient(135deg, rgba(255, 255, 255, 0.7), rgba(228, 234, 239, 0.7));
+  --shadow: 0 2px 12px rgba(60, 75, 95, 0.12);
+  --shadow-lg: 0 14px 36px rgba(60, 75, 95, 0.2);
+  --ring: 0 0 0 3px rgba(92, 113, 134, 0.28);
+}
+[data-app-theme='titanium'] .app-header {
+  color: #252b31;
+}
+[data-app-theme='titanium'] .app-header .icon-btn {
+  background: rgba(37, 43, 49, 0.1);
+  color: #252b31;
+}
+[data-app-theme='titanium'] .app-header .title {
+  text-shadow: none;
+}
+
+/* --- جمر الغروب: تدرّج غروب دافئ --- */
+:root[data-app-theme='ember'] {
+  --surface-gradient: linear-gradient(155deg, #1e1220 0%, #3d1e33 35%, #6b2f34 70%, #944a2c 100%);
+  --bg: #3a1f2e;
+  --surface: rgba(255, 220, 200, 0.07);
+  --surface-2: rgba(255, 220, 200, 0.12);
+  --border: rgba(255, 215, 195, 0.16);
+  --text: #f6e9e3;
+  --text-soft: #cdb0a6;
+  --green: #e8813f;
+  --green-deep: #cc6a2c;
+  --green-mid: #f19a5e;
+  --green-tint: rgba(232, 129, 63, 0.18);
+  --gold: #c96fa0;
+  --gold-deep: #ac5787;
+  --gold-tint: rgba(201, 111, 160, 0.16);
+  --gold-tint2: rgba(201, 111, 160, 0.1);
+  --header-grad: linear-gradient(135deg, rgba(90, 36, 56, 0.74), rgba(46, 18, 32, 0.74));
+  --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --ring: 0 0 0 3px rgba(232, 129, 63, 0.4);
+}
+
+/* ==========================================================================
    الإشعارات: التوستات + نافذة التأكيد + شريط الاتصال/المزامنة
    ========================================================================== */
 
