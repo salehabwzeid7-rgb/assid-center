@@ -9,11 +9,13 @@ import {
   GRADE_LABELS,
   GRADE_ORDER,
   GRADE_VALUE,
+  SESSION_STATUS_LABELS,
   gradeFromValue,
   type AttendanceStatus,
   type Grade,
   type Session,
 } from '../../core/models';
+import { dmy } from '../../core/format';
 import { surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -32,16 +34,32 @@ type Step = 'attendance' | 'recitation' | 'summary';
         <div class="card row-between">
           <span>
             <b>{{ dateLabel() }}</b>
-            <span [class]="'badge b-' + (s.status === 'open' ? 'late' : 'present')" style="margin-inline-start:8px">
-              {{ s.status === 'open' ? 'مفتوحة' : 'منتهية' }}
+            <span
+              [class]="
+                'badge b-' +
+                (s.status === 'open' ? 'late' : s.status === 'scheduled' ? 'grade' : 'present')
+              "
+              style="margin-inline-start:8px"
+            >
+              {{ statusLabels[s.status] }}
             </span>
           </span>
           @if (s.status === 'open') {
-            <button class="btn btn-ghost" style="padding:8px 14px" type="button" (click)="setStatus('closed')">
+            <button
+              class="btn btn-ghost"
+              style="padding:8px 14px"
+              type="button"
+              (click)="setStatus('closed')"
+            >
               إنهاء الجلسة
             </button>
           } @else {
-            <button class="btn btn-ghost" style="padding:8px 14px" type="button" (click)="setStatus('open')">
+            <button
+              class="btn btn-ghost"
+              style="padding:8px 14px"
+              type="button"
+              (click)="setStatus('open')"
+            >
               إعادة فتح
             </button>
           }
@@ -54,7 +72,9 @@ type Step = 'attendance' | 'recitation' | 'summary';
           <button [class.active]="step() === 'recitation'" (click)="step.set('recitation')">
             ٢ · التسميع
           </button>
-          <button [class.active]="step() === 'summary'" (click)="step.set('summary')">٣ · الملخّص</button>
+          <button [class.active]="step() === 'summary'" (click)="step.set('summary')">
+            ٣ · الملخّص
+          </button>
         </div>
 
         @if (students() === undefined) {
@@ -88,7 +108,11 @@ type Step = 'attendance' | 'recitation' | 'summary';
                 </div>
               </div>
             }
-            <button class="btn btn-primary btn-block btn-lg" type="button" (click)="step.set('recitation')">
+            <button
+              class="btn btn-primary btn-block btn-lg"
+              type="button"
+              (click)="step.set('recitation')"
+            >
               التالي: التسميع ›
             </button>
           }
@@ -100,21 +124,32 @@ type Step = 'attendance' | 'recitation' | 'summary';
               <div class="card">
                 <div class="row-between">
                   <span class="primary" style="font-weight:700">{{ st.name }}</span>
-                  <button class="btn btn-ghost" style="padding:7px 13px" type="button" (click)="recite(st.id)">
+                  <button
+                    class="btn btn-ghost"
+                    style="padding:7px 13px"
+                    type="button"
+                    (click)="recite(st.id)"
+                  >
                     {{ recOf(st.id) ? 'تعديل' : '＋ تسجيل' }}
                   </button>
                 </div>
                 @if (recOf(st.id); as r) {
                   <div class="muted" style="font-size:.85rem;margin-top:6px">
-                    {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ← {{ surahName(r.toSurah) }} {{ r.toAyah }}
-                    · {{ r.pages }} وجه · {{ gradeLabels[r.grade] }}
+                    {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ← {{ surahName(r.toSurah) }}
+                    {{ r.toAyah }} · {{ r.pages }} وجه · {{ gradeLabels[r.grade] }}
                   </div>
                 } @else {
-                  <div class="muted" style="font-size:.82rem;margin-top:4px">لم يُسجَّل تسميع بعد</div>
+                  <div class="muted" style="font-size:.82rem;margin-top:4px">
+                    لم يُسجَّل تسميع بعد
+                  </div>
                 }
               </div>
             }
-            <button class="btn btn-primary btn-block btn-lg" type="button" (click)="step.set('summary')">
+            <button
+              class="btn btn-primary btn-block btn-lg"
+              type="button"
+              (click)="step.set('summary')"
+            >
               التالي: الملخّص ›
             </button>
           }
@@ -143,10 +178,18 @@ type Step = 'attendance' | 'recitation' | 'summary';
             <div class="card" style="margin-top:10px">
               <div class="section-title" style="margin:0 0 8px">تفصيل الحضور</div>
               <div style="display:flex;gap:14px;flex-wrap:wrap">
-                <span>حاضر: <b>{{ countAtt('present') }}</b></span>
-                <span>متأخر: <b>{{ countAtt('late') }}</b></span>
-                <span>مأذون: <b>{{ countAtt('excused') }}</b></span>
-                <span>غائب: <b>{{ countAtt('absent') }}</b></span>
+                <span
+                  >حاضر: <b>{{ countAtt('present') }}</b></span
+                >
+                <span
+                  >متأخر: <b>{{ countAtt('late') }}</b></span
+                >
+                <span
+                  >مأذون: <b>{{ countAtt('excused') }}</b></span
+                >
+                <span
+                  >غائب: <b>{{ countAtt('absent') }}</b></span
+                >
               </div>
               @if (absentNames().length) {
                 <div class="muted" style="margin-top:8px;font-size:.86rem">
@@ -184,7 +227,11 @@ type Step = 'attendance' | 'recitation' | 'summary';
               </div>
             </div>
 
-            <a class="btn btn-block" style="margin-top:12px" [routerLink]="['/circle', session()!.circleId, 'stats']">
+            <a
+              class="btn btn-block"
+              style="margin-top:12px"
+              [routerLink]="['/circle', session()!.circleId, 'stats']"
+            >
               📊 إحصائيات الحلقة
             </a>
           }
@@ -236,6 +283,7 @@ export class SessionPage implements OnInit {
   readonly attOrder = ATTENDANCE_ORDER;
   readonly gradeLabels = GRADE_LABELS;
   readonly gradeOrder = GRADE_ORDER;
+  readonly statusLabels = SESSION_STATUS_LABELS;
   readonly surahName = surahName;
 
   private readonly allStudents = this.data.allStudents(this.destroyRef);
@@ -247,12 +295,7 @@ export class SessionPage implements OnInit {
   readonly attendance = this.data.sessionAttendance(this.id, this.destroyRef);
   readonly recitations = this.data.sessionRecitations(this.id, this.destroyRef);
 
-  readonly dateLabel = computed(() => {
-    const d = this.session()?.date;
-    return d
-      ? new Date(d + 'T00:00:00').toLocaleDateString('ar', { day: 'numeric', month: 'long' })
-      : '';
-  });
+  readonly dateLabel = computed(() => dmy(this.session()?.date));
 
   readonly presentTotal = computed(
     () =>
@@ -275,9 +318,7 @@ export class SessionPage implements OnInit {
   });
   readonly absentNames = computed(() => {
     const map = new Map((this.attendance() ?? []).map((a) => [a.studentId, a.status]));
-    return (this.students() ?? [])
-      .filter((s) => map.get(s.id) === 'absent')
-      .map((s) => s.name);
+    return (this.students() ?? []).filter((s) => map.get(s.id) === 'absent').map((s) => s.name);
   });
   readonly notRecitedNames = computed(() => {
     const done = new Set((this.recitations() ?? []).map((r) => r.studentId));
@@ -289,6 +330,15 @@ export class SessionPage implements OnInit {
     if (!s) {
       this.notFound.set(true);
       return;
+    }
+    // زيارة حصّة مجدولة = بدؤها
+    if (s.status === 'scheduled') {
+      try {
+        await this.data.setSessionStatus(this.id, 'open');
+        s.status = 'open';
+      } catch (e) {
+        console.error(e);
+      }
     }
     this.session.set(s);
     this.circleId.set(s.circleId);

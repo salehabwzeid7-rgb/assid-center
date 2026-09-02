@@ -19,6 +19,7 @@ import { db } from './firebase';
 import {
   COL,
   type Circle,
+  type CircleType,
   type Student,
   type Session,
   type SessionStatus,
@@ -37,7 +38,25 @@ export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-type NewCircle = { name: string; schedule?: string };
+/** تواريخ الأيام المتكرّرة القادمة (من اليوم حتى +horizonDays) الموافقة لأيام الأسبوع المختارة */
+export function upcomingDatesFor(weekdays: number[], horizonDays: number): string[] {
+  const set = new Set(weekdays);
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  const out: string[] = [];
+  for (let i = 0; i <= horizonDays; i++) {
+    const d = new Date(base.getTime() + i * 86400000);
+    if (set.has(d.getDay())) out.push(toDateStr(d));
+  }
+  return out;
+}
+
+type NewCircle = {
+  name: string;
+  type: CircleType;
+  weekdays: number[];
+  time?: string;
+};
 type NewStudent = Omit<Student, 'id' | 'createdAt'>;
 type NewRecitation = Omit<RecitationRecord, 'id' | 'createdAt'>;
 type NewEvaluation = Omit<EvaluationRecord, 'id' | 'createdAt'>;
@@ -116,23 +135,33 @@ export class DataService {
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;
   }
 
-  /** يفتح جلسة الحلقة لتاريخ محدّد؛ يُعيد الموجودة إن وُجدت، وإلا ينشئ واحدة */
-  async openSession(circleId: string, date: string): Promise<string> {
-    const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
-    const existing = snap.docs.find((d) => (d.data() as Session).date === date);
-    if (existing) {
-      if ((existing.data() as Session).status === 'closed') {
-        await updateDoc(existing.ref, { status: 'open' });
-      }
-      return existing.id;
+  /**
+   * يفتح جلسة الحلقة لتاريخ محدّد ويُعيد معرّفها.
+   * يُعيد الموجودة (المجدولة/المنتهية → تُفتح)، وإلا ينشئ واحدة بمعرّف ثابت.
+   */
+  async openSession(circleId: string, date: string, time?: string): Promise<string> {
+    const id = `${circleId}_${date}`;
+    const ref = this.ref(COL.sessions, id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      if ((snap.data() as Session).status !== 'open') await updateDoc(ref, { status: 'open' });
+      return id;
     }
-    const created = await addDoc(this.col(COL.sessions), {
+    // توافقيّة: قد توجد جلسة قديمة بمعرّف عشوائيّ لنفس اليوم
+    const legacy = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
+    const old = legacy.docs.find((d) => (d.data() as Session).date === date);
+    if (old) {
+      if ((old.data() as Session).status !== 'open') await updateDoc(old.ref, { status: 'open' });
+      return old.id;
+    }
+    await setDoc(ref, {
       circleId,
       date,
+      time: time ?? '',
       status: 'open' as SessionStatus,
       createdAt: Date.now(),
     });
-    return created.id;
+    return id;
   }
 
   async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
@@ -287,18 +316,67 @@ export class DataService {
   async addCircle(input: NewCircle): Promise<string> {
     const created = await addDoc(this.col(COL.circles), {
       name: input.name.trim(),
-      schedule: input.schedule?.trim() ?? '',
+      type: input.type,
+      weekdays: [...input.weekdays].sort((a, b) => a - b),
+      time: input.time?.trim() ?? '',
       createdAt: Date.now(),
     });
     return created.id;
   }
 
   async updateCircle(id: string, patch: Partial<NewCircle>): Promise<void> {
-    await updateDoc(this.ref(COL.circles, id), clean(patch));
+    const next: Record<string, unknown> = { ...patch };
+    if (patch.name !== undefined) next['name'] = patch.name.trim();
+    if (patch.weekdays !== undefined) next['weekdays'] = [...patch.weekdays].sort((a, b) => a - b);
+    if (patch.time !== undefined) next['time'] = patch.time.trim();
+    await updateDoc(this.ref(COL.circles, id), clean(next));
   }
 
+  /** حذف الحلقة وجلساتها المجدولة (تبقى الجلسات المفتوحة/المنتهية كسجلّ). */
   async deleteCircle(id: string): Promise<void> {
-    await deleteDoc(this.ref(COL.circles, id));
+    const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', id)));
+    await Promise.all([
+      ...snap.docs
+        .filter((d) => (d.data() as Session).status === 'scheduled')
+        .map((d) => deleteDoc(d.ref)),
+      deleteDoc(this.ref(COL.circles, id)),
+    ]);
+  }
+
+  /**
+   * جدولة تلقائية: ينشئ جلسات «مجدولة» للأيام المتكرّرة القادمة للحلقة.
+   * عمليّة idempotent — يتخطّى التواريخ التي لها جلسة أصلًا (بأيّ حالة).
+   * معرّف الجلسة ثابت «{circleId}_{date}» لتفادي التكرار بين الأجهزة.
+   */
+  async ensureScheduledSessions(circle: Circle, horizonDays: number): Promise<void> {
+    const weekdays = circle.weekdays ?? [];
+    const dates = weekdays.length ? upcomingDatesFor(weekdays, horizonDays) : [];
+    const target = new Set(dates);
+    const t = today();
+
+    const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circle.id)));
+    const existingDates = new Set<string>();
+    const stale: typeof snap.docs = [];
+    for (const d of snap.docs) {
+      const s = d.data() as Session;
+      existingDates.add(s.date);
+      // جلسة مجدولة مستقبليّة لم تعُد ضمن الأيام المختارة → تُلغى
+      if (s.status === 'scheduled' && s.date >= t && !target.has(s.date)) stale.push(d);
+    }
+    const missing = dates.filter((d) => !existingDates.has(d));
+
+    await Promise.all([
+      ...stale.map((d) => deleteDoc(d.ref)),
+      ...missing.map((date) =>
+        setDoc(this.ref(COL.sessions, `${circle.id}_${date}`), {
+          circleId: circle.id,
+          date,
+          time: circle.time ?? '',
+          status: 'scheduled' as SessionStatus,
+          createdAt: Date.now(),
+        }),
+      ),
+    ]);
   }
 
   async addStudent(input: NewStudent): Promise<string> {

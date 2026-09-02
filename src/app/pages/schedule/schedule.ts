@@ -1,6 +1,8 @@
-import { Component, DestroyRef, computed, inject } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
+import { dmy, weekdayAr } from '../../core/format';
+import { SchedulerService } from '../../core/scheduler.service';
 import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -16,7 +18,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
       } @else if (sessions()!.length === 0) {
         <div class="empty">
           <span class="icon">🗓️</span>
-          لا توجد جلسات مسجّلة بعد.
+          لا توجد حصص مجدولة بعد — أضف أيام التكرار عند إنشاء الحلقة.
         </div>
       } @else {
         @if (future().length) {
@@ -26,11 +28,11 @@ import { PageHeaderComponent } from '../../shared/page-header';
               <span class="avatar">{{ dayNum(s.date) }}</span>
               <span class="grow">
                 <span class="primary">{{ circleName(s.circleId) }}</span>
-                <span class="secondary">{{ fullDate(s.date) }}</span>
+                <span class="secondary">
+                  {{ weekdayAr(s.date) }} · {{ dmy(s.date) }}{{ s.time ? ' · ' + s.time : '' }}
+                </span>
               </span>
-              <span [class]="'badge b-' + (s.status === 'open' ? 'late' : 'present')">
-                {{ statusLabels[s.status] }}
-              </span>
+              <span [class]="'badge b-' + badge(s.status)">{{ statusLabels[s.status] }}</span>
             </a>
           }
         }
@@ -41,11 +43,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
               <span class="avatar">{{ dayNum(s.date) }}</span>
               <span class="grow">
                 <span class="primary">{{ circleName(s.circleId) }}</span>
-                <span class="secondary">{{ fullDate(s.date) }}</span>
+                <span class="secondary">{{ weekdayAr(s.date) }} · {{ dmy(s.date) }}</span>
               </span>
-              <span [class]="'badge b-' + (s.status === 'open' ? 'late' : 'present')">
-                {{ statusLabels[s.status] }}
-              </span>
+              <span [class]="'badge b-' + badge(s.status)">{{ statusLabels[s.status] }}</span>
             </a>
           }
         }
@@ -56,10 +56,20 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class SchedulePage {
   private destroyRef = inject(DestroyRef);
   private data = inject(DataService);
+  private scheduler = inject(SchedulerService);
 
   readonly statusLabels = SESSION_STATUS_LABELS;
+  readonly dmy = dmy;
+  readonly weekdayAr = weekdayAr;
   readonly sessions = this.data.allSessions(this.destroyRef);
   private readonly circles = this.data.circles(this.destroyRef);
+
+  constructor() {
+    effect(() => {
+      const cs = this.circles();
+      if (cs?.length) void this.scheduler.sync(cs);
+    });
+  }
 
   readonly future = computed<Session[]>(() => {
     const t = today();
@@ -79,11 +89,7 @@ export class SchedulePage {
   dayNum(date: string): string {
     return date.slice(8, 10);
   }
-  fullDate(date: string): string {
-    return new Date(date + 'T00:00:00').toLocaleDateString('ar', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-    });
+  badge(status: Session['status']): string {
+    return status === 'open' ? 'late' : status === 'scheduled' ? 'grade' : 'present';
   }
 }

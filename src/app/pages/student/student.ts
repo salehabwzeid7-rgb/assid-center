@@ -8,6 +8,7 @@ import {
   RECITATION_KIND_LABELS,
   type Student,
 } from '../../core/models';
+import { dmy } from '../../core/format';
 import { ayahRef } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -39,7 +40,10 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
         </div>
 
         <div class="stack-8" style="margin:10px 0">
-          <a class="btn btn-primary btn-block btn-lg" [routerLink]="['/student', s.id, 'recitation']">
+          <a
+            class="btn btn-primary btn-block btn-lg"
+            [routerLink]="['/student', s.id, 'recitation']"
+          >
             🎙️ تسجيل تسميع
           </a>
           <a class="btn btn-block" [routerLink]="['/student', s.id, 'evaluation']">
@@ -48,10 +52,18 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
         </div>
 
         <div class="tabs">
-          <button [class.active]="tab() === 'overview'" (click)="tab.set('overview')">نظرة عامة</button>
-          <button [class.active]="tab() === 'recitation'" (click)="tab.set('recitation')">التسميع</button>
-          <button [class.active]="tab() === 'attendance'" (click)="tab.set('attendance')">الحضور</button>
-          <button [class.active]="tab() === 'evaluation'" (click)="tab.set('evaluation')">التقييم</button>
+          <button [class.active]="tab() === 'overview'" (click)="tab.set('overview')">
+            نظرة عامة
+          </button>
+          <button [class.active]="tab() === 'recitation'" (click)="tab.set('recitation')">
+            التسميع
+          </button>
+          <button [class.active]="tab() === 'attendance'" (click)="tab.set('attendance')">
+            الحضور
+          </button>
+          <button [class.active]="tab() === 'evaluation'" (click)="tab.set('evaluation')">
+            التقييم
+          </button>
         </div>
 
         <!-- نظرة عامة -->
@@ -90,7 +102,12 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
               </a>
             }
             @if (s.phone) {
-              <a class="btn btn-ghost btn-block" style="margin-top:6px" [href]="'tel:' + s.phone" dir="ltr">
+              <a
+                class="btn btn-ghost btn-block"
+                style="margin-top:6px"
+                [href]="'tel:' + s.phone"
+                dir="ltr"
+              >
                 📱 الطالب: {{ s.phone }}
               </a>
             }
@@ -111,19 +128,21 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
               <div class="card">
                 <div class="row-between">
                   <span class="badge b-grade">{{ kindLabels[r.kind] }}</span>
-                  <span class="muted" style="font-size:.82rem">{{ r.date }}</span>
+                  <span class="muted" style="font-size:.82rem">{{ dmy(r.date) }}</span>
                 </div>
-                <div style="margin:6px 0;font-weight:700">
-                  من ({{ from(r) }}) إلى ({{ to(r) }})
-                </div>
+                <div style="margin:6px 0;font-weight:700">من ({{ from(r) }}) إلى ({{ to(r) }})</div>
                 <div class="muted" style="font-size:.86rem">
-                  {{ r.pages }} وجه · التقدير: {{ gradeLabels[r.grade] }}
-                  · أخطاء حفظ: {{ r.hifzErrors }} · تجويد: {{ r.tajweedErrors }} · تلقين: {{ r.promptCount }}
+                  {{ r.pages }} وجه · التقدير: {{ gradeLabels[r.grade] }} · أخطاء حفظ:
+                  {{ r.hifzErrors }} · تجويد: {{ r.tajweedErrors }} · تلقين: {{ r.promptCount }}
                 </div>
                 @if (r.notes) {
                   <div style="margin-top:6px">{{ r.notes }}</div>
                 }
-                <button class="btn btn-danger" style="margin-top:8px;padding:6px 12px" (click)="delRec(r.id)">
+                <button
+                  class="btn btn-danger"
+                  style="margin-top:8px;padding:6px 12px"
+                  (click)="delRec(r.id)"
+                >
                   حذف
                 </button>
               </div>
@@ -134,10 +153,18 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
         <!-- الحضور -->
         @if (tab() === 'attendance') {
           <div class="card" style="display:flex;gap:14px;flex-wrap:wrap">
-            <span>حاضر: <b>{{ attCount('present') }}</b></span>
-            <span>متأخر: <b>{{ attCount('late') }}</b></span>
-            <span>مأذون: <b>{{ attCount('excused') }}</b></span>
-            <span>غائب: <b>{{ attCount('absent') }}</b></span>
+            <span
+              >حاضر: <b>{{ attCount('present') }}</b></span
+            >
+            <span
+              >متأخر: <b>{{ attCount('late') }}</b></span
+            >
+            <span
+              >مأذون: <b>{{ attCount('excused') }}</b></span
+            >
+            <span
+              >غائب: <b>{{ attCount('absent') }}</b></span
+            >
           </div>
           @if (attendance() === undefined) {
             <div class="spinner"></div>
@@ -146,7 +173,9 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
           } @else {
             @for (a of attendance(); track a.id) {
               <div class="list-item" style="cursor:default">
-                <span class="grow"><span class="primary">{{ a.date }}</span></span>
+                <span class="grow"
+                  ><span class="primary">{{ dmy(a.date) }}</span></span
+                >
                 <span [class]="'badge b-' + a.status">{{ attLabels[a.status] }}</span>
               </div>
             }
@@ -163,13 +192,15 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
             @for (e of evaluations(); track e.id) {
               <div class="card">
                 <div class="row-between">
-                  <b>{{ e.date }}</b>
-                  <button class="btn btn-danger" style="padding:4px 10px" (click)="delEval(e.id)">حذف</button>
+                  <b>{{ dmy(e.date) }}</b>
+                  <button class="btn btn-danger" style="padding:4px 10px" (click)="delEval(e.id)">
+                    حذف
+                  </button>
                 </div>
                 <div class="muted" style="font-size:.86rem;margin-top:6px;line-height:2">
-                  الحفظ: {{ gradeLabels[e.memorization] }} · المراجعة: {{ gradeLabels[e.review] }}
-                  · التجويد: {{ gradeLabels[e.tajweed] }} · الانتباه: {{ gradeLabels[e.attention] }}
-                  · السلوك: {{ gradeLabels[e.behavior] }}
+                  الحفظ: {{ gradeLabels[e.memorization] }} · المراجعة: {{ gradeLabels[e.review] }} ·
+                  التجويد: {{ gradeLabels[e.tajweed] }} · الانتباه: {{ gradeLabels[e.attention] }} ·
+                  السلوك: {{ gradeLabels[e.behavior] }}
                 </div>
                 @if (e.notes) {
                   <div style="margin-top:6px">{{ e.notes }}</div>
@@ -203,6 +234,7 @@ export class StudentPage implements OnInit {
   readonly kindLabels = RECITATION_KIND_LABELS;
   readonly gradeLabels = GRADE_LABELS;
   readonly attLabels = ATTENDANCE_LABELS;
+  readonly dmy = dmy;
 
   readonly totalPages = computed(() => {
     const sum = (this.recitations() ?? []).reduce((t, r) => t + (Number(r.pages) || 0), 0);
@@ -238,7 +270,8 @@ export class StudentPage implements OnInit {
   }
 
   async delRec(id: string): Promise<void> {
-    if (!(await this.notify.confirm('حذف سجل التسميع؟', { confirmText: 'حذف', danger: true }))) return;
+    if (!(await this.notify.confirm('حذف سجل التسميع؟', { confirmText: 'حذف', danger: true })))
+      return;
     await this.notify.run(() => this.data.deleteRecitation(id), { success: 'حُذف سجل التسميع' });
   }
   async delEval(id: string): Promise<void> {

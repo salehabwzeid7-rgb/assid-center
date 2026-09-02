@@ -24,12 +24,45 @@ export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
 export const ATTENDANCE_ORDER: AttendanceStatus[] = ['present', 'late', 'excused', 'absent'];
 
 /** حالة الجلسة */
-export type SessionStatus = 'open' | 'closed';
+export type SessionStatus = 'scheduled' | 'open' | 'closed';
 
 export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
+  scheduled: 'مجدولة',
   open: 'مفتوحة',
   closed: 'منتهية',
 };
+
+/** نوع الحلقة */
+export type CircleType = 'memorization' | 'tajweed';
+
+export const CIRCLE_TYPE_LABELS: Record<CircleType, string> = {
+  memorization: 'حلقات تحفيظ',
+  tajweed: 'حلقات تجويد',
+};
+
+/** المفرد (يُستخدم في العناوين والشارات) */
+export const CIRCLE_TYPE_SINGULAR: Record<CircleType, string> = {
+  memorization: 'حلقة تحفيظ',
+  tajweed: 'حلقة تجويد',
+};
+
+export const CIRCLE_TYPE_ORDER: CircleType[] = ['memorization', 'tajweed'];
+
+/**
+ * أيام الأسبوع — القيمة = ‏Date.getDay()‎ (0 = الأحد … 6 = السبت).
+ * الترتيب يبدأ بالسبت (بداية الأسبوع الدراسيّ في المنطقة).
+ */
+export const WEEKDAY_LABELS: Record<number, string> = {
+  6: 'السبت',
+  0: 'الأحد',
+  1: 'الإثنين',
+  2: 'الثلاثاء',
+  3: 'الأربعاء',
+  4: 'الخميس',
+  5: 'الجمعة',
+};
+
+export const WEEKDAY_ORDER = [6, 0, 1, 2, 3, 4, 5];
 
 /** نوع التسميع */
 export type RecitationKind = 'new' | 'near_review' | 'far_review';
@@ -80,7 +113,13 @@ export interface Teacher {
 export interface Circle {
   id: string;
   name: string;
-  /** الفترة/التوقيت: مثال «بعد المغرب — من الأحد إلى الخميس» */
+  /** نوع الحلقة (مطلوب للحلقات الجديدة) */
+  type?: CircleType;
+  /** أيام التكرار الأسبوعيّ — قيم ‏getDay()‎ (مطلوب للحلقات الجديدة) */
+  weekdays?: number[];
+  /** توقيت الحلقة «HH:MM» (اختياريّ) */
+  time?: string;
+  /** نصّ حرّ قديم للتوقيت — للتوافق مع الحلقات المُنشأة قبل الجدولة التلقائية */
   schedule?: string;
   createdAt: number;
 }
@@ -107,6 +146,8 @@ export interface Session {
   circleId: string;
   /** التاريخ بصيغة YYYY-MM-DD */
   date: string;
+  /** توقيت الحصّة «HH:MM» (منسوخ من الحلقة عند الجدولة) */
+  time?: string;
   status: SessionStatus;
   note?: string;
   createdAt: number;

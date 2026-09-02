@@ -1,7 +1,9 @@
-import { Component, DestroyRef, computed, inject } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
-import { DataService, today, toDateStr } from '../../core/data.service';
+import { DataService, today } from '../../core/data.service';
+import { dmy, relativeDay, weekdayAr } from '../../core/format';
+import { SchedulerService } from '../../core/scheduler.service';
 import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
 
 @Component({
@@ -175,11 +177,16 @@ import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
             <span class="avatar">{{ circleInitial(s.circleId) }}</span>
             <span class="grow">
               <span class="primary">{{ circleName(s.circleId) }}</span>
-              <span class="secondary">{{ circleSchedule(s.circleId) || 'حصّة الحلقة' }}</span>
+              <span class="secondary">{{ weekdayAr(s.date) }}{{ sessionTime(s) }}</span>
             </span>
             <span class="when">
               <span class="day">{{ relDay(s.date) }}</span>
-              <span [class]="'badge b-' + (s.status === 'open' ? 'late' : 'present')">
+              <span
+                [class]="
+                  'badge b-' +
+                  (s.status === 'open' ? 'late' : s.status === 'scheduled' ? 'grade' : 'present')
+                "
+              >
                 {{ statusLabels[s.status] }}
               </span>
             </span>
@@ -194,18 +201,25 @@ export class DashboardPage {
   private data = inject(DataService);
   private auth = inject(AuthService);
   private router = inject(Router);
+  private scheduler = inject(SchedulerService);
 
   readonly statusLabels = SESSION_STATUS_LABELS;
-  readonly todayLabel = new Date().toLocaleDateString('ar', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  readonly dmy = dmy;
+  readonly weekdayAr = weekdayAr;
+  readonly todayLabel = `${weekdayAr(today())} · ${dmy(today())}`;
 
   readonly circles = this.data.circles(this.destroyRef);
   readonly students = this.data.allStudents(this.destroyRef);
   private readonly sessions = this.data.allSessions(this.destroyRef);
   private readonly attendance = this.data.allAttendance(this.destroyRef);
+
+  constructor() {
+    // جدولة تلقائية للحصص القادمة عند تحميل قائمة الحلقات
+    effect(() => {
+      const cs = this.circles();
+      if (cs?.length) void this.scheduler.sync(cs);
+    });
+  }
 
   readonly firstName = computed(
     () => (this.auth.teacher()?.name ?? 'أستاذ').trim().split(/\s+/)[0],
@@ -269,15 +283,11 @@ export class DashboardPage {
   circleInitial(id: string): string {
     return this.circleName(id).charAt(0);
   }
-  circleSchedule(id: string): string {
-    return this.circle(id)?.schedule ?? '';
+  sessionTime(s: Session): string {
+    return s.time ? ' · ' + s.time : '';
   }
 
   relDay(date: string): string {
-    const t = today();
-    if (date === t) return 'اليوم';
-    if (date === toDateStr(new Date(Date.now() + 86400000))) return 'غدًا';
-    if (date === toDateStr(new Date(Date.now() - 86400000))) return 'أمس';
-    return new Date(date + 'T00:00:00').toLocaleDateString('ar', { weekday: 'long' });
+    return relativeDay(date, today());
   }
 }
