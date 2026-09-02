@@ -11,12 +11,12 @@ type Mode = 'login' | 'register';
   template: `
     <div class="auth-wrap">
       <div class="auth-logo">
-        <div class="mark quran-font">أ</div>
+        <img class="auth-badge" src="logo.svg" alt="شعار مركز أسيد" width="96" height="96" />
         <h1>مركز أسيد لتحفيظ القرآن الكريم</h1>
         <p>واجهة المعلّم</p>
       </div>
 
-      <form class="card" (ngSubmit)="submit()">
+      <form class="card" (ngSubmit)="submit()" novalidate>
         <div class="tabs" style="margin-bottom:16px">
           <button type="button" [class.active]="mode() === 'login'" (click)="setMode('login')">
             تسجيل الدخول
@@ -36,38 +36,50 @@ type Mode = 'login' | 'register';
         @if (mode() === 'register') {
           <div class="field">
             <label for="name">الاسم الكامل</label>
-            <input id="name" name="name" [(ngModel)]="name" autocomplete="name" required />
+            <input id="name" name="name" [(ngModel)]="name" autocomplete="name" />
           </div>
         }
 
         <div class="field">
-          <label for="email">البريد الإلكتروني</label>
+          <label for="identifier">البريد الإلكتروني أو اسم المستخدم</label>
           <input
-            id="email"
-            name="email"
-            type="email"
+            id="identifier"
+            name="identifier"
+            type="text"
             inputmode="email"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
             autocomplete="username"
             dir="ltr"
-            [(ngModel)]="email"
-            required
+            [(ngModel)]="identifier"
           />
+          <div class="hint">
+            يمكنك استخدام بريد إلكتروني كامل، أو اسمًا بسيطًا مثل <bdi>ahmad</bdi>
+          </div>
         </div>
 
         <div class="field">
           <label for="password">كلمة المرور</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            [autocomplete]="mode() === 'register' ? 'new-password' : 'current-password'"
-            dir="ltr"
-            [(ngModel)]="password"
-            required
-          />
-          @if (mode() === 'register') {
-            <div class="hint">6 أحرف على الأقل</div>
-          }
+          <div class="pw-wrap">
+            <input
+              id="password"
+              name="password"
+              [type]="showPw() ? 'text' : 'password'"
+              [autocomplete]="mode() === 'register' ? 'new-password' : 'current-password'"
+              dir="ltr"
+              [(ngModel)]="password"
+            />
+            <button
+              type="button"
+              class="pw-toggle"
+              [attr.aria-label]="showPw() ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'"
+              (click)="showPw.set(!showPw())"
+            >
+              {{ showPw() ? '🙈' : '👁' }}
+            </button>
+          </div>
+          <div class="hint">6 خانات على الأقل، أرقام أو حروف مثل <bdi>123456</bdi></div>
         </div>
 
         <button class="btn btn-primary btn-block btn-lg" type="submit" [disabled]="loading()">
@@ -92,6 +104,28 @@ type Mode = 'login' | 'register';
       </p>
     </div>
   `,
+  styles: [
+    `
+      .pw-wrap {
+        position: relative;
+      }
+      .pw-wrap input {
+        padding-inline-end: 44px;
+      }
+      .pw-toggle {
+        position: absolute;
+        inset-inline-end: 6px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        font-size: 1.15rem;
+        line-height: 1;
+        padding: 6px;
+        cursor: pointer;
+      }
+    `,
+  ],
 })
 export class LoginPage {
   private auth = inject(AuthService);
@@ -99,8 +133,9 @@ export class LoginPage {
 
   readonly mode = signal<Mode>('login');
   name = '';
-  email = '';
+  identifier = '';
   password = '';
+  readonly showPw = signal(false);
   readonly loading = signal(false);
   readonly error = signal('');
   readonly info = signal('');
@@ -114,8 +149,8 @@ export class LoginPage {
   async submit(): Promise<void> {
     this.error.set('');
     this.info.set('');
-    if (!this.email.trim() || !this.password) {
-      this.error.set('أدخل البريد وكلمة المرور');
+    if (!this.identifier.trim() || !this.password) {
+      this.error.set('أدخل اسم المستخدم/البريد وكلمة المرور');
       return;
     }
     if (this.mode() === 'register' && !this.name.trim()) {
@@ -123,15 +158,15 @@ export class LoginPage {
       return;
     }
     if (this.mode() === 'register' && this.password.length < 6) {
-      this.error.set('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      this.error.set('كلمة المرور يجب أن تكون 6 خانات على الأقل');
       return;
     }
     this.loading.set(true);
     try {
       if (this.mode() === 'login') {
-        await this.auth.login(this.email, this.password);
+        await this.auth.login(this.identifier, this.password);
       } else {
-        await this.auth.register(this.name, this.email, this.password);
+        await this.auth.register(this.name, this.identifier, this.password);
       }
       await this.router.navigateByUrl('/');
     } catch (e: unknown) {
@@ -144,13 +179,17 @@ export class LoginPage {
   async forgotPassword(): Promise<void> {
     this.error.set('');
     this.info.set('');
-    if (!this.email.trim()) {
-      this.error.set('أدخل بريدك الإلكتروني أولًا');
+    if (!this.identifier.trim()) {
+      this.error.set('أدخل اسم المستخدم/البريد أولًا');
+      return;
+    }
+    if (!this.identifier.includes('@')) {
+      this.error.set('إعادة التعيين تحتاج بريدًا إلكترونيًا كاملًا');
       return;
     }
     this.loading.set(true);
     try {
-      await this.auth.resetPassword(this.email);
+      await this.auth.resetPassword(this.identifier);
       this.info.set('تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك');
     } catch (e: unknown) {
       this.error.set(mapAuthError(e));
@@ -164,21 +203,21 @@ function mapAuthError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? '';
   switch (code) {
     case 'auth/invalid-email':
-      return 'صيغة البريد الإلكتروني غير صحيحة';
+      return 'صيغة اسم المستخدم/البريد غير مقبولة';
     case 'auth/user-disabled':
       return 'هذا الحساب موقوف، تواصل مع الإدارة';
     case 'auth/user-not-found':
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
-      return 'البريد أو كلمة المرور غير صحيحة';
+      return 'اسم المستخدم/البريد أو كلمة المرور غير صحيحة';
     case 'auth/email-already-in-use':
-      return 'هذا البريد مسجَّل مسبقًا، سجّل الدخول بدلًا من ذلك';
+      return 'هذا الحساب مسجَّل مسبقًا، سجّل الدخول بدلًا من ذلك';
     case 'auth/weak-password':
-      return 'كلمة المرور ضعيفة (6 أحرف على الأقل)';
+      return 'كلمة المرور ضعيفة (6 خانات على الأقل)';
     case 'auth/too-many-requests':
       return 'محاولات كثيرة، حاول لاحقًا';
     case 'auth/network-request-failed':
-      return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
+      return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت أو المحاكي';
     default:
       return 'تعذّر إتمام العملية، حاول مرة أخرى';
   }

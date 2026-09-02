@@ -43,19 +43,32 @@ export class AuthService {
     });
   }
 
-  /** تسجيل الدخول ببريد وكلمة مرور */
-  async login(email: string, password: string): Promise<void> {
-    const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+  /**
+   * يحوّل المُدخَل إلى بريد صالح لـ Firebase.
+   * يقبل بريدًا كاملًا، أو اسمًا بسيطًا (حروف/أرقام) فيُلحق به نطاقًا افتراضيًا
+   * حتى يسهل الدخول والتجربة محليًا بلا قيود صارمة.
+   */
+  identifierToEmail(id: string): string {
+    const v = id.trim();
+    if (!v) return v;
+    if (v.includes('@')) return v.toLowerCase();
+    return `${v.replace(/\s+/g, '').toLowerCase()}@assid.local`;
+  }
+
+  /** تسجيل الدخول ببريد/اسم وكلمة مرور */
+  async login(identifier: string, password: string): Promise<void> {
+    const cred = await signInWithEmailAndPassword(auth, this.identifierToEmail(identifier), password);
     await this.loadOrCreateTeacher(cred.user);
   }
 
   /** إنشاء حساب معلّم جديد من الصفر */
-  async register(name: string, email: string, password: string): Promise<void> {
-    const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  async register(name: string, identifier: string, password: string): Promise<void> {
+    const email = this.identifierToEmail(identifier);
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name.trim() });
     const fresh: Omit<Teacher, 'id'> = {
       name: name.trim(),
-      email: cred.user.email ?? email.trim(),
+      email: cred.user.email ?? email,
       phone: '',
       createdAt: Date.now(),
     };
@@ -64,8 +77,8 @@ export class AuthService {
   }
 
   /** إرسال رابط إعادة تعيين كلمة المرور */
-  async resetPassword(email: string): Promise<void> {
-    await sendPasswordResetEmail(auth, email.trim());
+  async resetPassword(identifier: string): Promise<void> {
+    await sendPasswordResetEmail(auth, this.identifierToEmail(identifier));
   }
 
   async logout(): Promise<void> {

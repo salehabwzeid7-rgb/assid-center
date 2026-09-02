@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 126" role="img" aria-label="شعار مركز أسيد">
+  <defs>
+    <linearGradient id="ac-gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8cd54"/>
+      <stop offset="0.55" stop-color="#e0980f"/>
+      <stop offset="1" stop-color="#b6740a"/>
+    </linearGradient>
+    <linearGradient id="ac-green" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#33a659"/>
+      <stop offset="1" stop-color="#0e5726"/>
+    </linearGradient>
+    <radialGradient id="ac-sun" cx="0.5" cy="0.4" r="0.62">
+      <stop offset="0" stop-color="#fff7dd"/>
+      <stop offset="0.68" stop-color="#f6d178"/>
+      <stop offset="1" stop-color="#e2a939"/>
+    </radialGradient>
+  </defs>
+
+  <!-- الأشعّة -->
+  <g stroke="#e7a92c" stroke-width="2.5" stroke-linecap="round">
+    <g transform="rotate(-98 64 60)"><line x1="64" y1="33" x2="64" y2="17"/></g>
+    <g transform="rotate(-82 64 60)"><line x1="64" y1="33" x2="64" y2="16"/></g>
+    <g transform="rotate(-66 64 60)"><line x1="64" y1="33" x2="64" y2="15"/></g>
+    <g transform="rotate(-50 64 60)"><line x1="64" y1="33" x2="64" y2="15"/></g>
+    <g transform="rotate(-34 64 60)"><line x1="64" y1="33" x2="64" y2="14"/></g>
+    <g transform="rotate(-18 64 60)"><line x1="64" y1="33" x2="64" y2="14"/></g>
+    <g transform="rotate(0 64 60)"><line x1="64" y1="33" x2="64" y2="13"/></g>
+    <g transform="rotate(18 64 60)"><line x1="64" y1="33" x2="64" y2="14"/></g>
+    <g transform="rotate(34 64 60)"><line x1="64" y1="33" x2="64" y2="14"/></g>
+    <g transform="rotate(50 64 60)"><line x1="64" y1="33" x2="64" y2="15"/></g>
+    <g transform="rotate(66 64 60)"><line x1="64" y1="33" x2="64" y2="15"/></g>
+    <g transform="rotate(82 64 60)"><line x1="64" y1="33" x2="64" y2="16"/></g>
+    <g transform="rotate(98 64 60)"><line x1="64" y1="33" x2="64" y2="17"/></g>
+  </g>
+
+  <!-- القوس (المحراب) -->
+  <path d="M32 110 L32 55 Q32 40 44 30 Q54 21 64 21 Q74 21 84 30 Q96 40 96 55 L96 110 Z"
+        fill="url(#ac-gold)" stroke="#a9760a" stroke-width="2"/>
+  <path d="M40 106 L40 56 Q40 44 49 37 Q56 31 64 31 Q72 31 79 37 Q88 44 88 56 L88 106 Z"
+        fill="none" stroke="#fbe8ad" stroke-width="1.5" opacity="0.75"/>
+
+  <!-- الشمس -->
+  <circle cx="64" cy="55" r="16" fill="url(#ac-sun)" stroke="#c98f28" stroke-width="1.4"/>
+  <circle cx="64" cy="55" r="11.5" fill="none" stroke="#c1892a" stroke-width="0.9" opacity="0.55"/>
+  <path d="M57 57.5 q7 -8 14 0" fill="none" stroke="#8a5f1c" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="64" cy="49.5" r="1.2" fill="#8a5f1c"/>
+
+  <!-- الكتاب المفتوح -->
+  <path d="M64 84 L44 79.5 Q41 79 41 81.6 L41 94 Q41 95.8 43 96.2 L64 100.5 Z"
+        fill="#fbf3dc" stroke="#c98f28" stroke-width="1.3"/>
+  <path d="M64 84 L84 79.5 Q87 79 87 81.6 L87 94 Q87 95.8 85 96.2 L64 100.5 Z"
+        fill="#fdf9ec" stroke="#c98f28" stroke-width="1.3"/>
+  <line x1="64" y1="84" x2="64" y2="100.5" stroke="#c98f28" stroke-width="1.3"/>
+  <g stroke="#ddb968" stroke-width="0.85">
+    <path d="M46 84 L60 87"/><path d="M46 87.6 L60 90.6"/><path d="M46 91.2 L60 94.2"/>
+    <path d="M68 87 L82 84"/><path d="M68 90.6 L82 87.6"/><path d="M68 94.2 L82 91.2"/>
+  </g>
+
+  <!-- الشريط الأخضر -->
+  <path d="M14 94 Q12 108 21 111 L38 104 L27 90 Z" fill="#0b451e"/>
+  <path d="M114 94 Q116 108 107 111 L90 104 L101 90 Z" fill="#0b451e"/>
+  <path d="M22 90 Q64 116 106 90 L100 106 Q64 128 28 106 Z"
+        fill="url(#ac-green)" stroke="#0b451e" stroke-width="1"/>
+  <text x="64" y="105.5" text-anchor="middle" direction="rtl"
+        font-family="'Amiri Quran','Tajawal',serif" font-weight="700"
+        font-size="9.5" fill="#f6dd93">مركز أسيد</text>
+</svg>

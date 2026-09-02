@@ -687,6 +687,27 @@ textarea {
   border: 2px solid var(--gold);
 }
 
+/* شارة الشعار في شاشة الدخول */
+.auth-badge {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  margin: 0 auto 14px;
+  padding: 8px;
+  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+@media (max-width: 360px) {
+  .auth-badge {
+    width: 84px;
+    height: 84px;
+  }
+}
+
 .auth-logo h1 {
   font-size: 1.3rem;
 }
