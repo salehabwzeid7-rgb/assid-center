@@ -9,6 +9,7 @@
     "build": "ng build",
     "build:prod": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
+    "clean": "node scripts/clean.mjs",
     "firebase:rules": "firebase deploy --only firestore:rules",
     "cap:sync": "npm run build:prod && npx cap sync android",
     "android:open": "npm run cap:sync && npx cap open android",

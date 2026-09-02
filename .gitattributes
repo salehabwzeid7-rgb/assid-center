@@ -1,0 +1,5 @@
+# وسم الملفات المُولَّدة حتى تُطوى في فروقات GitHub وأدوات المراجعة/الذكاء الاصطناعي.
+# android/ يبقى متتبَّعًا في git (مطلوب لبناء APK) لكنه لا يُحتسب لغةً ولا يظهر في الفروقات افتراضيًا.
+
+android/**            linguist-generated=true
+package-lock.json     linguist-generated=true

@@ -117,6 +117,20 @@ npm run android:open   # فتح المشروع في Android Studio
 
 ---
 
+## التنظيف وأدوات الذكاء الاصطناعي
+
+```
+npm run clean     # يحذف .angular و dist و android/app/build (تُعاد إنشاؤها آليًا)
+```
+
+- **`.aiexclude` / `.cursorignore`**: يستبعدان `android/` و`docs/screens/` والمخرجات
+  و`package-lock.json` من فهرسة أدوات الذكاء الاصطناعي — لتقليل استهلاك الـ tokens
+  وحصر السياق في `src/`. (`android/` يبقى متتبَّعًا في git لبناء APK.)
+- **`.gitattributes`**: يَسِم `android/**` و`package-lock.json` كـ`linguist-generated`
+  حتى تُطوى في فروقات GitHub.
+
+---
+
 ## هيكل المشروع
 
 ```
