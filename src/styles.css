@@ -43,6 +43,13 @@
   --shadow-lg: 0 12px 34px rgba(12, 45, 31, 0.16);
   --ring: 0 0 0 3px rgba(201, 161, 74, 0.25);
 
+  /* طبقات العمق والتفاعل للعناصر التفاعلية (أزرار، بطاقات، شرائح…) */
+  --i-rest: 0 1px 2px rgba(12, 45, 31, 0.1), 0 3px 8px rgba(12, 45, 31, 0.07);
+  --i-hover: 0 6px 16px rgba(12, 45, 31, 0.16), 0 16px 34px rgba(12, 45, 31, 0.13);
+  --i-press: inset 0 2px 6px rgba(12, 45, 31, 0.18);
+  --i-edge: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --i-frame: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(0, 0, 0, 0.12));
+
   --header-h: 58px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -79,6 +86,12 @@
 
     --shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 12px 34px rgba(0, 0, 0, 0.55);
+
+    --i-rest: 0 1px 2px rgba(0, 0, 0, 0.45), 0 3px 10px rgba(0, 0, 0, 0.35);
+    --i-hover: 0 8px 20px rgba(0, 0, 0, 0.5), 0 18px 38px rgba(0, 0, 0, 0.44);
+    --i-press: inset 0 2px 7px rgba(0, 0, 0, 0.55);
+    --i-edge: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    --i-frame: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.3));
   }
 }
 
@@ -632,6 +645,252 @@ textarea {
 
 .fab:active {
   transform: scale(0.96);
+}
+
+/* ==========================================================================
+   التفاعل والحركات الدقيقة (Depth · Framing · Micro-interactions)
+   كل عنصر تفاعلي: طبقات ظلّ + حافّة علوية مضيئة + إطار متدرّج،
+   وعند التمرير: رفع خفيف + توهّج حدود، وعند الضغط: انخفاض داخليّ.
+   يحترم إعداد «تقليل الحركة» في النظام.
+   ========================================================================== */
+
+.btn,
+.chip,
+.tabs button,
+.fab,
+.app-header .icon-btn,
+.list-item,
+.theme-row,
+.stat,
+.card {
+  transition:
+    transform 0.16s var(--ease),
+    box-shadow 0.24s var(--ease),
+    border-color 0.24s var(--ease),
+    background-color 0.24s var(--ease),
+    filter 0.16s var(--ease);
+}
+
+/* ----- الأزرار: عمق متعدّد الطبقات + إطار متدرّج ----- */
+.btn {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--border);
+  box-shadow: var(--i-rest), var(--i-edge);
+}
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--i-frame);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.85;
+  pointer-events: none;
+  transition: opacity 0.24s var(--ease), background 0.24s var(--ease);
+}
+.btn-primary {
+  border-color: var(--green-deep);
+  box-shadow: var(--i-rest), var(--i-edge), var(--shadow-lg);
+}
+.btn-ghost {
+  box-shadow: var(--i-edge);
+}
+.btn-gold {
+  border-color: var(--gold-deep);
+}
+.btn-danger {
+  border-color: var(--danger);
+}
+
+/* ----- حالات التمرير (أجهزة تدعم التمرير فقط) ----- */
+@media (hover: hover) {
+  .btn:hover:not(:disabled),
+  .chip:hover,
+  .tabs button:hover,
+  .app-header .icon-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--i-hover), var(--i-edge);
+  }
+  .btn:hover:not(:disabled)::after {
+    opacity: 1;
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+  .app-header .icon-btn:hover {
+    background: rgba(255, 255, 255, 0.28);
+  }
+  .list-item:hover,
+  .theme-row:hover {
+    transform: translateY(-2px);
+    border-color: var(--gold);
+    box-shadow: var(--i-hover);
+  }
+  .stat:hover {
+    border-color: var(--gold);
+    box-shadow: var(--i-hover);
+  }
+  .fab:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: var(--i-hover), 0 0 22px var(--gold-tint);
+  }
+}
+
+/* ----- حالات الضغط / اللمس (كل الأجهزة) ----- */
+.btn:active:not(:disabled),
+.chip:active,
+.tabs button:active,
+.app-header .icon-btn:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: var(--i-press);
+}
+.btn:active:not(:disabled)::after {
+  opacity: 1;
+}
+.list-item:active,
+.theme-row:active {
+  transform: scale(0.985);
+  box-shadow: var(--i-press);
+}
+.fab:active {
+  transform: scale(0.95);
+  box-shadow: var(--i-press);
+}
+
+/* ----- تركيز لوحة المفاتيح (وصوليّة) ----- */
+.btn:focus-visible,
+.chip:focus-visible,
+.tabs button:focus-visible,
+.app-header .icon-btn:focus-visible,
+.list-item:focus-visible,
+.theme-row:focus-visible,
+.fab:focus-visible {
+  outline: none;
+  box-shadow: var(--ring), var(--i-rest);
+}
+
+/* ----- الأزرار المعطّلة: بلا حركة ولا توهّج ----- */
+.btn:disabled {
+  transform: none;
+  box-shadow: var(--i-rest);
+  filter: saturate(0.55);
+}
+.btn:disabled::after {
+  opacity: 0.35;
+}
+
+/* ----- تبويبات / مفاتيح التبديل: عمق للزر النشط ----- */
+.tabs button.active {
+  box-shadow: var(--i-rest), var(--i-edge);
+}
+
+/* ==========================================================================
+   طبقة التفاعل الفاخرة: إطارات معدنية متوهّجة عند التمرير على الثيمات الفاخرة
+   ========================================================================== */
+
+/* عمق مناسب للأسطح الداكنة في كل الثيمات كاملة السطح */
+:root[data-app-surface='full'] {
+  --i-rest: 0 1px 2px rgba(0, 0, 0, 0.45), 0 3px 12px rgba(0, 0, 0, 0.38);
+  --i-hover: 0 10px 24px rgba(0, 0, 0, 0.52), 0 20px 44px rgba(0, 0, 0, 0.46);
+  --i-press: inset 0 2px 8px rgba(0, 0, 0, 0.6);
+  --i-edge: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --i-frame: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.32));
+}
+/* الثيمات الفاتحة كاملة السطح تعود لعمق فاتح */
+:root[data-app-theme='titanium'],
+:root[data-app-theme='snowgold'],
+:root[data-app-theme='platinumtitan'],
+:root[data-app-theme='ivorybronze'] {
+  --i-rest: 0 1px 2px rgba(40, 50, 65, 0.12), 0 4px 12px rgba(40, 50, 65, 0.1);
+  --i-hover: 0 8px 20px rgba(40, 50, 65, 0.18), 0 18px 40px rgba(40, 50, 65, 0.16);
+  --i-press: inset 0 2px 7px rgba(40, 50, 65, 0.2);
+  --i-edge: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --i-frame: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(0, 0, 0, 0.1));
+}
+
+/* إطار الأزرار في الثيمات الفاخرة = تدرّج معدنيّ من لون الإبراز */
+:root[data-app-frame='luxury'] .btn::after {
+  background: linear-gradient(
+    160deg,
+    var(--lux-accent) 0%,
+    transparent 38%,
+    transparent 62%,
+    var(--lux-accent) 100%
+  );
+  opacity: 1;
+}
+
+/* توهّج الحدود الديناميكيّ عند التمرير */
+@media (hover: hover) {
+  :root[data-app-frame='luxury'] .btn:hover:not(:disabled),
+  :root[data-app-frame='luxury'] .list-item:hover,
+  :root[data-app-frame='luxury'] .stat:hover,
+  :root[data-app-frame='luxury'] .theme-row:hover,
+  :root[data-app-frame='luxury'] .chip:hover {
+    border-color: var(--lux-accent);
+    box-shadow:
+      0 0 0 1px var(--lux-accent),
+      0 0 22px var(--lux-accent-soft),
+      var(--i-hover);
+  }
+  :root[data-app-frame='luxury'] .btn-primary:hover:not(:disabled) {
+    box-shadow:
+      0 0 0 1px var(--lux-accent),
+      0 0 32px var(--lux-accent-soft),
+      var(--shadow-lg);
+  }
+  :root[data-app-frame='luxury'] .fab:hover {
+    box-shadow:
+      0 0 0 2px var(--lux-accent),
+      0 0 34px var(--lux-accent-soft),
+      var(--i-hover);
+  }
+}
+:root[data-app-frame='luxury'] .btn:active:not(:disabled),
+:root[data-app-frame='luxury'] .list-item:active,
+:root[data-app-frame='luxury'] .theme-row:active {
+  box-shadow: 0 0 0 1px var(--lux-accent-soft), var(--i-press);
+}
+:root[data-app-frame='luxury'] .btn:focus-visible,
+:root[data-app-frame='luxury'] .list-item:focus-visible,
+:root[data-app-frame='luxury'] .fab:focus-visible {
+  box-shadow: 0 0 0 3px var(--lux-accent-soft), 0 0 20px var(--lux-accent-soft), var(--i-rest);
+}
+
+/* ----- احترام تقليل الحركة ----- */
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .chip,
+  .tabs button,
+  .fab,
+  .app-header .icon-btn,
+  .list-item,
+  .theme-row,
+  .stat,
+  .card {
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .btn:hover,
+  .btn:active,
+  .chip:hover,
+  .chip:active,
+  .tabs button:hover,
+  .list-item:hover,
+  .list-item:active,
+  .theme-row:hover,
+  .stat:hover,
+  .card:hover,
+  .fab:hover,
+  .fab:active,
+  .app-header .icon-btn:hover {
+    transform: none;
+  }
 }
 
 /* ---------- شاشة الدخول ---------- */
