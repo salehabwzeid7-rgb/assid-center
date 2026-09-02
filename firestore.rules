@@ -1,0 +1,27 @@
+rules_version = '2';
+
+// ==========================================================================
+//  قواعد أمان Firestore — مركز أَصيد (واجهة المعلّم)
+//
+//  كل بيانات المعلّم مخزّنة تحت مستنده:  teachers/{uid}/...
+//  فلا يصل أي معلّم إلا إلى شجرته هو.
+//
+//  النشر:  firebase deploy --only firestore:rules
+// ==========================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /teachers/{uid} {
+      // ملف المعلّم نفسه
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if false;
+
+      // كل المجموعات الفرعية: الحلقات، الطلاب، الحضور، التسميع، التقييم
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}

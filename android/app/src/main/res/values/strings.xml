@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">مركز أَصيد</string>
+    <string name="title_activity_main">مركز أَصيد</string>
+    <string name="package_name">com.assidcenter.teacher</string>
+    <string name="custom_url_scheme">com.assidcenter.teacher</string>
+</resources>
