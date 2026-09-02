@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import {
   ThemeService,
+  THEME_DESC,
   THEME_LABELS,
   THEME_ORDER,
   THEME_SWATCHES,
@@ -18,25 +19,32 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <app-page-header title="حساب المعلّم" />
 
     <div class="page">
-      <div class="section-title">المظهر</div>
+      <div class="row-between section-title">
+        <span>المظهر</span>
+        <span class="muted" style="font-weight:400;font-size:.78rem">{{ themes.length }} سمة</span>
+      </div>
       <div class="card">
         <p class="muted" style="margin-top:0;font-size:.86rem">
-          اختر سمة الواجهة — كلّها تدعم العربية RTL والوضعين الفاتح والداكن.
+          اختر سمة الواجهة — كلّها بالعربية RTL وتدعم الوضعين الفاتح والداكن، والتبديل فوريّ.
         </p>
-        <div class="theme-grid">
+        <div class="theme-list">
           @for (t of themes; track t) {
             <button
               type="button"
-              class="theme-card"
+              class="theme-row"
               [class.active]="theme.theme() === t"
               (click)="theme.set(t)"
             >
-              <span class="theme-swatch">
+              <span class="theme-swatch" aria-hidden="true">
                 <i [style.background]="swatches[t][0]"></i>
                 <i [style.background]="swatches[t][1]"></i>
                 <i [style.background]="swatches[t][2]"></i>
               </span>
-              <span class="theme-name">{{ labels[t] }}</span>
+              <span class="theme-text">
+                <span class="theme-name">{{ labels[t] }}</span>
+                <span class="theme-desc">{{ descriptions[t] }}</span>
+              </span>
+              <span class="theme-check">{{ theme.theme() === t ? '✓' : '' }}</span>
             </button>
           }
         </div>
@@ -78,35 +86,36 @@ import { PageHeaderComponent } from '../../shared/page-header';
   `,
   styles: [
     `
-      .theme-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-      .theme-card {
+      .theme-list {
         display: flex;
         flex-direction: column;
-        align-items: center;
         gap: 8px;
-        padding: 12px;
+      }
+      .theme-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: right;
+        padding: 10px 12px;
         border: 2px solid var(--border);
         border-radius: var(--radius-sm);
         background: var(--surface);
         color: var(--text);
         cursor: pointer;
-        transition: all var(--ease);
+        transition: border-color var(--ease), box-shadow var(--ease), transform 0.1s ease;
       }
-      .theme-card.active {
+      .theme-row:active {
+        transform: scale(0.99);
+      }
+      .theme-row.active {
         border-color: var(--gold);
         box-shadow: var(--ring);
       }
-      .theme-name {
-        font-weight: 700;
-        font-size: 0.9rem;
-      }
       .theme-swatch {
         display: flex;
-        width: 100%;
+        flex-shrink: 0;
+        width: 46px;
         height: 34px;
         border-radius: 8px;
         overflow: hidden;
@@ -114,6 +123,29 @@ import { PageHeaderComponent } from '../../shared/page-header';
       }
       .theme-swatch i {
         flex: 1;
+      }
+      .theme-text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .theme-name {
+        font-weight: 700;
+        font-size: 0.92rem;
+      }
+      .theme-desc {
+        color: var(--text-soft);
+        font-size: 0.76rem;
+        line-height: 1.5;
+      }
+      .theme-check {
+        flex-shrink: 0;
+        width: 20px;
+        text-align: center;
+        color: var(--gold-deep);
+        font-weight: 800;
       }
     `,
   ],
@@ -126,6 +158,7 @@ export class ProfilePage {
 
   readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;
+  readonly descriptions = THEME_DESC;
   readonly swatches = THEME_SWATCHES;
 
   name = this.auth.teacher()?.name ?? '';
