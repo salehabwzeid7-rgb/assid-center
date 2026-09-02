@@ -161,7 +161,10 @@ export class DataService {
 
   // ---------- سجلات ضمن جلسة ----------
 
-  sessionAttendance(sessionId: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
+  sessionAttendance(
+    sessionId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<AttendanceRecord[] | undefined> {
     const q = query(this.col(COL.attendance), where('sessionId', '==', sessionId));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
@@ -231,7 +234,10 @@ export class DataService {
 
   // ---------- سجلات الحلقة (للإحصائيات) ----------
 
-  circleAttendance(circleId: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
+  circleAttendance(
+    circleId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<AttendanceRecord[] | undefined> {
     const q = query(this.col(COL.attendance), where('circleId', '==', circleId));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
@@ -251,7 +257,15 @@ export class DataService {
     return this.live<AttendanceRecord>(q, destroyRef);
   }
 
-  recitationsForDate(date: string, destroyRef?: DestroyRef): Signal<RecitationRecord[] | undefined> {
+  /** كل سجلات الحضور (لحساب معدّل الحضور العام في البانر). */
+  allAttendance(destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
+    return this.live<AttendanceRecord>(query(this.col(COL.attendance)), destroyRef);
+  }
+
+  recitationsForDate(
+    date: string,
+    destroyRef?: DestroyRef,
+  ): Signal<RecitationRecord[] | undefined> {
     const q = query(this.col(COL.recitations), where('date', '==', date));
     return this.live<RecitationRecord>(q, destroyRef);
   }

@@ -1,52 +1,8 @@
 import { Component, DestroyRef, computed, inject } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { DataService, today, toDateStr } from '../../core/data.service';
 import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
-
-/** آيات مختارة عن العلم والقرآن — تُعرض واحدة يوميًّا بالتناوب حسب اليوم. */
-const VERSES: { ref: string; text: string; meaning: string }[] = [
-  {
-    ref: 'البقرة ١٨٦',
-    text: '﴿وَإِذَا سَأَلَكَ عِبَادِي عَنِّي فَإِنِّي قَرِيبٌ ۖ أُجِيبُ دَعْوَةَ ٱلدَّاعِ إِذَا دَعَانِ﴾',
-    meaning: 'قربٌ من الله وإجابةٌ للدعاء — تذكيرٌ للمعلّم والطالب أن يستعينا به في كل خطوة.',
-  },
-  {
-    ref: 'طه ١١٤',
-    text: '﴿وَقُل رَّبِّ زِدْنِي عِلْمًا﴾',
-    meaning: 'دعاءٌ بطلب الزيادة في العلم؛ خيرُ ما يُفتتح به مجلس التحفيظ.',
-  },
-  {
-    ref: 'القمر ١٧',
-    text: '﴿وَلَقَدْ يَسَّرْنَا ٱلْقُرْآنَ لِلذِّكْرِ فَهَلْ مِن مُّدَّكِرٍ﴾',
-    meaning: 'تيسيرُ الله لحفظ كتابه وتدبّره؛ فليُقبِل الطالب واثقًا بعون الله.',
-  },
-  {
-    ref: 'فاطر ٢٩',
-    text: '﴿إِنَّ ٱلَّذِينَ يَتْلُونَ كِتَٰبَ ٱللَّهِ وَأَقَامُوا۟ ٱلصَّلَوٰةَ ... يَرْجُونَ تِجَٰرَةً لَّن تَبُورَ﴾',
-    meaning: 'تلاوةُ القرآن مع العمل تجارةٌ رابحةٌ لا كساد فيها ولا خسارة.',
-  },
-  {
-    ref: 'المجادلة ١١',
-    text: '﴿يَرْفَعِ ٱللَّهُ ٱلَّذِينَ ءَامَنُوا۟ مِنكُمْ وَٱلَّذِينَ أُوتُوا۟ ٱلْعِلْمَ دَرَجَٰتٍ﴾',
-    meaning: 'رفعةُ الدرجات لأهل الإيمان والعلم؛ حافزٌ للمثابرة في الطلب والتعليم.',
-  },
-  {
-    ref: 'العنكبوت ٤٩',
-    text: '﴿بَلْ هُوَ ءَايَٰتٌۢ بَيِّنَٰتٌ فِى صُدُورِ ٱلَّذِينَ أُوتُوا۟ ٱلْعِلْمَ﴾',
-    meaning: 'شرفُ حَمَلة القرآن أن يكون محفوظًا في صدورهم آياتٍ بيّنات.',
-  },
-  {
-    ref: 'ص ٢٩',
-    text: '﴿كِتَٰبٌ أَنزَلْنَٰهُ إِلَيْكَ مُبَٰرَكٌ لِّيَدَّبَّرُوٓا۟ ءَايَٰتِهِۦ وَلِيَتَذَكَّرَ أُو۟لُوا۟ ٱلْأَلْبَٰبِ﴾',
-    meaning: 'الغايةُ من إنزال القرآن تدبّرُه والاتّعاظ به، لا مجرّد تلاوة اللسان.',
-  },
-  {
-    ref: 'الإسراء ٩',
-    text: '﴿إِنَّ هَٰذَا ٱلْقُرْءَانَ يَهْدِى لِلَّتِى هِىَ أَقْوَمُ﴾',
-    meaning: 'القرآن يهدي إلى أقوم الطرق وأصلحها في الاعتقاد والعمل والسلوك.',
-  },
-];
 
 @Component({
   selector: 'app-dashboard',
@@ -87,16 +43,28 @@ const VERSES: { ref: string; text: string; meaning: string }[] = [
         </div>
       </header>
 
-      <section class="verse-card">
-        <p class="kicker">آية اليوم · سورة {{ verse.ref }}</p>
-        <p class="ayah">{{ verse.text }}</p>
-        <p class="meaning">{{ verse.meaning }}</p>
+      <!-- البانر العلوي: ملخّص المعلّم لليوم -->
+      <section class="ops-card">
+        <p class="kicker">ملخّص اليوم · {{ todayLabel }}</p>
+        <div class="ops-stats">
+          <div>
+            <span class="v">{{ activeToday() }}</span>
+            <span class="k">حلقة نشطة اليوم</span>
+          </div>
+          <div>
+            <span class="v">{{ overallRate() === null ? '—' : overallRate() + '٪' }}</span>
+            <span class="k">معدّل الحضور العام</span>
+          </div>
+        </div>
+        <button class="ops-btn" type="button" (click)="goToSessions()">
+          {{ openToday() ? 'متابعة حصص اليوم' : 'بدء حصص اليوم' }} ‹
+        </button>
       </section>
 
       <div class="stat-row">
         <div class="stat">
           <div class="num">{{ circles()?.length ?? 0 }} <span class="unit">حلقة</span></div>
-          <div class="label">نشطة</div>
+          <div class="label">مسجّلة</div>
         </div>
         <div class="stat">
           <div class="num">{{ students()?.length ?? 0 }} <span class="unit">طالب</span></div>
@@ -104,10 +72,10 @@ const VERSES: { ref: string; text: string; meaning: string }[] = [
         </div>
         <div class="stat">
           <div class="num">
-            @if (attendancePct() === null) {
+            @if (todayRate() === null) {
               —
             } @else {
-              {{ attendancePct() }}<span class="unit">%</span>
+              {{ todayRate() }}<span class="unit">٪</span>
             }
           </div>
           <div class="label">حضور اليوم</div>
@@ -225,14 +193,19 @@ export class DashboardPage {
   private destroyRef = inject(DestroyRef);
   private data = inject(DataService);
   private auth = inject(AuthService);
+  private router = inject(Router);
 
   readonly statusLabels = SESSION_STATUS_LABELS;
-  readonly verse = VERSES[dayOfYear() % VERSES.length];
+  readonly todayLabel = new Date().toLocaleDateString('ar', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
 
   readonly circles = this.data.circles(this.destroyRef);
   readonly students = this.data.allStudents(this.destroyRef);
   private readonly sessions = this.data.allSessions(this.destroyRef);
-  private readonly attToday = this.data.attendanceForDate(today(), this.destroyRef);
+  private readonly attendance = this.data.allAttendance(this.destroyRef);
 
   readonly firstName = computed(
     () => (this.auth.teacher()?.name ?? 'أستاذ').trim().split(/\s+/)[0],
@@ -251,14 +224,27 @@ export class DashboardPage {
     () => this.sessions()?.filter((s) => s.status === 'open').length ?? 0,
   );
 
-  readonly attendancePct = computed<number | null>(() => {
-    const rows = this.attToday();
-    if (!rows || rows.length === 0) return null;
-    const present = rows.filter((a) => a.status === 'present' || a.status === 'late').length;
-    return Math.round((present / rows.length) * 100);
+  /** عدد الحلقات التي لها حصّة بتاريخ اليوم. */
+  readonly activeToday = computed(() => {
+    const t = today();
+    return new Set((this.sessions() ?? []).filter((s) => s.date === t).map((s) => s.circleId)).size;
   });
 
-  /** حصص مفتوحة أو مجدولة اليوم وما بعده — مرتّبة تصاعديًّا، حتى ٣. */
+  readonly openToday = computed(() =>
+    (this.sessions() ?? []).some((s) => s.date === today() && s.status === 'open'),
+  );
+
+  private rate(rows: { status: string }[] | undefined): number | null {
+    if (!rows || rows.length === 0) return null;
+    const good = rows.filter((a) => a.status === 'present' || a.status === 'late').length;
+    return Math.round((good / rows.length) * 100);
+  }
+  readonly overallRate = computed(() => this.rate(this.attendance()));
+  readonly todayRate = computed(() =>
+    this.rate(this.attendance()?.filter((a) => a.date === today())),
+  );
+
+  /** حصص مفتوحة أو مجدولة اليوم فما بعد — مرتّبة تصاعديًّا، حتى ٣. */
   readonly upcoming = computed<Session[] | undefined>(() => {
     const all = this.sessions();
     if (all === undefined) return undefined;
@@ -268,6 +254,11 @@ export class DashboardPage {
       .sort((a, b) => a.date.localeCompare(b.date) || b.createdAt - a.createdAt)
       .slice(0, 3);
   });
+
+  goToSessions(): void {
+    const open = (this.sessions() ?? []).find((s) => s.date === today() && s.status === 'open');
+    void this.router.navigate(open ? ['/session', open.id] : ['/circles']);
+  }
 
   private circle(id: string) {
     return this.circles()?.find((c) => c.id === id);
@@ -285,17 +276,8 @@ export class DashboardPage {
   relDay(date: string): string {
     const t = today();
     if (date === t) return 'اليوم';
-    const tomorrow = toDateStr(new Date(Date.now() + 86400000));
-    if (date === tomorrow) return 'غدًا';
-    const yesterday = toDateStr(new Date(Date.now() - 86400000));
-    if (date === yesterday) return 'أمس';
+    if (date === toDateStr(new Date(Date.now() + 86400000))) return 'غدًا';
+    if (date === toDateStr(new Date(Date.now() - 86400000))) return 'أمس';
     return new Date(date + 'T00:00:00').toLocaleDateString('ar', { weekday: 'long' });
   }
-}
-
-/** ترتيب اليوم في السنة (١..٣٦٦) لاختيار آية اليوم. */
-function dayOfYear(): number {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  return Math.floor((now.getTime() - start.getTime()) / 86400000);
 }
