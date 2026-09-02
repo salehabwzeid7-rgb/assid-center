@@ -4,13 +4,11 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import {
-  LUXURY_THEME_GROUPS,
+  ThemeService,
   THEME_DESC,
-  THEME_GROUP_LABELS,
   THEME_LABELS,
   THEME_ORDER,
-  THEME_PREVIEW,
-  ThemeService,
+  THEME_SWATCHES,
 } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -23,40 +21,33 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <div class="page">
       <div class="row-between section-title">
         <span>المظهر</span>
-        <span class="muted" style="font-weight:400;font-size:.78rem">{{ totalCount }} سمة</span>
+        <span class="muted" style="font-weight:400;font-size:.78rem">{{ themes.length }} سمة</span>
       </div>
       <div class="card">
-        <div class="lux-section-head" style="margin-top:0;padding-top:0;border:0">
-          <span class="lux-section-title">{{ groupLabels.luxury }}</span>
-          <span class="theme-group-hint">
-            سطح كامل فاخر + إطارات معدنية تحيط بالبطاقات والأزرار والتواريخ. التبديل فوريّ.
-          </span>
+        <p class="muted" style="margin-top:0;font-size:.86rem">
+          اختر سمة الواجهة — كلّها بالعربية RTL وتدعم الوضعين الفاتح والداكن، والتبديل فوريّ.
+        </p>
+        <div class="theme-list">
+          @for (t of themes; track t) {
+            <button
+              type="button"
+              class="theme-row"
+              [class.active]="theme.theme() === t"
+              (click)="theme.set(t)"
+            >
+              <span class="theme-swatch" aria-hidden="true">
+                <i [style.background]="swatches[t][0]"></i>
+                <i [style.background]="swatches[t][1]"></i>
+                <i [style.background]="swatches[t][2]"></i>
+              </span>
+              <span class="theme-text">
+                <span class="theme-name">{{ labels[t] }}</span>
+                <span class="theme-desc">{{ descriptions[t] }}</span>
+              </span>
+              <span class="theme-check">{{ theme.theme() === t ? '✓' : '' }}</span>
+            </button>
+          }
         </div>
-
-        @for (g of groups; track g.key) {
-          <div class="theme-group-label" style="margin-top:16px">{{ g.label }}</div>
-          <div class="theme-list">
-            @for (t of g.themes; track t) {
-              <button
-                type="button"
-                class="theme-row"
-                [class.active]="theme.theme() === t"
-                (click)="theme.set(t)"
-              >
-                <span
-                  class="theme-swatch grad"
-                  aria-hidden="true"
-                  [style.background]="previews[t]"
-                ></span>
-                <span class="theme-text">
-                  <span class="theme-name">{{ labels[t] }}</span>
-                  <span class="theme-desc">{{ descriptions[t] }}</span>
-                </span>
-                <span class="theme-check">{{ theme.theme() === t ? '✓' : '' }}</span>
-              </button>
-            }
-          </div>
-        }
       </div>
 
       <div class="section-title">بيانات المعلّم</div>
@@ -85,26 +76,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
       </div>
 
       <div class="card">
-        <button class="btn btn-logout btn-block btn-lg" type="button" (click)="logout()">
-          <svg
-            viewBox="0 0 24 24"
-            width="18"
-            height="18"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
-            <path d="M10 17 5 12l5-5M5 12h11" />
-          </svg>
+        <button class="btn btn-danger btn-block" type="button" (click)="logout()">
           تسجيل الخروج
         </button>
-        <p class="hint" style="text-align:center;margin-top:8px">
-          إنهاء الجلسة والعودة إلى شاشة الدخول.
-        </p>
       </div>
 
       <p class="hint" style="text-align:center">مركز أسيد لتحفيظ القرآن الكريم — واجهة المعلّم</p>
@@ -112,42 +86,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
   `,
   styles: [
     `
-      .theme-group-label {
-        font-weight: 700;
-        font-size: 0.86rem;
-        color: var(--text-soft);
-        margin: 10px 2px 8px;
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .theme-group-hint {
-        font-weight: 400;
-        font-size: 0.75rem;
-        color: var(--text-soft);
-        opacity: 0.85;
-      }
-      .lux-section-head {
-        margin: 22px 0 2px;
-        padding-top: 14px;
-        border-top: 1px solid var(--border);
-        display: flex;
-        flex-direction: column;
-        gap: 3px;
-      }
-      .lux-section-title {
-        font-weight: 800;
-        font-size: 0.98rem;
-        color: var(--gold-deep);
-        display: flex;
-        align-items: center;
-        gap: 7px;
-      }
-      .lux-section-title::before {
-        content: '✦';
-        color: var(--gold);
-        font-size: 0.9rem;
-      }
       .theme-list {
         display: flex;
         flex-direction: column;
@@ -221,13 +159,10 @@ export class ProfilePage {
   readonly notify = inject(NotifyService);
   private router = inject(Router);
 
+  readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;
   readonly descriptions = THEME_DESC;
-  readonly previews = THEME_PREVIEW;
-  readonly groupLabels = THEME_GROUP_LABELS;
-  readonly groups = LUXURY_THEME_GROUPS;
-
-  readonly totalCount = THEME_ORDER.length;
+  readonly swatches = THEME_SWATCHES;
 
   name = this.auth.teacher()?.name ?? '';
   phone = this.auth.teacher()?.phone ?? '';

@@ -4,26 +4,10 @@
     <meta charset="utf-8" />
     <title>مركز أسيد لتحفيظ القرآن الكريم</title>
     <script>
-      // تطبيق السمة الفاخرة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
+      // تطبيق السمة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
       try {
-        var THEMES = [
-          'snowgold',
-          'pearlobsidian',
-          'platinumtitan',
-          'ivorybronze',
-          'obsidianroyal',
-          'charcoalsilver',
-          'espressobronze',
-          'cybergold',
-          'desertgold',
-          'emeraldroyal',
-        ];
         var t = localStorage.getItem('assid-center:theme');
-        if (THEMES.indexOf(t) < 0) t = 'ivorybronze';
-        var r = document.documentElement;
-        r.setAttribute('data-app-theme', t);
-        r.setAttribute('data-app-surface', 'full');
-        r.setAttribute('data-app-frame', 'luxury');
+        if (t) document.documentElement.setAttribute('data-app-theme', t);
       } catch (e) {}
     </script>
     <base href="/" />
