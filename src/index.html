@@ -10,11 +10,18 @@
         if (t) {
           var r = document.documentElement;
           r.setAttribute('data-app-theme', t);
+          var lux = [
+            'snowgold', 'pearlobsidian', 'platinumtitan', 'ivorybronze',
+            'obsidianroyal', 'charcoalsilver', 'espressobronze', 'cybergold',
+            'desertgold', 'emeraldroyal',
+          ];
           var full = [
             'obsidian', 'charcoal', 'gunmetal', 'icenavy',
             'espresso', 'emerald', 'titanium', 'ember',
           ];
-          r.setAttribute('data-app-surface', full.indexOf(t) >= 0 ? 'full' : 'flat');
+          var isLux = lux.indexOf(t) >= 0;
+          r.setAttribute('data-app-surface', isLux || full.indexOf(t) >= 0 ? 'full' : 'flat');
+          if (isLux) r.setAttribute('data-app-frame', 'luxury');
         }
       } catch (e) {}
     </script>

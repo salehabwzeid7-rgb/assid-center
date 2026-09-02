@@ -35,21 +35,80 @@ export const FULL_SURFACE_THEMES = [
   'ember',
 ] as const;
 
-export type AppTheme = (typeof STANDARD_THEMES)[number] | (typeof FULL_SURFACE_THEMES)[number];
+/**
+ * ثيمات فاخرة «كاملة السطح» مع تأطير غنيّ:
+ * تغيّر خلفية التطبيق كليًّا وتحيط البطاقات والأزرار والتواريخ بإطارات ذهبية/برونزية/فضّية.
+ */
+export const LUXURY_THEMES = [
+  // بيضاء فاخرة
+  'snowgold',
+  'pearlobsidian',
+  'platinumtitan',
+  'ivorybronze',
+  // سوداء فاخرة
+  'obsidianroyal',
+  'charcoalsilver',
+  'espressobronze',
+  'cybergold',
+  // إضافية فاخرة
+  'desertgold',
+  'emeraldroyal',
+] as const;
+
+export type AppTheme =
+  | (typeof STANDARD_THEMES)[number]
+  | (typeof FULL_SURFACE_THEMES)[number]
+  | (typeof LUXURY_THEMES)[number];
 
 /** ترتيب التدوير الكامل (زر 🎨) */
-export const THEME_ORDER: AppTheme[] = [...STANDARD_THEMES, ...FULL_SURFACE_THEMES];
+export const THEME_ORDER: AppTheme[] = [
+  ...STANDARD_THEMES,
+  ...FULL_SURFACE_THEMES,
+  ...LUXURY_THEMES,
+];
 
-const FULL_SURFACE_SET = new Set<string>(FULL_SURFACE_THEMES);
+const FULL_SURFACE_SET = new Set<string>([...FULL_SURFACE_THEMES, ...LUXURY_THEMES]);
+const LUXURY_SET = new Set<string>(LUXURY_THEMES);
+
+/** هل السمة تحوّل خلفية التطبيق بالكامل؟ (كاملة السطح أو فاخرة) */
 export function isFullSurface(t: AppTheme): boolean {
   return FULL_SURFACE_SET.has(t);
 }
 
-/** عناوين القسمين في شاشة الإعدادات */
+/** هل السمة من المجموعة الفاخرة (إطارات + تأطير)؟ */
+export function isLuxury(t: AppTheme): boolean {
+  return LUXURY_SET.has(t);
+}
+
+/** عناوين الأقسام في شاشة الإعدادات */
 export const THEME_GROUP_LABELS = {
   standard: 'الثيمات القياسية',
   full: 'الثيمات الاحترافية المتقدّمة',
+  luxury: 'الثيمات الفاخرة الاحترافية',
 } as const;
+
+/** تقسيم الثيمات الفاخرة إلى ثلاث فئات داخل قسمها */
+export const LUXURY_THEME_GROUPS: readonly {
+  key: string;
+  label: string;
+  themes: readonly AppTheme[];
+}[] = [
+  {
+    key: 'white',
+    label: 'الثيمات البيضاء الفاخرة',
+    themes: ['snowgold', 'pearlobsidian', 'platinumtitan', 'ivorybronze'],
+  },
+  {
+    key: 'dark',
+    label: 'الثيمات السوداء الفاخرة',
+    themes: ['obsidianroyal', 'charcoalsilver', 'espressobronze', 'cybergold'],
+  },
+  {
+    key: 'signature',
+    label: 'ثيمات إضافية فاخرة',
+    themes: ['desertgold', 'emeraldroyal'],
+  },
+];
 
 export const THEME_LABELS: Record<AppTheme, string> = {
   default: 'الأساسية',
@@ -72,6 +131,16 @@ export const THEME_LABELS: Record<AppTheme, string> = {
   emerald: 'زمرّد الغابة',
   titanium: 'تيتانيوم فاتح',
   ember: 'جمر الغروب',
+  snowgold: 'أبيض ثلجيّ بإطار ذهبيّ',
+  pearlobsidian: 'لؤلؤيّ بأسود وذهبيّ',
+  platinumtitan: 'أبيض فضّيّ تيتانيوم',
+  ivorybronze: 'عاجيّ دافئ ببرونز',
+  obsidianroyal: 'أوبسيديان بذهبيّ متوهّج',
+  charcoalsilver: 'فحميّ بفضّة وأبيض',
+  espressobronze: 'إسبريسو ملكيّ ببرونز',
+  cybergold: 'أسود سيبرانيّ بذهبيّ',
+  desertgold: 'صحراويّ فخم بذهبيّ',
+  emeraldroyal: 'زمرّديّ ملكيّ داكن',
 };
 
 /** وصف موجز لكل سمة (يظهر تحت الاسم في شاشة الإعدادات) */
@@ -96,6 +165,16 @@ export const THEME_DESC: Record<AppTheme, string> = {
   emerald: 'أخضر غابيّ عميق متدرّج مع توهّج زمرّديّ',
   titanium: 'رماديّ فضّيّ فاتح متدرّج بإحساس معدنيّ ناعم',
   ember: 'تدرّج غروب دافئ من الأرجوانيّ إلى الجمر البرتقاليّ',
+  snowgold: 'خلفية ثلجية نقيّة + بطاقات بيضاء محاطة بإطار ذهبيّ متوهّج + نصّ فحميّ وأزرار مذهّبة',
+  pearlobsidian: 'خلفية لؤلؤية + بطاقات سوداء أوبسيديان بحوافّ ذهبية رفيعة + تباين تنفيذيّ راقٍ',
+  platinumtitan: 'سطح أبيض بلاتينيّ + بطاقات فضّية متدرّجة + ظلال ناعمة ونصّ إردوازيّ عميق',
+  ivorybronze: 'خلفية عاجية كريمية دافئة + بطاقات بيج + إطارات برونزية غنيّة ونصّ بنّيّ',
+  obsidianroyal: 'أسود منتصف الليل + بطاقات فحمية محاطة بإطار ذهبيّ فاخر من كل الجهات + أزرار مذهّبة',
+  charcoalsilver: 'فحميّ مطفأ + بطاقات بإطار تيتانيوم فضّيّ + نصّ أبيض ناصع وإبرازات فضّية متوهّجة',
+  espressobronze: 'خلفية إسبريسو شبه سوداء + ألواح بنّية داكنة بإطارات برونزية معدنية أنيقة',
+  cybergold: 'واجهة داكنة عصرية + طبقات سوداء محاطة بحوافّ ذهبية رفيعة متوهّجة + عناصر عالية التباين',
+  desertgold: 'خلفية رملية صحراوية + بطاقات سوداء مطفأة + تأطير ذهبيّ بلمسة تراث محليّ فاخرة',
+  emeraldroyal: 'خضرة غابية شبه سوداء + ألواح أوبسيديان محاطة بإطار ذهبيّ + شارات زمرّدية متوهّجة',
 };
 
 /** ألوان مصغّرة لعيّنة الاختيار (أساسي · مميّز · خلفية) */
@@ -120,6 +199,16 @@ export const THEME_SWATCHES: Record<AppTheme, [string, string, string]> = {
   emerald: ['#2bb673', '#d8c06a', '#0d2418'],
   titanium: ['#5c7186', '#a9772e', '#eaeef2'],
   ember: ['#e8813f', '#c96fa0', '#3a1f2e'],
+  snowgold: ['#c9a14a', '#e8ddc0', '#ffffff'],
+  pearlobsidian: ['#cba64e', '#16161a', '#f4f0e7'],
+  platinumtitan: ['#8a94a0', '#d7dde3', '#f5f7f9'],
+  ivorybronze: ['#a9772e', '#8a6a3e', '#f8f2e4'],
+  obsidianroyal: ['#e0b95f', '#1a1a20', '#0a0a0e'],
+  charcoalsilver: ['#c6cdd6', '#8b93a0', '#16171a'],
+  espressobronze: ['#c08a4d', '#3a271b', '#150e08'],
+  cybergold: ['#f2cb4f', '#0e0e12', '#060608'],
+  desertgold: ['#d9b667', '#14120f', '#cebc94'],
+  emeraldroyal: ['#2fb877', '#dcb75f', '#071a11'],
 };
 
 /** تدرّج معاينة لعيّنة الثيمات كاملة السطح */
@@ -132,6 +221,16 @@ export const THEME_PREVIEW: Partial<Record<AppTheme, string>> = {
   emerald: 'linear-gradient(135deg, #08160f 0%, #0f3a26 55%, #091d13 100%)',
   titanium: 'linear-gradient(135deg, #eef1f4 0%, #d8dee4 55%, #f4f6f8 100%)',
   ember: 'linear-gradient(135deg, #1e1220 0%, #6b2f34 55%, #944a2c 100%)',
+  snowgold: 'linear-gradient(135deg, #ffffff 0%, #f7f2e3 58%, #efe3c6 100%)',
+  pearlobsidian: 'linear-gradient(135deg, #f6f3ec 0%, #e9e3d5 42%, #16161a 100%)',
+  platinumtitan: 'linear-gradient(135deg, #f6f8fa 0%, #dfe4ea 52%, #c5cdd7 100%)',
+  ivorybronze: 'linear-gradient(135deg, #f8f2e4 0%, #e9dcc2 52%, #a9772e 100%)',
+  obsidianroyal: 'linear-gradient(135deg, #0a0a0e 0%, #1b1710 52%, #8a6a2e 100%)',
+  charcoalsilver: 'linear-gradient(135deg, #0f1012 0%, #26292e 52%, #aeb6c1 100%)',
+  espressobronze: 'linear-gradient(135deg, #140d08 0%, #3a271b 52%, #b07d45 100%)',
+  cybergold: 'linear-gradient(135deg, #050507 0%, #12120a 48%, #e8c24a 100%)',
+  desertgold: 'linear-gradient(135deg, #cebc94 0%, #7a6a4d 45%, #14120f 100%)',
+  emeraldroyal: 'linear-gradient(135deg, #07130d 0%, #0f3a26 50%, #8a6a2e 100%)',
 };
 
 const KEY = 'assid-center:theme';
@@ -170,6 +269,8 @@ export class ThemeService {
     const root = document.documentElement;
     root.setAttribute('data-app-theme', t);
     root.setAttribute('data-app-surface', isFullSurface(t) ? 'full' : 'flat');
+    if (isLuxury(t)) root.setAttribute('data-app-frame', 'luxury');
+    else root.removeAttribute('data-app-frame');
   }
 }
 

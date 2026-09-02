@@ -385,6 +385,15 @@ textarea {
   margin-top: 4px;
 }
 
+/* تاريخ اليوم أعلى الصفحة (يُؤطَّر في الثيمات الفاخرة) */
+.page-date {
+  display: inline-block;
+  margin: 6px 2px 2px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+}
+
 /* ---------- أزرار ---------- */
 .btn {
   display: inline-flex;
@@ -1566,6 +1575,438 @@ textarea {
   --shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
   --ring: 0 0 0 3px rgba(232, 129, 63, 0.4);
+}
+
+/* ==========================================================================
+   القسم الثالث — الثيمات الفاخرة الاحترافية (Luxury / Full-Surface + Framing)
+   عند اختيار أيّ منها:
+   • تتحوّل خلفية التطبيق بالكامل إلى تدرّج فاخر (data-app-surface='full').
+   • تُحاط البطاقات والألواح واللوحات الجانبية بإطار معدنيّ (ذهبي/برونزي/فضّي)
+     مع توهّج ناعم، وتُؤطَّر الأزرار والتواريخ وعناصر الإجراءات (data-app-frame='luxury').
+   ثلاث فئات: بيضاء فاخرة · سوداء فاخرة · توقيعية إضافية.
+   ========================================================================== */
+
+/* --- قواعد التأطير المشتركة لكل الثيمات الفاخرة --- */
+:root[data-app-frame='luxury'] {
+  /* لون النصّ فوق خلفية الجسم (يُخصَّص في الثيمات ذات الخلفية الفاتحة والبطاقات الداكنة) */
+  --lux-on-bg: var(--text);
+  --lux-on-bg-soft: var(--text-soft);
+  background: var(--bg);
+}
+:root[data-app-frame='luxury'] body {
+  background: var(--surface-gradient);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  min-height: 100dvh;
+}
+
+/* الشريط العلوي: حافّة معدنية سفلية + توهّج */
+:root[data-app-frame='luxury'] .app-header {
+  background: var(--header-grad);
+  border-bottom: 1.5px solid var(--lux-accent);
+  box-shadow:
+    0 2px 22px rgba(0, 0, 0, 0.3),
+    inset 0 -1px 0 var(--lux-accent-soft);
+}
+
+/* الأسطح المؤطَّرة: بطاقات، عناصر قوائم، إحصاءات، تبويبات، نوافذ، صفوف الإعدادات */
+:root[data-app-frame='luxury'] .card,
+:root[data-app-frame='luxury'] .list-item,
+:root[data-app-frame='luxury'] .stat,
+:root[data-app-frame='luxury'] .tabs,
+:root[data-app-frame='luxury'] .modal,
+:root[data-app-frame='luxury'] .toast,
+:root[data-app-frame='luxury'] .net-banner,
+:root[data-app-frame='luxury'] .theme-row {
+  border: 1px solid var(--lux-accent);
+  box-shadow: var(--lux-frame-glow), var(--shadow-lg);
+}
+:root[data-app-frame='luxury'] .list-item:active,
+:root[data-app-frame='luxury'] .theme-row.active {
+  border-color: var(--lux-accent);
+  box-shadow: var(--ring), var(--lux-frame-glow);
+}
+
+/* الحقول والمدخلات مؤطَّرة أيضًا */
+:root[data-app-frame='luxury'] .field input,
+:root[data-app-frame='luxury'] .field select,
+:root[data-app-frame='luxury'] .field textarea {
+  border: 1px solid var(--lux-btn-border);
+}
+
+/* الأزرار: تأطير كامل من كل الجهات */
+:root[data-app-frame='luxury'] .btn {
+  border: 1px solid var(--lux-btn-border);
+}
+:root[data-app-frame='luxury'] .btn-primary {
+  border: 1px solid var(--lux-accent);
+  box-shadow:
+    0 0 0 1px var(--lux-accent-soft),
+    0 8px 24px rgba(0, 0, 0, 0.28),
+    var(--lux-frame-glow);
+}
+:root[data-app-frame='luxury'] .btn-ghost,
+:root[data-app-frame='luxury'] .btn-danger,
+:root[data-app-frame='luxury'] .btn-gold {
+  border: 1px solid var(--lux-btn-border);
+}
+:root[data-app-frame='luxury'] .chip {
+  border: 1px solid var(--lux-btn-border);
+}
+
+/* الزرّ العائم والتواريخ والشارات: إطار معدنيّ */
+:root[data-app-frame='luxury'] .fab {
+  border: 2px solid var(--lux-accent);
+  box-shadow: 0 0 26px var(--lux-accent-soft), var(--shadow-lg);
+}
+:root[data-app-frame='luxury'] .page-date {
+  border: 1px solid var(--lux-accent);
+  padding: 4px 12px;
+  box-shadow: var(--lux-frame-glow);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+:root[data-app-frame='luxury'] .badge {
+  border: 1px solid var(--lux-btn-border);
+}
+
+/* عناوين الأقسام والنصوص الواقعة مباشرة على خلفية الجسم */
+:root[data-app-frame='luxury'] .section-title,
+:root[data-app-frame='luxury'] .row-between.section-title > span,
+:root[data-app-frame='luxury'] .page > .hint,
+:root[data-app-frame='luxury'] .empty {
+  color: var(--lux-on-bg-soft);
+}
+:root[data-app-frame='luxury'] .section-title a {
+  color: var(--lux-on-bg);
+  font-weight: 700;
+}
+:root[data-app-frame='luxury'] .section-title::before {
+  background: var(--lux-accent);
+  box-shadow: 0 0 10px var(--lux-accent-soft);
+}
+:root[data-app-frame='luxury'] .stat::after {
+  background: var(--lux-accent);
+}
+
+/* نافذة التأكيد الخلفية */
+:root[data-app-frame='luxury'] .modal-backdrop {
+  background: rgba(0, 0, 0, 0.62);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* ------------------ الفئة الأولى: بيضاء فاخرة ------------------ */
+
+/* 1) أبيض ثلجيّ بإطار ذهبيّ ملكيّ */
+:root[data-app-theme='snowgold'] {
+  --surface-gradient: linear-gradient(160deg, #ffffff 0%, #fdfaf1 45%, #f7f0df 100%);
+  --bg: #fefdf9;
+  --surface: #ffffff;
+  --surface-2: #faf5e8;
+  --text: #23262b;
+  --text-soft: #6b6f77;
+  --border: #ece2c8;
+  --green: #9c7c2e;
+  --green-deep: #7f6425;
+  --green-mid: #b89441;
+  --green-tint: rgba(201, 161, 74, 0.14);
+  --gold: #c9a14a;
+  --gold-deep: #a9822f;
+  --gold-tint: #f3ebd6;
+  --gold-tint2: #faf4e4;
+  --header-grad: linear-gradient(135deg, #1f2430 0%, #10131b 100%);
+  --shadow: 0 2px 14px rgba(150, 120, 40, 0.1);
+  --shadow-lg: 0 16px 40px rgba(150, 120, 40, 0.16);
+  --ring: 0 0 0 3px rgba(201, 161, 74, 0.3);
+  --lux-accent: rgba(201, 161, 74, 0.6);
+  --lux-accent-soft: rgba(201, 161, 74, 0.22);
+  --lux-btn-border: rgba(201, 161, 74, 0.38);
+  --lux-frame-glow: 0 0 0 1px rgba(201, 161, 74, 0.18), 0 0 22px rgba(201, 161, 74, 0.14);
+}
+
+/* 2) أبيض لؤلؤيّ مدموج بالأسود والذهبيّ */
+:root[data-app-theme='pearlobsidian'] {
+  --surface-gradient: linear-gradient(160deg, #f7f4ed 0%, #efe9dc 48%, #e6ddca 100%);
+  --bg: #f4f0e7;
+  --surface: #16161a;
+  --surface-2: #1f1f25;
+  --text: #f0ece2;
+  --text-soft: #b0a992;
+  --border: rgba(203, 166, 78, 0.45);
+  --green: #cba64e;
+  --green-deep: #b08e3c;
+  --green-mid: #ddbb63;
+  --green-tint: rgba(203, 166, 78, 0.18);
+  --gold: #cba64e;
+  --gold-deep: #b08e3c;
+  --gold-tint: rgba(203, 166, 78, 0.16);
+  --gold-tint2: rgba(203, 166, 78, 0.1);
+  --header-grad: linear-gradient(135deg, #121216 0%, #08080a 100%);
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.28);
+  --ring: 0 0 0 3px rgba(203, 166, 78, 0.34);
+  --lux-accent: rgba(203, 166, 78, 0.65);
+  --lux-accent-soft: rgba(203, 166, 78, 0.22);
+  --lux-btn-border: rgba(203, 166, 78, 0.4);
+  --lux-frame-glow: 0 0 0 1px rgba(203, 166, 78, 0.22), 0 0 20px rgba(203, 166, 78, 0.12);
+  --lux-on-bg: #241d0f;
+  --lux-on-bg-soft: #5c5133;
+}
+:root[data-app-theme='pearlobsidian'] .btn-primary {
+  color: #14140f;
+}
+
+/* 3) أبيض فضّيّ تيتانيوم */
+:root[data-app-theme='platinumtitan'] {
+  --surface-gradient: linear-gradient(160deg, #f7f9fb 0%, #eef1f5 50%, #e2e7ee 100%);
+  --bg: #f4f6f9;
+  --surface: linear-gradient(150deg, #ffffff 0%, #eef1f5 100%);
+  --surface-2: #e9edf2;
+  --text: #2b323c;
+  --text-soft: #5f6b7d;
+  --border: #d3dae2;
+  --green: #4d6275;
+  --green-deep: #3b4d5e;
+  --green-mid: #6c8299;
+  --green-tint: rgba(77, 98, 117, 0.12);
+  --gold: #8a94a0;
+  --gold-deep: #6f7a87;
+  --gold-tint: rgba(138, 148, 160, 0.16);
+  --gold-tint2: rgba(138, 148, 160, 0.1);
+  --header-grad: linear-gradient(135deg, #414b57 0%, #2c343e 100%);
+  --shadow: 0 2px 14px rgba(70, 85, 105, 0.12);
+  --shadow-lg: 0 16px 40px rgba(70, 85, 105, 0.2);
+  --ring: 0 0 0 3px rgba(120, 140, 160, 0.3);
+  --lux-accent: rgba(150, 163, 178, 0.75);
+  --lux-accent-soft: rgba(150, 163, 178, 0.28);
+  --lux-btn-border: rgba(120, 138, 158, 0.4);
+  --lux-frame-glow: 0 0 0 1px rgba(160, 172, 186, 0.3), 0 4px 18px rgba(70, 85, 105, 0.12);
+}
+
+/* 4) أبيض عاجيّ دافئ مع لمسة برونزية */
+:root[data-app-theme='ivorybronze'] {
+  --surface-gradient: linear-gradient(160deg, #faf5e9 0%, #f2ead7 50%, #ebdfc6 100%);
+  --bg: #f8f2e4;
+  --surface: #fffdf6;
+  --surface-2: #f5edda;
+  --text: #3b2f22;
+  --text-soft: #7a6a54;
+  --border: #e6d8bd;
+  --green: #8a6a3e;
+  --green-deep: #6f5531;
+  --green-mid: #a5824f;
+  --green-tint: rgba(138, 106, 62, 0.14);
+  --gold: #a9772e;
+  --gold-deep: #8a5f22;
+  --gold-tint: #f1e6cf;
+  --gold-tint2: #f8f0dd;
+  --header-grad: linear-gradient(135deg, #4a3a26 0%, #33281a 100%);
+  --shadow: 0 2px 14px rgba(120, 90, 45, 0.12);
+  --shadow-lg: 0 16px 40px rgba(120, 90, 45, 0.18);
+  --ring: 0 0 0 3px rgba(169, 119, 46, 0.28);
+  --lux-accent: rgba(150, 105, 50, 0.55);
+  --lux-accent-soft: rgba(169, 119, 46, 0.2);
+  --lux-btn-border: rgba(150, 105, 50, 0.4);
+  --lux-frame-glow: 0 0 0 1px rgba(150, 105, 50, 0.2), 0 0 20px rgba(169, 119, 46, 0.12);
+}
+
+/* ------------------ الفئة الثانية: سوداء فاخرة ------------------ */
+
+/* 5) أسود أوبسيديان مع ذهبيّ ملكيّ متوهّج */
+:root[data-app-theme='obsidianroyal'] {
+  --surface-gradient: radial-gradient(circle at 28% -5%, #16151c 0%, #0b0b10 55%, #060608 100%);
+  --bg: #0a0a0e;
+  --surface: rgba(30, 27, 20, 0.72);
+  --surface-2: rgba(44, 40, 30, 0.6);
+  --text: #f3efe4;
+  --text-soft: #b3ab95;
+  --border: rgba(224, 185, 95, 0.42);
+  --green: #d9b25a;
+  --green-deep: #c19a44;
+  --green-mid: #e6c471;
+  --green-tint: rgba(217, 178, 90, 0.16);
+  --gold: #e0b95f;
+  --gold-deep: #c8a24a;
+  --gold-tint: rgba(224, 185, 95, 0.16);
+  --gold-tint2: rgba(224, 185, 95, 0.1);
+  --header-grad: linear-gradient(135deg, #14120c 0%, #0a0a0c 100%);
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 46px rgba(0, 0, 0, 0.6);
+  --ring: 0 0 0 3px rgba(224, 185, 95, 0.4);
+  --lux-accent: rgba(224, 185, 95, 0.7);
+  --lux-accent-soft: rgba(224, 185, 95, 0.28);
+  --lux-btn-border: rgba(224, 185, 95, 0.45);
+  --lux-frame-glow: 0 0 0 1px rgba(224, 185, 95, 0.3), 0 0 26px rgba(224, 185, 95, 0.18);
+}
+:root[data-app-theme='obsidianroyal'] .btn-primary {
+  color: #14120c;
+}
+
+/* 6) أسود فحميّ مدموج بالفضّة والأبيض */
+:root[data-app-theme='charcoalsilver'] {
+  --surface-gradient: linear-gradient(160deg, #141518 0%, #1d1f24 50%, #121316 100%);
+  --bg: #16171a;
+  --surface: rgba(200, 208, 220, 0.07);
+  --surface-2: rgba(200, 208, 220, 0.12);
+  --border: rgba(206, 213, 222, 0.36);
+  --text: #f4f6f9;
+  --text-soft: #aab2bf;
+  --green: #c6cdd6;
+  --green-deep: #a8b0bd;
+  --green-mid: #dde2e9;
+  --green-tint: rgba(198, 205, 214, 0.14);
+  --gold: #c6cdd6;
+  --gold-deep: #a8b0bd;
+  --gold-tint: rgba(198, 205, 214, 0.14);
+  --gold-tint2: rgba(198, 205, 214, 0.09);
+  --header-grad: linear-gradient(135deg, #23252a 0%, #16171a 100%);
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.58);
+  --ring: 0 0 0 3px rgba(198, 205, 214, 0.32);
+  --lux-accent: rgba(206, 213, 222, 0.6);
+  --lux-accent-soft: rgba(206, 213, 222, 0.24);
+  --lux-btn-border: rgba(206, 213, 222, 0.4);
+  --lux-frame-glow: 0 0 0 1px rgba(214, 221, 230, 0.28), 0 0 22px rgba(206, 213, 222, 0.14);
+}
+:root[data-app-theme='charcoalsilver'] .btn-primary {
+  color: #16171a;
+}
+
+/* 7) أسود ملكيّ مع تدرّجات البرونز (إسبريسو داكن) */
+:root[data-app-theme='espressobronze'] {
+  --surface-gradient: linear-gradient(160deg, #140d08 0%, #241811 50%, #100a06 100%);
+  --bg: #150e08;
+  --surface: rgba(122, 86, 55, 0.14);
+  --surface-2: rgba(122, 86, 55, 0.22);
+  --border: rgba(192, 138, 77, 0.42);
+  --text: #f1e6d8;
+  --text-soft: #bda88f;
+  --green: #b8814a;
+  --green-deep: #9c6a3a;
+  --green-mid: #cf9c63;
+  --green-tint: rgba(184, 129, 74, 0.16);
+  --gold: #c08a4d;
+  --gold-deep: #a2703b;
+  --gold-tint: rgba(192, 138, 77, 0.16);
+  --gold-tint2: rgba(192, 138, 77, 0.1);
+  --header-grad: linear-gradient(135deg, #1e140c 0%, #120b06 100%);
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 46px rgba(0, 0, 0, 0.6);
+  --ring: 0 0 0 3px rgba(192, 138, 77, 0.4);
+  --lux-accent: rgba(192, 138, 77, 0.6);
+  --lux-accent-soft: rgba(192, 138, 77, 0.24);
+  --lux-btn-border: rgba(192, 138, 77, 0.42);
+  --lux-frame-glow: 0 0 0 1px rgba(192, 138, 77, 0.26), 0 0 22px rgba(192, 138, 77, 0.14);
+}
+:root[data-app-theme='espressobronze'] .btn-primary {
+  color: #17100a;
+}
+
+/* 8) أسود سيبرانيّ مع لمسات نيون ذهبية */
+:root[data-app-theme='cybergold'] {
+  --surface-gradient: linear-gradient(160deg, #050507 0%, #0b0b10 45%, #060609 100%);
+  --bg: #060608;
+  --surface: rgba(232, 194, 74, 0.05);
+  --surface-2: rgba(232, 194, 74, 0.09);
+  --border: rgba(242, 203, 79, 0.5);
+  --text: #f6f4ea;
+  --text-soft: #b0ad9e;
+  --green: #e8c24a;
+  --green-deep: #d0a933;
+  --green-mid: #f0d271;
+  --green-tint: rgba(232, 194, 74, 0.14);
+  --gold: #f2cb4f;
+  --gold-deep: #d8b23c;
+  --gold-tint: rgba(242, 203, 79, 0.14);
+  --gold-tint2: rgba(242, 203, 79, 0.09);
+  --header-grad: linear-gradient(135deg, #0c0c10 0%, #050506 100%);
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 18px 46px rgba(0, 0, 0, 0.65);
+  --ring: 0 0 0 3px rgba(242, 203, 79, 0.45);
+  --lux-accent: rgba(242, 203, 79, 0.8);
+  --lux-accent-soft: rgba(242, 203, 79, 0.3);
+  --lux-btn-border: rgba(242, 203, 79, 0.5);
+  --lux-frame-glow: 0 0 0 1px rgba(242, 203, 79, 0.4), 0 0 28px rgba(242, 203, 79, 0.22);
+}
+:root[data-app-theme='cybergold'] .btn-primary {
+  color: #0c0c10;
+}
+:root[data-app-theme='cybergold'] .card,
+:root[data-app-theme='cybergold'] .stat,
+:root[data-app-theme='cybergold'] .list-item {
+  box-shadow:
+    0 0 0 1px rgba(242, 203, 79, 0.35),
+    0 0 30px rgba(242, 203, 79, 0.14),
+    var(--shadow-lg);
+}
+
+/* ------------------ الفئة الثالثة: توقيعية إضافية ------------------ */
+
+/* 9) صحراويّ فخم بذهبيّ ورمل */
+:root[data-app-theme='desertgold'] {
+  --surface-gradient: linear-gradient(160deg, #d8c7a0 0%, #c9b58c 45%, #b7a074 100%);
+  --bg: #cebc94;
+  --surface: rgba(19, 17, 14, 0.9);
+  --surface-2: rgba(33, 30, 24, 0.85);
+  --text: #f2e8d5;
+  --text-soft: #c2b49a;
+  --border: rgba(217, 182, 103, 0.55);
+  --green: #d4af5e;
+  --green-deep: #bd9846;
+  --green-mid: #e2c37a;
+  --green-tint: rgba(212, 175, 94, 0.18);
+  --gold: #d9b667;
+  --gold-deep: #c19f4f;
+  --gold-tint: rgba(217, 182, 103, 0.18);
+  --gold-tint2: rgba(217, 182, 103, 0.1);
+  --header-grad: linear-gradient(135deg, #14120d 0%, #0c0b08 100%);
+  --shadow: 0 2px 16px rgba(60, 45, 20, 0.28);
+  --shadow-lg: 0 18px 44px rgba(60, 45, 20, 0.34);
+  --ring: 0 0 0 3px rgba(217, 182, 103, 0.4);
+  --lux-accent: rgba(217, 182, 103, 0.65);
+  --lux-accent-soft: rgba(217, 182, 103, 0.26);
+  --lux-btn-border: rgba(217, 182, 103, 0.45);
+  --lux-frame-glow: 0 0 0 1px rgba(217, 182, 103, 0.3), 0 0 22px rgba(217, 182, 103, 0.16);
+  --lux-on-bg: #1f1a10;
+  --lux-on-bg-soft: #473d27;
+}
+:root[data-app-theme='desertgold'] .btn-primary {
+  color: #14120d;
+}
+
+/* 10) زمرّديّ ملكيّ داكن مع ذهبيّ */
+:root[data-app-theme='emeraldroyal'] {
+  --surface-gradient: linear-gradient(160deg, #05130d 0%, #0a2418 48%, #04100a 100%);
+  --bg: #071a11;
+  --surface: rgba(21, 33, 27, 0.82);
+  --surface-2: rgba(29, 45, 37, 0.7);
+  --text: #eaf3ec;
+  --text-soft: #a3bdad;
+  --border: rgba(220, 183, 95, 0.45);
+  --green: #2fb877;
+  --green-deep: #1f9a5f;
+  --green-mid: #49cf8e;
+  --green-tint: rgba(47, 184, 119, 0.16);
+  --gold: #dcb75f;
+  --gold-deep: #c39f49;
+  --gold-tint: rgba(220, 183, 95, 0.16);
+  --gold-tint2: rgba(220, 183, 95, 0.1);
+  --header-grad: linear-gradient(135deg, #0a1f15 0%, #05120b 100%);
+  --shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 18px 46px rgba(0, 0, 0, 0.58);
+  --ring: 0 0 0 3px rgba(220, 183, 95, 0.38);
+  --lux-accent: rgba(220, 183, 95, 0.62);
+  --lux-accent-soft: rgba(220, 183, 95, 0.24);
+  --lux-btn-border: rgba(220, 183, 95, 0.42);
+  --lux-frame-glow: 0 0 0 1px rgba(220, 183, 95, 0.28), 0 0 24px rgba(47, 184, 119, 0.16);
+}
+:root[data-app-theme='emeraldroyal'] .badge.b-present,
+:root[data-app-theme='emeraldroyal'] .badge.b-grade {
+  box-shadow: 0 0 12px rgba(47, 184, 119, 0.45);
+}
+:root[data-app-theme='emeraldroyal'] .fab {
+  box-shadow: 0 0 26px rgba(47, 184, 119, 0.4), var(--shadow-lg);
 }
 
 /* ==========================================================================

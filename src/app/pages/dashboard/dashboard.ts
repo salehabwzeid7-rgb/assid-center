@@ -18,7 +18,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
     </app-page-header>
 
     <div class="page">
-      <p class="muted" style="margin:6px 2px 2px">{{ todayLabel }}</p>
+      <p class="muted page-date">{{ todayLabel }}</p>
 
       <div class="stat-grid" style="margin-top:12px">
         <div class="stat">
