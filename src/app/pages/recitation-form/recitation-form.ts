@@ -5,17 +5,18 @@ import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import {
   RECITATION_KIND_LABELS,
-  type Grade,
+  TASMIE_PASS,
+  scoreOf,
   type RecitationKind,
   type Student,
 } from '../../core/models';
 import { SURAHS, surah, surahsBetween } from '../../core/quran-data';
-import { GradePickerComponent } from '../../shared/grade-picker';
+import { ScoreInputComponent } from '../../shared/score-input';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
   selector: 'app-recitation-form',
-  imports: [FormsModule, PageHeaderComponent, GradePickerComponent],
+  imports: [FormsModule, PageHeaderComponent, ScoreInputComponent],
   template: `
     <app-page-header [title]="editing() ? 'تعديل التسميع' : 'تسجيل تسميع'" />
 
@@ -108,7 +109,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
           />
         </div>
 
-        <app-grade-picker label="تقدير التسميع" [(value)]="grade" />
+        <app-score-input
+          label="نسبة التسميع (٪)"
+          [threshold]="tasmiePass"
+          [value]="score()"
+          (valueChange)="score.set($event)"
+        />
 
         <div class="field-row">
           <div class="field">
@@ -191,7 +197,8 @@ export class RecitationFormPage implements OnInit {
   readonly surahs = SURAHS;
   readonly kinds: RecitationKind[] = ['new', 'near_review', 'far_review'];
   readonly kindLabels = RECITATION_KIND_LABELS;
-  readonly grade = signal<Grade>('very_good');
+  readonly tasmiePass = TASMIE_PASS;
+  readonly score = signal(95);
 
   m = {
     date: today(),
@@ -229,7 +236,7 @@ export class RecitationFormPage implements OnInit {
           promptCount: existing.promptCount,
           notes: existing.notes ?? '',
         };
-        this.grade.set(existing.grade);
+        this.score.set(scoreOf(existing));
       }
     }
     this.cdr.markForCheck();
@@ -266,7 +273,7 @@ export class RecitationFormPage implements OnInit {
       toSurah,
       toAyah,
       pages: Number(this.m.pages) || 0,
-      grade: this.grade(),
+      score: this.score(),
       hifzErrors: Number(this.m.hifzErrors) || 0,
       tajweedErrors: Number(this.m.tajweedErrors) || 0,
       promptCount: Number(this.m.promptCount) || 0,

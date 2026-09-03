@@ -3,13 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
-import type { Grade, Student } from '../../core/models';
-import { GradePickerComponent } from '../../shared/grade-picker';
+import { SARD_PASS, type Student } from '../../core/models';
+import { ScoreInputComponent } from '../../shared/score-input';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
   selector: 'app-evaluation-form',
-  imports: [FormsModule, PageHeaderComponent, GradePickerComponent],
+  imports: [FormsModule, PageHeaderComponent, ScoreInputComponent],
   template: `
     <app-page-header title="التقييم اليومي" />
 
@@ -26,11 +26,36 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <input id="date" name="date" type="date" [(ngModel)]="date" required />
         </div>
 
-        <app-grade-picker label="الحفظ الجديد" [(value)]="memorization" />
-        <app-grade-picker label="المراجعة" [(value)]="review" />
-        <app-grade-picker label="التجويد وأحكام التلاوة" [(value)]="tajweed" />
-        <app-grade-picker label="الانتباه والتفاعل" [(value)]="attention" />
-        <app-grade-picker label="الأدب والسلوك" [(value)]="behavior" />
+        <app-score-input
+          label="الحفظ الجديد (٪)"
+          [threshold]="pass"
+          [value]="memorization()"
+          (valueChange)="memorization.set($event)"
+        />
+        <app-score-input
+          label="المراجعة (٪)"
+          [threshold]="pass"
+          [value]="review()"
+          (valueChange)="review.set($event)"
+        />
+        <app-score-input
+          label="التجويد وأحكام التلاوة (٪)"
+          [threshold]="pass"
+          [value]="tajweed()"
+          (valueChange)="tajweed.set($event)"
+        />
+        <app-score-input
+          label="الانتباه والتفاعل (٪)"
+          [threshold]="pass"
+          [value]="attention()"
+          (valueChange)="attention.set($event)"
+        />
+        <app-score-input
+          label="الأدب والسلوك (٪)"
+          [threshold]="pass"
+          [value]="behavior()"
+          (valueChange)="behavior.set($event)"
+        />
 
         <div class="field">
           <label for="notes">ملاحظات اليوم</label>
@@ -72,11 +97,12 @@ export class EvaluationFormPage implements OnInit {
 
   date = today();
   notes = '';
-  readonly memorization = signal<Grade>('very_good');
-  readonly review = signal<Grade>('very_good');
-  readonly tajweed = signal<Grade>('very_good');
-  readonly attention = signal<Grade>('very_good');
-  readonly behavior = signal<Grade>('very_good');
+  readonly pass = SARD_PASS;
+  readonly memorization = signal(90);
+  readonly review = signal(90);
+  readonly tajweed = signal(90);
+  readonly attention = signal(90);
+  readonly behavior = signal(90);
 
   async ngOnInit(): Promise<void> {
     this.student.set(await this.data.getStudent(this.studentId));

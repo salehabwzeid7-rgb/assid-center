@@ -6,13 +6,11 @@ import { NotifyService } from '../../core/notify.service';
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_ORDER,
-  GRADE_LABELS,
-  GRADE_ORDER,
-  GRADE_VALUE,
   SESSION_STATUS_LABELS,
-  gradeFromValue,
+  TASMIE_PASS,
+  passLabel,
+  scoreOf,
   type AttendanceStatus,
-  type Grade,
   type Session,
 } from '../../core/models';
 import { dmy } from '../../core/format';
@@ -163,7 +161,8 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
                 @if (recOf(st.id); as r) {
                   <div class="muted" style="font-size:.85rem;margin-top:6px">
                     {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ← {{ surahName(r.toSurah) }}
-                    {{ r.toAyah }} · {{ r.pages }} وجه · {{ gradeLabels[r.grade] }}
+                    {{ r.toAyah }} · {{ r.pages }} وجه · {{ scoreOf(r) }}٪ ·
+                    {{ verdict(scoreOf(r)) }}
                   </div>
                 } @else {
                   <div class="muted" style="font-size:.82rem;margin-top:4px">
@@ -197,8 +196,8 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
                 <div class="label">مجموع الأوجه</div>
               </div>
               <div class="stat">
-                <div class="num">{{ avgGradeLabel() }}</div>
-                <div class="label">متوسط التقدير</div>
+                <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
+                <div class="label">متوسّط التسميع</div>
               </div>
             </div>
 
@@ -226,14 +225,20 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
             </div>
 
             <div class="card" style="margin-top:10px">
-              <div class="section-title" style="margin:0 0 8px">توزيع تقديرات التسميع</div>
-              @for (g of gradeOrder; track g) {
-                <div style="display:flex;align-items:center;gap:8px;margin:4px 0">
-                  <span style="width:64px;font-size:.85rem">{{ gradeLabels[g] }}</span>
-                  <span class="bar"><i [style.width.%]="gradePct(g)"></i></span>
-                  <span class="muted" style="font-size:.8rem">{{ gradeCount(g) }}</span>
-                </div>
-              }
+              <div class="section-title" style="margin:0 0 8px">
+                نتيجة التسميع (عتبة النجاح ٩٥٪)
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap">
+                <span
+                  >ناجح (≥ ٩٥٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
+                >
+                <span
+                  >دون العتبة: <b style="color:var(--danger)">{{ failCount() }}</b></span
+                >
+              </div>
+              <div class="bar" style="margin-top:8px">
+                <i [style.width.%]="passPct()"></i>
+              </div>
               @if (notRecitedNames().length) {
                 <div class="muted" style="margin-top:8px;font-size:.86rem">
                   لم يسمّعوا: {{ notRecitedNames().join('، ') }}
@@ -334,8 +339,11 @@ export class SessionPage implements OnInit {
 
   readonly attLabels = ATTENDANCE_LABELS;
   readonly attOrder = ATTENDANCE_ORDER;
-  readonly gradeLabels = GRADE_LABELS;
-  readonly gradeOrder = GRADE_ORDER;
+  readonly tasmiePass = TASMIE_PASS;
+  readonly scoreOf = scoreOf;
+  verdict(score: number): string {
+    return passLabel(score, TASMIE_PASS);
+  }
   readonly statusLabels = SESSION_STATUS_LABELS;
   readonly surahName = surahName;
   readonly fmt12 = fmt12;
@@ -382,11 +390,18 @@ export class SessionPage implements OnInit {
     const sum = (this.recitations() ?? []).reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
   });
-  readonly avgGradeLabel = computed(() => {
+  readonly avgScore = computed<number | null>(() => {
     const list = this.recitations() ?? [];
-    if (!list.length) return '—';
-    const avg = list.reduce((t, r) => t + GRADE_VALUE[r.grade], 0) / list.length;
-    return GRADE_LABELS[gradeFromValue(avg)];
+    if (!list.length) return null;
+    return Math.round(list.reduce((t, r) => t + scoreOf(r), 0) / list.length);
+  });
+  readonly passCount = computed(
+    () => (this.recitations() ?? []).filter((r) => scoreOf(r) >= TASMIE_PASS).length,
+  );
+  readonly failCount = computed(() => this.recitedTotal() - this.passCount());
+  readonly passPct = computed(() => {
+    const n = this.recitedTotal();
+    return n ? (this.passCount() / n) * 100 : 0;
   });
   readonly absentNames = computed(() => {
     const map = new Map((this.attendance() ?? []).map((a) => [a.studentId, a.status]));
@@ -454,13 +469,6 @@ export class SessionPage implements OnInit {
   }
   countAtt(status: AttendanceStatus): number {
     return this.attendance()?.filter((a) => a.status === status).length ?? 0;
-  }
-  gradeCount(g: Grade): number {
-    return this.recitations()?.filter((r) => r.grade === g).length ?? 0;
-  }
-  gradePct(g: Grade): number {
-    const n = this.recitedTotal();
-    return n ? (this.gradeCount(g) / n) * 100 : 0;
   }
 
   async setAttendance(studentId: string, status: AttendanceStatus): Promise<void> {

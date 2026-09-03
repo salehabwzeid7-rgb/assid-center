@@ -2,7 +2,7 @@
    تحليل حالة السرد لطالب — يُستخدم في لوحة «السرد» وصفحة سرد الطالب.
    ========================================================================== */
 
-import { GRADE_VALUE, gradeFromValue, type Grade, type SerdRecord, type Student } from './models';
+import { scoreOf, type SerdRecord, type Student } from './models';
 import { JUZ_SURAHS, completedJuz, juzOfBlock } from './quran-data';
 
 /** تصنيف الطالب في لوحة السرد (الطلاب بلا أجزاء مكتملة = 'none' فلا يظهرون). */
@@ -27,10 +27,10 @@ export interface SardAnalysis {
   /** أجزاء يوشك الطالب على إكمال حفظها (ناقصها سورة أو سورتان) */
   nearJuz: { juz: number; have: number; total: number }[];
   serdCount: number;
-  /** متوسّط تقدير كلّ عمليّات السرد */
-  avgGrade: Grade | null;
-  /** آخر تقدير سرد لكلّ جزء (للعرض التفصيليّ) */
-  juzLastGrade: Map<number, Grade>;
+  /** متوسّط درجة كلّ عمليّات السرد (٠..١٠٠) */
+  avgScore: number | null;
+  /** آخر درجة سرد لكلّ جزء (٠..١٠٠) للعرض التفصيليّ */
+  juzLastScore: Map<number, number>;
   category: SardCategory;
   /** عدد ما على الطالب سرده (أجزاء غير مسرودة + كتل جاهزة) */
   pendingCount: number;
@@ -50,9 +50,9 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
   const revisedJuz = completed.filter((j) => revisedSet.has(j));
   const unrevisedJuz = completed.filter((j) => !revisedSet.has(j));
 
-  // آخر تقدير لكلّ جزء (المصدر مرتَّب تنازليًّا زمنيًّا فأوّل ظهور هو الأحدث)
-  const juzLastGrade = new Map<number, Grade>();
-  for (const s of juzSerds) if (!juzLastGrade.has(s.juz)) juzLastGrade.set(s.juz, s.grade);
+  // آخر درجة لكلّ جزء (المصدر مرتَّب تنازليًّا زمنيًّا فأوّل ظهور هو الأحدث)
+  const juzLastScore = new Map<number, number>();
+  for (const s of juzSerds) if (!juzLastScore.has(s.juz)) juzLastScore.set(s.juz, scoreOf(s));
 
   const doneBlockSet = new Set(blockSerds.map((s) => s.juz));
   const readyBlocks: number[] = [];
@@ -73,9 +73,9 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
     }
   });
 
-  const gradeVals = mine.map((s) => GRADE_VALUE[s.grade]);
-  const avgGrade = gradeVals.length
-    ? gradeFromValue(gradeVals.reduce((a, b) => a + b, 0) / gradeVals.length)
+  const scores = mine.map((s) => scoreOf(s));
+  const avgScore = scores.length
+    ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
     : null;
 
   const pendingCount = unrevisedJuz.length + readyBlocks.length;
@@ -93,8 +93,8 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
     doneBlocks,
     nearJuz,
     serdCount: mine.length,
-    avgGrade,
-    juzLastGrade,
+    avgScore,
+    juzLastScore,
     category,
     pendingCount,
   };

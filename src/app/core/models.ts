@@ -79,31 +79,48 @@ export const RECITATION_KIND_LABELS: Record<RecitationKind, string> = {
   far_review: 'مراجعة بعيدة',
 };
 
-/** التقدير */
-export type Grade = 'excellent' | 'very_good' | 'good' | 'fair' | 'weak';
+/* ==========================================================================
+   التقييم بالنسبة المئويّة (٠..١٠٠) — بلا تقديرات نصّيّة.
+   عتبة النجاح تختلف حسب السياق:
+     • السرد / التقييم اليوميّ:  ٩٠٪ فأعلى = ناجح
+     • التسميع داخل الجلسة:       ٩٥٪ فأعلى = ناجح
+   ========================================================================== */
 
-export const GRADE_LABELS: Record<Grade, string> = {
-  excellent: 'ممتاز',
-  very_good: 'جيد جدًا',
-  good: 'جيد',
-  fair: 'مقبول',
-  weak: 'ضعيف',
+/** عتبة نجاح السرد والتقييم اليوميّ */
+export const SARD_PASS = 90;
+/** عتبة نجاح التسميع داخل الجلسة */
+export const TASMIE_PASS = 95;
+
+/** يحصر الدرجة ضمن ٠..١٠٠ ويقرّبها لعدد صحيح */
+export function clampScore(v: number | string | null | undefined): number {
+  const n = Math.round(Number(v) || 0);
+  return Math.max(0, Math.min(100, n));
+}
+
+/** «ناجح» عند بلوغ العتبة، وإلا «راسب» */
+export function passLabel(score: number, threshold: number): 'ناجح' | 'راسب' {
+  return score >= threshold ? 'ناجح' : 'راسب';
+}
+
+/** فئة الشارة اللونيّة حسب النجاح/الرسوب */
+export function scoreClass(score: number, threshold: number): 'pass' | 'fail' {
+  return score >= threshold ? 'pass' : 'fail';
+}
+
+/** تقديرات نصّيّة قديمة → نسبة تقريبيّة (لقراءة السجلّات المُنشأة قبل التحديث) */
+const LEGACY_GRADE_SCORE: Record<string, number> = {
+  excellent: 98,
+  very_good: 88,
+  good: 78,
+  fair: 68,
+  weak: 50,
 };
 
-export const GRADE_ORDER: Grade[] = ['excellent', 'very_good', 'good', 'fair', 'weak'];
-
-/** قيمة رقمية للتقدير (لحساب المتوسط) */
-export const GRADE_VALUE: Record<Grade, number> = {
-  excellent: 5,
-  very_good: 4,
-  good: 3,
-  fair: 2,
-  weak: 1,
-};
-
-export function gradeFromValue(v: number): Grade {
-  const r = Math.round(v);
-  return (GRADE_ORDER.find((g) => GRADE_VALUE[g] === r) ?? 'good') as Grade;
+/** يقرأ درجة السجلّ (score الجديد أو تحويل grade القديم). */
+export function scoreOf(rec: { score?: number; grade?: string } | null | undefined): number {
+  if (!rec) return 0;
+  if (typeof rec.score === 'number') return rec.score;
+  return rec.grade && rec.grade in LEGACY_GRADE_SCORE ? LEGACY_GRADE_SCORE[rec.grade] : 0;
 }
 
 /** المعلّم */
@@ -202,7 +219,10 @@ export interface RecitationRecord {
   toAyah: number;
   /** عدد الأوجه (الصفحات) المسمَّعة */
   pages: number;
-  grade: Grade;
+  /** درجة التسميع ٠..١٠٠ (عتبة النجاح ٩٥٪) */
+  score: number;
+  /** @deprecated تقدير نصّيّ قديم — للقراءة فقط */
+  grade?: string;
   /** أخطاء التجويد */
   tajweedErrors: number;
   /** أخطاء الحفظ */
@@ -220,13 +240,14 @@ export interface EvaluationRecord {
   circleId: string;
   sessionId?: string;
   date: string;
-  memorization: Grade;
-  review: Grade;
-  tajweed: Grade;
+  /** كلّ الحقول درجات مئويّة ٠..١٠٠ (عتبة النجاح ٩٠٪) */
+  memorization: number;
+  review: number;
+  tajweed: number;
   /** الانتباه والتفاعل داخل الحلقة */
-  attention: Grade;
+  attention: number;
   /** الأدب والسلوك */
-  behavior: Grade;
+  behavior: number;
   notes?: string;
   createdAt: number;
 }
@@ -252,7 +273,10 @@ export interface SerdRecord {
   juz: number;
   /** أرقام أجزاء الكتلة الثلاثة (scope='block' فقط) */
   juzList?: number[];
-  grade: Grade;
+  /** درجة السرد ٠..١٠٠ (عتبة النجاح ٩٠٪) */
+  score: number;
+  /** @deprecated تقدير نصّيّ قديم — للقراءة فقط */
+  grade?: string;
   /** رقم دورة المراجعة لهذا الجزء/الكتلة (1 = أوّل سرد …) */
   cycle: number;
   date: string;

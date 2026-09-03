@@ -4,29 +4,32 @@ import { ActivatedRoute } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import {
-  GRADE_LABELS,
+  SARD_PASS,
+  passLabel,
+  scoreOf,
   type Circle,
-  type Grade,
   type SerdRecord,
   type Student,
 } from '../../core/models';
 import { completedJuz, juzOfBlock } from '../../core/quran-data';
 import { dmy } from '../../core/format';
-import { GradePickerComponent } from '../../shared/grade-picker';
+import { ScoreInputComponent } from '../../shared/score-input';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 interface JuzRow {
   juz: number;
   cycles: number;
-  lastGrade: Grade | null;
+  lastScore: number | null;
 }
 interface BlockRow {
   block: number;
   juz: number[];
+  /** عدد أجزاء الكتلة الثلاثة التي سُرِد كلٌّ منها مرّة على الأقلّ (٠..٣) */
+  revisedCount: number;
   ready: boolean;
   done: boolean;
   cycles: number;
-  lastGrade: Grade | null;
+  lastScore: number | null;
 }
 interface Recording {
   scope: 'juz' | 'block';
@@ -44,7 +47,7 @@ interface Recording {
  */
 @Component({
   selector: 'app-serd',
-  imports: [FormsModule, GradePickerComponent, PageHeaderComponent],
+  imports: [FormsModule, ScoreInputComponent, PageHeaderComponent],
   template: `
     <app-page-header [title]="'السرد — ' + (student()?.name || 'الطالب')" />
 
@@ -88,14 +91,19 @@ interface Recording {
             <div class="section-title">مطلوب — أجزاء لم تُسرد بعد</div>
             @if (unrevised().length > 1) {
               <div class="card batch">
-                <app-grade-picker label="تقدير موحّد للسرد الأوّل" [(value)]="batchGrade" />
+                <app-score-input
+                  label="نسبة موحّدة للسرد الأوّل (٪)"
+                  [threshold]="sardPass"
+                  [value]="batchScore()"
+                  (valueChange)="batchScore.set($event)"
+                />
                 <button
                   class="btn btn-primary btn-block"
                   type="button"
                   [disabled]="saving()"
                   (click)="batchRecord()"
                 >
-                  تسجيل سرد أوّل لكلّ الأجزاء ({{ unrevised().length }}) بهذا التقدير
+                  تسجيل سرد أوّل لكلّ الأجزاء ({{ unrevised().length }}) بهذه النسبة
                 </button>
               </div>
             }
@@ -117,13 +125,18 @@ interface Recording {
           @if (blockRows().length) {
             <div class="section-title">السرد المجمّع — كلّ ٣ أجزاء متتالية</div>
             @for (b of blockRows(); track b.block) {
-              <div class="card" [class.milestone]="b.ready">
+              <div class="card" [class.milestone]="b.ready" [class.locked]="!b.ready && !b.done">
                 <div class="row-between">
                   <span>
                     الأجزاء {{ b.juz[0] }} · {{ b.juz[1] }} · {{ b.juz[2] }}
                     @if (b.done) {
-                      <span class="badge b-present" style="margin-inline-start:6px">
-                        {{ gradeLabels[b.lastGrade!] }} · {{ b.cycles }} دورة
+                      <span
+                        class="badge"
+                        [class.b-present]="b.lastScore! >= sardPass"
+                        [class.b-absent]="b.lastScore! < sardPass"
+                        style="margin-inline-start:6px"
+                      >
+                        {{ b.lastScore }}٪ · {{ pass(b.lastScore!) }} · {{ b.cycles }} دورة
                       </span>
                     }
                   </span>
@@ -135,6 +148,8 @@ interface Recording {
                     <button class="btn btn-ghost" type="button" (click)="openBlock(b.block)">
                       دورة أخرى
                     </button>
+                  } @else {
+                    <span class="lock-pill">🔒 مقفل</span>
                   }
                 </div>
                 @if (b.ready) {
@@ -142,7 +157,10 @@ interface Recording {
                     اكتمل حفظ الأجزاء الثلاثة وسُرِد كلٌّ منها — السرد المجمّع مطلوب الآن.
                   </p>
                 } @else if (!b.done) {
-                  <p class="muted" style="margin:6px 0 0">اسرد كلّ جزء منفردًا أوّلًا.</p>
+                  <p class="muted" style="margin:6px 0 0">
+                    {{ b.revisedCount }}/3 أجزاء سُرِدت — يُفتح السرد المجمّع بعد حفظ وسرد الأجزاء
+                    الثلاثة كلٌّ على حدة.
+                  </p>
                 }
               </div>
             }
@@ -157,7 +175,7 @@ interface Recording {
                 <span class="grow">
                   <span class="primary">الجزء {{ r.juz }}</span>
                   <span class="secondary">
-                    {{ r.cycles }} دورة · آخر تقدير {{ gradeLabels[r.lastGrade!] }}
+                    {{ r.cycles }} دورة · آخر درجة {{ r.lastScore }}٪ ({{ pass(r.lastScore!) }})
                     @if (r.cycles < 2) {
                       · يُنصح بدورة ثانية
                     }
@@ -186,7 +204,13 @@ interface Recording {
               <div class="card">
                 <div class="row-between">
                   <b>{{ scopeText(rec) }}</b>
-                  <span class="badge b-grade">{{ gradeLabels[rec.grade] }}</span>
+                  <span
+                    class="badge"
+                    [class.b-present]="scoreOf(rec) >= sardPass"
+                    [class.b-absent]="scoreOf(rec) < sardPass"
+                  >
+                    {{ scoreOf(rec) }}٪ · {{ pass(scoreOf(rec)) }}
+                  </span>
                 </div>
                 <div class="muted" style="font-size:.84rem;margin-top:4px">
                   الدورة {{ rec.cycle }} · {{ dmy(rec.date) }}
@@ -218,7 +242,12 @@ interface Recording {
           <h3>{{ rec.title }}</h3>
           <p>الدورة {{ rec.cycle }}</p>
 
-          <app-grade-picker label="تقدير السرد" [(value)]="grade" />
+          <app-score-input
+            label="نسبة السرد (٪)"
+            [threshold]="sardPass"
+            [value]="score()"
+            (valueChange)="score.set($event)"
+          />
 
           <div class="field">
             <label for="sd-date">التاريخ</label>
@@ -251,6 +280,15 @@ interface Recording {
         border: 1px solid var(--gold);
         background: var(--gold-tint);
       }
+      .card.locked {
+        opacity: 0.7;
+      }
+      .lock-pill {
+        flex-shrink: 0;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-soft);
+      }
       .card.batch {
         background: var(--surface-2);
       }
@@ -279,11 +317,12 @@ export class SerdPage implements OnInit {
   readonly loaded = signal(false);
 
   readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
-  readonly gradeLabels = GRADE_LABELS;
   readonly dmy = dmy;
+  readonly sardPass = SARD_PASS;
+  readonly scoreOf = scoreOf;
 
-  readonly grade = signal<Grade>('very_good');
-  readonly batchGrade = signal<Grade>('very_good');
+  readonly score = signal(90);
+  readonly batchScore = signal(90);
   readonly recording = signal<Recording | null>(null);
   readonly saving = signal(false);
   date = today();
@@ -309,7 +348,7 @@ export class SerdPage implements OnInit {
   readonly juzRows = computed<JuzRow[]>(() =>
     this.completed().map((juz) => {
       const list = this.juzSerds().get(juz) ?? [];
-      return { juz, cycles: list.length, lastGrade: list[0]?.grade ?? null };
+      return { juz, cycles: list.length, lastScore: list[0] ? scoreOf(list[0]) : null };
     }),
   );
   readonly unrevised = computed(() => this.juzRows().filter((r) => r.cycles === 0));
@@ -321,16 +360,20 @@ export class SerdPage implements OnInit {
     const out: BlockRow[] = [];
     for (let b = 1; b <= 10; b++) {
       const juz = juzOfBlock(b);
+      // شرط الظهور: حفظ الأجزاء الثلاثة كاملةً
       if (!juz.every((j) => done.has(j))) continue;
-      const eachRevised = juz.every((j) => (this.juzSerds().get(j)?.length ?? 0) >= 1);
+      // شرط الفتح: سرد كلّ جزء منها منفردًا مرّةً على الأقلّ
+      const revisedCount = juz.filter((j) => (this.juzSerds().get(j)?.length ?? 0) >= 1).length;
+      const eachRevised = revisedCount === 3;
       const bs = this.blockSerdMap().get(b) ?? [];
       out.push({
         block: b,
         juz,
+        revisedCount,
         ready: eachRevised && bs.length === 0,
         done: bs.length > 0,
         cycles: bs.length,
-        lastGrade: bs[0]?.grade ?? null,
+        lastScore: bs[0] ? scoreOf(bs[0]) : null,
       });
     }
     return out;
@@ -368,9 +411,14 @@ export class SerdPage implements OnInit {
     });
   }
   private reset(): void {
-    this.grade.set('very_good');
+    this.score.set(SARD_PASS);
     this.date = today();
     this.notes = '';
+  }
+
+  /** «ناجح» عند ≥ ٩٠٪ وإلا «راسب» */
+  pass(score: number): string {
+    return passLabel(score, SARD_PASS);
   }
 
   async save(): Promise<void> {
@@ -387,7 +435,7 @@ export class SerdPage implements OnInit {
             scope: rec.scope,
             juz: rec.juz,
             juzList: rec.juzList,
-            grade: this.grade(),
+            score: this.score(),
             cycle: rec.cycle,
             date: this.date,
             notes: this.notes.trim() || undefined,
@@ -413,7 +461,7 @@ export class SerdPage implements OnInit {
               circleId: s.circleId,
               scope: 'juz',
               juz: r.juz,
-              grade: this.batchGrade(),
+              score: this.batchScore(),
               cycle: 1,
               date: today(),
             }),

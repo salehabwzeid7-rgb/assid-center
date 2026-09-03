@@ -1,7 +1,7 @@
 import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { GRADE_LABELS, circleLabel, type Circle, type Student } from '../../core/models';
+import { SARD_PASS, circleLabel, passLabel, type Circle, type Student } from '../../core/models';
 import { analyzeSard, type SardAnalysis } from '../../core/sard';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -66,8 +66,13 @@ interface Row {
                   }
                 </span>
               </span>
-              @if (r.a.avgGrade) {
-                <span class="badge b-grade">{{ gradeLabels[r.a.avgGrade] }}</span>
+              @if (r.a.avgScore !== null) {
+                <span
+                  class="badge"
+                  [class.b-present]="r.a.avgScore >= sardPass"
+                  [class.b-absent]="r.a.avgScore < sardPass"
+                  >{{ r.a.avgScore }}٪</span
+                >
               }
             </a>
           }
@@ -108,12 +113,17 @@ interface Row {
                 </span>
                 <span class="tags">
                   @for (j of r.a.revisedJuz; track j) {
-                    <span class="t ok">{{ j }} · {{ gradeShort(r.a.juzLastGrade.get(j)) }}</span>
+                    <span class="t ok">{{ j }} · {{ r.a.juzLastScore.get(j) }}٪</span>
                   }
                 </span>
               </span>
-              @if (r.a.avgGrade) {
-                <span class="badge b-present">{{ gradeLabels[r.a.avgGrade] }}</span>
+              @if (r.a.avgScore !== null) {
+                <span
+                  class="badge"
+                  [class.b-present]="r.a.avgScore >= sardPass"
+                  [class.b-absent]="r.a.avgScore < sardPass"
+                  >{{ r.a.avgScore }}٪ · {{ verdict(r.a.avgScore) }}</span
+                >
               }
             </a>
           }
@@ -197,7 +207,7 @@ export class SardDashboardPage {
   readonly students = this.data.allStudents(this.destroyRef);
   readonly circles = this.data.circles(this.destroyRef);
   readonly serds = this.data.allSerds(this.destroyRef);
-  readonly gradeLabels = GRADE_LABELS;
+  readonly sardPass = SARD_PASS;
 
   private readonly circleMap = computed(() => {
     const m = new Map<string, Circle>();
@@ -237,7 +247,7 @@ export class SardDashboardPage {
   blockJuz(block: number): string {
     return `${block * 3 - 2}·${block * 3 - 1}·${block * 3}`;
   }
-  gradeShort(g: string | undefined): string {
-    return g ? GRADE_LABELS[g as keyof typeof GRADE_LABELS] : '—';
+  verdict(score: number): string {
+    return passLabel(score, SARD_PASS);
   }
 }

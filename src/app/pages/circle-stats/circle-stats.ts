@@ -1,14 +1,7 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import {
-  GRADE_LABELS,
-  GRADE_ORDER,
-  GRADE_VALUE,
-  gradeFromValue,
-  type Circle,
-  type Grade,
-} from '../../core/models';
+import { TASMIE_PASS, scoreOf, type Circle } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -43,22 +36,26 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="label">مجموع الأوجه المسمَّعة</div>
           </div>
           <div class="stat">
-            <div class="num">{{ avgGrade() }}</div>
-            <div class="label">متوسط التقدير</div>
+            <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
+            <div class="label">متوسّط التسميع</div>
           </div>
         </div>
 
         <div class="card" style="margin-top:12px">
-          <div class="section-title" style="margin:0 0 8px">توزيع تقديرات التسميع</div>
-          @for (g of gradeOrder; track g) {
-            <div style="display:flex;align-items:center;gap:8px;margin:5px 0">
-              <span style="width:64px;font-size:.85rem">{{ gradeLabels[g] }}</span>
-              <span class="bar"><i [style.width.%]="gradePct(g)"></i></span>
-              <span class="muted" style="font-size:.8rem">{{ gradeCount(g) }}</span>
-            </div>
-          }
+          <div class="section-title" style="margin:0 0 8px">نتيجة التسميع (عتبة النجاح ٩٥٪)</div>
           @if (recitationCount() === 0) {
             <p class="muted" style="margin:0">لا توجد سجلات تسميع بعد.</p>
+          } @else {
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <span
+                >ناجح (≥ ٩٥٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
+              >
+              <span
+                >دون العتبة:
+                <b style="color:var(--danger)">{{ recitationCount() - passCount() }}</b></span
+              >
+            </div>
+            <div class="bar" style="margin-top:8px"><i [style.width.%]="passPct()"></i></div>
           }
         </div>
 
@@ -107,9 +104,6 @@ export class CircleStatsPage implements OnInit {
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly circle = signal<Circle | null>(null);
 
-  readonly gradeLabels = GRADE_LABELS;
-  readonly gradeOrder = GRADE_ORDER;
-
   private readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   private readonly sessions = this.data.sessionsByCircle(this.id, this.destroyRef);
   private readonly attendance = this.data.circleAttendance(this.id, this.destroyRef);
@@ -136,20 +130,18 @@ export class CircleStatsPage implements OnInit {
     const ok = list.filter((a) => a.status === 'present' || a.status === 'late').length;
     return Math.round((ok / list.length) * 100);
   });
-  readonly avgGrade = computed(() => {
+  readonly avgScore = computed<number | null>(() => {
     const list = this.recitations() ?? [];
-    if (!list.length) return '—';
-    const avg = list.reduce((t, r) => t + GRADE_VALUE[r.grade], 0) / list.length;
-    return GRADE_LABELS[gradeFromValue(avg)];
+    if (!list.length) return null;
+    return Math.round(list.reduce((t, r) => t + scoreOf(r), 0) / list.length);
   });
-
-  gradeCount(g: Grade): number {
-    return this.recitations()?.filter((r) => r.grade === g).length ?? 0;
-  }
-  gradePct(g: Grade): number {
+  readonly passCount = computed(
+    () => (this.recitations() ?? []).filter((r) => scoreOf(r) >= TASMIE_PASS).length,
+  );
+  readonly passPct = computed(() => {
     const n = this.recitationCount();
-    return n ? (this.gradeCount(g) / n) * 100 : 0;
-  }
+    return n ? (this.passCount() / n) * 100 : 0;
+  });
 
   readonly perStudent = computed(() => {
     const students = this.students() ?? [];
