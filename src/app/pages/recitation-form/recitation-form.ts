@@ -285,7 +285,7 @@ export class RecitationFormPage implements OnInit {
 
     // مزامنة المقرّر: «حفظ جديد» يُضيف سوره تلقائيًّا إلى سجلّ الطالب القرآنيّ
     if (this.m.kind === 'new') {
-      const added = await this.data.mergeStudentMemorizedSurahs(
+      const { added, completedJuz } = await this.data.mergeStudentMemorizedSurahs(
         s.id,
         surahsBetween(fromSurah, toSurah),
       );
@@ -293,6 +293,11 @@ export class RecitationFormPage implements OnInit {
         this.notify.success(
           added === 1 ? 'أُضيفت سورة إلى مقرّر الطالب' : `أُضيفت ${added} سور إلى مقرّر الطالب`,
         );
+      }
+      // تنبيه اكتمال جزء → دعوة لتسجيل السرد
+      if (completedJuz.length > 0) {
+        const jz = completedJuz.map((j) => `الجزء ${j}`).join(' و');
+        this.notify.info(`🎉 أكمل الطالب حفظ ${jz} — سجّل السرد والتقييم من صفحة «السرد».`);
       }
     }
 

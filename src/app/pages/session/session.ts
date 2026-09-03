@@ -17,10 +17,10 @@ import {
 } from '../../core/models';
 import { dmy } from '../../core/format';
 import { fmt12, sessionWindow, untilLabel } from '../../core/time';
-import { surahName } from '../../core/quran-data';
+import { completedJuz, surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
-type Step = 'attendance' | 'recitation' | 'summary';
+type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
 
 @Component({
   selector: 'app-session',
@@ -92,6 +92,7 @@ type Step = 'attendance' | 'recitation' | 'summary';
           <button [class.active]="step() === 'summary'" (click)="step.set('summary')">
             ٣ · الملخّص
           </button>
+          <button [class.active]="step() === 'serd'" (click)="step.set('serd')">السرد</button>
         </div>
 
         @if (students() === undefined) {
@@ -261,6 +262,32 @@ type Step = 'attendance' | 'recitation' | 'summary';
               📊 إحصائيات الحلقة
             </a>
           }
+
+          <!-- السرد — سجلّ مراجعة الأجزاء المحفوظة لكلّ طالب -->
+          @if (step() === 'serd') {
+            <div class="section-title">سرد الأجزاء المحفوظة</div>
+            @for (st of students(); track st.id) {
+              <a class="list-item" [routerLink]="['/student', st.id, 'serd']">
+                <span class="avatar">{{ serdOf(st).revised }}</span>
+                <span class="grow">
+                  <span class="primary">{{ st.name }}</span>
+                  <span class="secondary">
+                    {{ serdOf(st).completed }} جزء مكتمل · {{ serdOf(st).revised }} مسرود
+                    @if (serdOf(st).pending > 0) {
+                      ·
+                      <span style="color:var(--warn,#a07030)"
+                        >⚠ {{ serdOf(st).pending }} بانتظار السرد</span
+                      >
+                    }
+                  </span>
+                </span>
+                <span class="chevron">‹</span>
+              </a>
+            }
+            <p class="hint" style="margin-top:10px">
+              افتح سجلّ الطالب لتسجيل السرد وتقييمه، أو السرد المجمّع لكلّ ٣ أجزاء.
+            </p>
+          }
         }
       } @else {
         <div class="spinner"></div>
@@ -300,7 +327,7 @@ export class SessionPage implements OnInit {
 
   private initialStep(): Step {
     const q = this.route.snapshot.queryParamMap.get('step');
-    return q === 'recitation' || q === 'summary' ? q : 'attendance';
+    return q === 'recitation' || q === 'summary' || q === 'serd' ? q : 'attendance';
   }
   readonly circleId = signal('');
   note = '';
@@ -338,6 +365,7 @@ export class SessionPage implements OnInit {
   });
   readonly attendance = this.data.sessionAttendance(this.id, this.destroyRef);
   readonly recitations = this.data.sessionRecitations(this.id, this.destroyRef);
+  private readonly allSerds = this.data.allSerds(this.destroyRef);
 
   readonly dateLabel = computed(() => dmy(this.session()?.date));
 
@@ -408,6 +436,21 @@ export class SessionPage implements OnInit {
   }
   recOf(studentId: string) {
     return this.recitations()?.find((r) => r.studentId === studentId) ?? null;
+  }
+  /** ملخّص السرد لطالب: الأجزاء المكتملة، وكم منها سُرِد، وكم بانتظار السرد. */
+  serdOf(st: { id: string; memorizedSurahs?: number[] }): {
+    completed: number;
+    revised: number;
+    pending: number;
+  } {
+    const done = completedJuz(st.memorizedSurahs ?? []);
+    const revisedSet = new Set(
+      (this.allSerds() ?? [])
+        .filter((r) => r.studentId === st.id && r.scope === 'juz')
+        .map((r) => r.juz),
+    );
+    const revised = done.filter((j) => revisedSet.has(j)).length;
+    return { completed: done.length, revised, pending: done.length - revised };
   }
   countAtt(status: AttendanceStatus): number {
     return this.attendance()?.filter((a) => a.status === status).length ?? 0;

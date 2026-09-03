@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { circleLabel } from '../../core/models';
+import { completedJuz } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
@@ -165,6 +166,13 @@ export class StudentFormPage implements OnInit {
       { success: editing ? 'حُفظت بيانات الطالب' : 'أُضيف الطالب', error: 'تعذّر حفظ الطالب' },
     );
     this.saving.set(false);
-    if (targetId) await this.router.navigate(['/student', targetId]);
+    if (!targetId) return;
+
+    // طالب جديد لديه أجزاء محفوظة مسبقًا → شاشة إعداد سجلّ السرد
+    if (!editing && completedJuz(this.m.memorizedSurahs).length > 0) {
+      await this.router.navigate(['/student', targetId, 'serd'], { queryParams: { setup: 1 } });
+      return;
+    }
+    await this.router.navigate(['/student', targetId]);
   }
 }

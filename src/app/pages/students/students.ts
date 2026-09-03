@@ -9,10 +9,11 @@ import {
   ElementRef,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { circleLabel, type Student } from '../../core/models';
+import { completedJuz } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
@@ -197,6 +198,7 @@ export class StudentsPage {
   private destroyRef = inject(DestroyRef);
   private data = inject(DataService);
   private notify = inject(NotifyService);
+  private router = inject(Router);
 
   private readonly nameInput = viewChild<ElementRef<HTMLInputElement>>('nameInput');
 
@@ -279,6 +281,11 @@ export class StudentsPage {
       { success: 'أُضيف الطالب', error: 'تعذّر إضافة الطالب' },
     );
     this.saving.set(false);
-    if (id) this.adding.set(false);
+    if (!id) return;
+    this.adding.set(false);
+    // طالب لديه أجزاء محفوظة مسبقًا → شاشة إعداد سجلّ السرد
+    if (completedJuz(this.m.memorizedSurahs).length > 0) {
+      void this.router.navigate(['/student', id, 'serd'], { queryParams: { setup: 1 } });
+    }
   }
 }

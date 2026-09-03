@@ -17,6 +17,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { SessionLockedError, sessionWindow } from './time';
+import { completedJuz } from './quran-data';
 import {
   COL,
   type Circle,
@@ -27,6 +28,7 @@ import {
   type AttendanceRecord,
   type RecitationRecord,
   type EvaluationRecord,
+  type SerdRecord,
 } from './models';
 
 /** التاريخ الحالي بصيغة YYYY-MM-DD (توقيت الجهاز المحلي) */
@@ -72,6 +74,7 @@ type NewCircle = {
 type NewStudent = Omit<Student, 'id' | 'createdAt'>;
 type NewRecitation = Omit<RecitationRecord, 'id' | 'createdAt'>;
 type NewEvaluation = Omit<EvaluationRecord, 'id' | 'createdAt'>;
+type NewSerd = Omit<SerdRecord, 'id' | 'createdAt'>;
 
 @Injectable({ providedIn: 'root' })
 export class DataService {
@@ -435,20 +438,51 @@ export class DataService {
   /**
    * يضمّ سورًا إلى سجلّ المقرّر القرآنيّ للطالب (دمج بلا تكرار).
    * يُستدعى تلقائيًّا عند تسجيل «حفظ جديد» في الجلسة/التسميع.
-   * يُرجع عدد السور المضافة فعليًّا.
+   * يُرجع عدد السور المضافة والأجزاء التي اكتملت حفظًا بهذه الإضافة.
    */
-  async mergeStudentMemorizedSurahs(studentId: string, surahs: number[]): Promise<number> {
+  async mergeStudentMemorizedSurahs(
+    studentId: string,
+    surahs: number[],
+  ): Promise<{ added: number; completedJuz: number[] }> {
     const valid = surahs.filter((n) => Number.isInteger(n) && n >= 1 && n <= 114);
-    if (valid.length === 0) return 0;
+    if (valid.length === 0) return { added: 0, completedJuz: [] };
     const student = await this.getStudent(studentId);
-    if (!student) return 0;
-    const set = new Set(student.memorizedSurahs ?? []);
+    if (!student) return { added: 0, completedJuz: [] };
+    const prev = student.memorizedSurahs ?? [];
+    const set = new Set(prev);
     const before = set.size;
     valid.forEach((n) => set.add(n));
-    if (set.size === before) return 0;
+    if (set.size === before) return { added: 0, completedJuz: [] };
     const next = [...set].sort((a, b) => a - b);
     await updateDoc(this.ref(COL.students, studentId), { memorizedSurahs: next });
-    return set.size - before;
+    const wasComplete = new Set(completedJuz(prev));
+    const newlyComplete = completedJuz(next).filter((j) => !wasComplete.has(j));
+    return { added: set.size - before, completedJuz: newlyComplete };
+  }
+
+  // ---------- السرد (مراجعة الأجزاء المحفوظة) ----------
+
+  serdByStudent(studentId: string, destroyRef?: DestroyRef): Signal<SerdRecord[] | undefined> {
+    const q = query(this.col(COL.serd), where('studentId', '==', studentId));
+    return this.live<SerdRecord>(q, destroyRef, this.byDateDesc);
+  }
+
+  circleSerd(circleId: string, destroyRef?: DestroyRef): Signal<SerdRecord[] | undefined> {
+    const q = query(this.col(COL.serd), where('circleId', '==', circleId));
+    return this.live<SerdRecord>(q, destroyRef, this.byDateDesc);
+  }
+
+  allSerds(destroyRef?: DestroyRef): Signal<SerdRecord[] | undefined> {
+    return this.live<SerdRecord>(query(this.col(COL.serd)), destroyRef, this.byDateDesc);
+  }
+
+  async addSerd(input: NewSerd): Promise<string> {
+    const created = await addDoc(this.col(COL.serd), { ...clean(input), createdAt: Date.now() });
+    return created.id;
+  }
+
+  async deleteSerd(id: string): Promise<void> {
+    await deleteDoc(this.ref(COL.serd, id));
   }
 
   async addRecitation(input: NewRecitation): Promise<string> {

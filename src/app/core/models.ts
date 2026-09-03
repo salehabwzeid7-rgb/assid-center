@@ -231,6 +231,36 @@ export interface EvaluationRecord {
   createdAt: number;
 }
 
+/** نوع السرد */
+export type SerdScope = 'juz' | 'block';
+
+export const SERD_SCOPE_LABELS: Record<SerdScope, string> = {
+  juz: 'سرد جزء',
+  block: 'سرد مجمّع (٣ أجزاء)',
+};
+
+/**
+ * سجلّ السرد — مراجعة/تسميع جزء محفوظ كاملًا أو كتلة ثلاثة أجزاء متتالية،
+ * مع تقييم مستقلّ ورقم دورة المراجعة.
+ */
+export interface SerdRecord {
+  id: string;
+  studentId: string;
+  circleId: string;
+  scope: SerdScope;
+  /** الجزء (scope='juz') أو أوّل جزء في الكتلة (scope='block': 1، 4، 7 … 28) */
+  juz: number;
+  /** أرقام أجزاء الكتلة الثلاثة (scope='block' فقط) */
+  juzList?: number[];
+  grade: Grade;
+  /** رقم دورة المراجعة لهذا الجزء/الكتلة (1 = أوّل سرد …) */
+  cycle: number;
+  date: string;
+  sessionId?: string;
+  notes?: string;
+  createdAt: number;
+}
+
 /** أسماء المجموعات المشتركة على مستوى الجذر */
 export const COL = {
   circles: 'circles',
@@ -239,6 +269,7 @@ export const COL = {
   attendance: 'attendance',
   recitations: 'recitations',
   evaluations: 'evaluations',
+  serd: 'serd',
 } as const;
 
 /** مجموعة ملفّات المعلّمين (اسم/جوال فقط) */

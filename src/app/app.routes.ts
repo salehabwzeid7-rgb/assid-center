@@ -84,6 +84,10 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/student-form/student-form').then((m) => m.StudentFormPage),
       },
+      {
+        path: 'student/:id/serd',
+        loadComponent: () => import('./pages/serd/serd').then((m) => m.SerdPage),
+      },
     ],
   },
   { path: '**', redirectTo: '' },

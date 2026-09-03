@@ -186,6 +186,26 @@ export function juzOfSurah(n: number): number[] {
   return res;
 }
 
+/** أرقام الأجزاء المكتملة حفظًا (كلّ سور الجزء ضمن المحفوظ). */
+export function completedJuz(memorizedSurahs: readonly number[]): number[] {
+  const set = new Set(memorizedSurahs);
+  const res: number[] = [];
+  JUZ_SURAHS.forEach((list, i) => {
+    if (list.every((n) => set.has(n))) res.push(i + 1);
+  });
+  return res;
+}
+
+/** رقم كتلة الثلاثة أجزاء (1..10): الجزء 1-3 → 1 … الجزء 28-30 → 10 */
+export function blockOfJuz(juz: number): number {
+  return Math.ceil(juz / 3);
+}
+
+/** أجزاء الكتلة مرتّبةً: الكتلة 10 → [28, 29, 30] */
+export function juzOfBlock(block: number): number[] {
+  return [block * 3 - 2, block * 3 - 1, block * 3];
+}
+
 /** كل أرقام السور ضمن نطاق (من سورة → إلى سورة) شاملًا الطرفين. */
 export function surahsBetween(from: number, to: number): number[] {
   const a = Math.min(from, to);

@@ -3,7 +3,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { ATTENDANCE_LABELS, CIRCLE_TYPE_SHORT, type Circle, type Student } from '../../core/models';
 import { dmy } from '../../core/format';
-import { JUZ_SURAHS } from '../../core/quran-data';
+import { JUZ_SURAHS, completedJuz } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 /**
@@ -42,7 +42,10 @@ import { PageHeaderComponent } from '../../shared/page-header';
                 }
               </div>
             </div>
-            <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'edit']">تعديل</a>
+            <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+              <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'serd']">السرد</a>
+              <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'edit']">تعديل</a>
+            </div>
           </div>
         </div>
 
@@ -82,7 +85,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
           } @else {
             <p class="muted" style="margin:0 0 10px">
               <b style="color:var(--green)">{{ fullJuz() }}</b> جزءًا كاملًا ·
-              <b style="color:var(--green)">{{ memoCount() }}</b> سورة محفوظة
+              <b style="color:var(--green)">{{ memoCount() }}</b> سورة محفوظة ·
+              <b style="color:var(--green)">{{ revisedJuzCount() }}</b> جزءًا مسرودًا
             </p>
             <div class="juz-strip">
               @for (c of juzCells(); track c.juz) {
@@ -97,6 +101,13 @@ import { PageHeaderComponent } from '../../shared/page-header';
               }
             </div>
           }
+
+          @if (unrevisedJuz().length) {
+            <a class="serd-alert" [routerLink]="['/student', s.id, 'serd']">
+              🔔 أكمل الطالب حفظ {{ unrevisedJuz().length }} جزءًا ولم يُسجَّل سردها — سجّل السرد ›
+            </a>
+          }
+
           @if (s.currentPlan) {
             <p style="margin:12px 0 0;line-height:1.8">{{ s.currentPlan }}</p>
           }
@@ -254,6 +265,16 @@ import { PageHeaderComponent } from '../../shared/page-header';
         border-color: var(--green);
         color: #fff;
       }
+      .serd-alert {
+        display: block;
+        margin-top: 12px;
+        padding: 10px 12px;
+        border-radius: var(--radius-xs);
+        background: var(--warn-bg, #f3e8d8);
+        color: var(--warn, #a07030);
+        font-weight: 700;
+        font-size: 0.86rem;
+      }
     `,
   ],
 })
@@ -273,6 +294,7 @@ export class StudentPage implements OnInit {
 
   private readonly recitations = this.data.studentRecitations(this.id, this.destroyRef);
   readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
+  private readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
 
   private readonly memorized = computed(() => new Set(this.student()?.memorizedSurahs ?? []));
   readonly memoCount = computed(() => this.memorized().size);
@@ -289,6 +311,20 @@ export class StudentPage implements OnInit {
     });
   });
   readonly fullJuz = computed(() => this.juzCells().filter((c) => c.state === 'full').length);
+
+  /** أرقام الأجزاء المكتملة حفظًا التي سُرِد كلٌّ منها مرّة واحدة على الأقلّ. */
+  private readonly revisedJuzSet = computed(
+    () => new Set((this.serds() ?? []).filter((r) => r.scope === 'juz').map((r) => r.juz)),
+  );
+  readonly revisedJuzCount = computed(
+    () =>
+      completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => this.revisedJuzSet().has(j))
+        .length,
+  );
+  /** أجزاء مكتملة الحفظ ولم تُسرد بعد — مصدر تنبيه السرد. */
+  readonly unrevisedJuz = computed(() =>
+    completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => !this.revisedJuzSet().has(j)),
+  );
 
   readonly recitationsCount = computed(() => this.recitations()?.length ?? 0);
   readonly totalPages = computed(() => {
