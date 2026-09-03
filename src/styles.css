@@ -892,22 +892,22 @@ textarea {
   content: '';
   position: fixed;
   z-index: -1;
-  width: 220px;
-  height: 220px;
+  width: 176px;
+  height: 176px;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.35;
   -webkit-mask: var(--misk-star) center / contain no-repeat;
   mask: var(--misk-star) center / contain no-repeat;
 }
 :root[data-app-theme='misk'] .app-shell::before {
-  top: 8px;
-  inset-inline-start: -30px;
-  background-color: rgba(59, 107, 74, 0.16);
+  top: -36px;
+  inset-inline-start: -60px;
+  background-color: rgba(59, 107, 74, 0.08);
 }
 :root[data-app-theme='misk'] .app-shell::after {
-  bottom: 76px;
-  inset-inline-end: -30px;
-  background-color: rgba(61, 95, 114, 0.16);
+  bottom: 62px;
+  inset-inline-end: -60px;
+  background-color: rgba(61, 95, 114, 0.08);
 }
 
 /* ==========================================================================
