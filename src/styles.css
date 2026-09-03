@@ -823,7 +823,9 @@ textarea {
   --shadow-lg: 0 12px 34px rgba(28, 23, 16, 0.14);
   --ring: 0 0 0 3px rgba(59, 107, 74, 0.22);
 
-  --misk-star: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cpath d='M100,20 L113.4,67.7 L156.6,43.4 L132.3,86.6 L180,100 L132.3,113.4 L156.6,156.6 L113.4,132.3 L100,180 L86.6,132.3 L43.4,156.6 L67.7,113.4 L20,100 L67.7,86.6 L43.4,43.4 L86.6,67.7 Z' fill='%23000'/%3E%3C/svg%3E");
+  /* بلاطة زخرفة هندسية صغيرة متكرّرة (شبكة معيّنات + وريدات) */
+  --misk-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M22 2 L42 22 L22 42 L2 22 Z'/%3E%3Cpath d='M22 9 L35 22 L22 35 L9 22 Z'/%3E%3Ccircle cx='22' cy='22' r='3.6'/%3E%3Cpath d='M22 2 V9 M42 22 H35 M22 42 V35 M2 22 H9'/%3E%3C/g%3E%3C/svg%3E");
+  --misk-ink: rgba(59, 107, 74, 0.05);
 }
 
 /* خطّ Cairo (نفس خطّ Figma) */
@@ -882,32 +884,20 @@ textarea {
   border-color: var(--green);
 }
 
-/* زخرفة النجمة الإسلامية الثمانية — خافتة، ثابتة، في زاويتين */
+/* زخرفة هندسية إسلامية صغيرة متكرّرة عبر الخلفية — خافتة جدًّا وثابتة أثناء التمرير */
 :root[data-app-theme='misk'] .app-shell {
   position: relative;
   z-index: 0;
 }
-:root[data-app-theme='misk'] .app-shell::before,
-:root[data-app-theme='misk'] .app-shell::after {
+:root[data-app-theme='misk'] .app-shell::before {
   content: '';
   position: fixed;
+  inset: 0;
   z-index: -1;
-  width: 176px;
-  height: 176px;
   pointer-events: none;
-  opacity: 0.35;
-  -webkit-mask: var(--misk-star) center / contain no-repeat;
-  mask: var(--misk-star) center / contain no-repeat;
-}
-:root[data-app-theme='misk'] .app-shell::before {
-  top: -36px;
-  inset-inline-start: -60px;
-  background-color: rgba(59, 107, 74, 0.08);
-}
-:root[data-app-theme='misk'] .app-shell::after {
-  bottom: 62px;
-  inset-inline-end: -60px;
-  background-color: rgba(61, 95, 114, 0.08);
+  background-color: var(--misk-ink);
+  -webkit-mask: var(--misk-pattern) repeat 0 0 / 44px 44px;
+  mask: var(--misk-pattern) repeat 0 0 / 44px 44px;
 }
 
 /* ==========================================================================
