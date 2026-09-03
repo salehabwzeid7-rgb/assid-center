@@ -7,6 +7,11 @@
 - **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام)
 - **أرشيف النسخ:** https://github.com/salehabwzeid7-rgb/assid-center/releases
 
+> **تحديث مباشر (OTA):** بعد تثبيت نسخة **1.2.2 أو أحدث** مرّة واحدة، تصل تعديلات الواجهة
+> والمنطق إلى التطبيق المُثبَّت **تلقائيًّا** — يفحص التطبيق `‎/ota/latest.json‎` عند كلّ فتح،
+> ينزّل الحزمة الجديدة في الخلفيّة، ويُفعّلها في الفتحة التالية. **لا حاجة لإعادة تنزيل APK**
+> إلّا عند تغييرات الطبقة الأصليّة (إضافة Capacitor جديدة، إذن جديد، رفع `versionCode`).
+
 ---
 
 ## ١) الربط بـ GitHub — تمّ ✅
@@ -35,12 +40,20 @@ npm run release -- major --push      # 1.2.0 → 2.0.0
 4. **commit + وسم** `vX.Y.Z` ثمّ **دفع** الفرع والوسم.
 5. دفع الوسم يُشغّل workflow **«إصدار APK»** على GitHub → يبني `assembleDebug` ويرفع
    `AssidCenter-Teacher-vX.Y.Z.apk` إلى صفحة **Releases** (أرشيف).
-6. محليًّا: يبني `scripts/publish-apk.mjs` نسخة APK وينشرها على **Firebase Hosting** →
-   يتحدّث رابط `https://assid-center.web.app/download` فورًا (هذا الرابط للمشاركة).
+6. محليًّا: يبني `scripts/publish-ota.mjs` **حزمة تحديث مباشر (OTA)** وينشرها على Firebase Hosting
+   → تصل الأجهزة المُثبَّتة تلقائيًّا عند فتح التطبيق.
+7. محليًّا: يبني `scripts/publish-apk.mjs` نسخة APK وينشرها على **Firebase Hosting** →
+   يتحدّث رابط `https://assid-center.web.app/download` فورًا (هذا الرابط للمشاركة والتثبيت الأوّل).
 
 > الـ APK **موقّع بمفتاح debug** — يُثبَّت مباشرةً بعد تفعيل «تثبيت من مصادر غير معروفة». لا يصلح لمتجر Play.
 
-### تحديث الرابط المباشر وحده (بلا إصدار جديد)
+### تحديث مباشر وحده — الأسرع لتعديلات الواجهة/المنطق (بلا إصدار ولا APK)
+
+```bash
+npm run publish:ota       # يبني الويب، يضغطه، وينشره → يصل الأجهزة المُثبَّتة تلقائيًّا
+```
+
+### تحديث رابط تنزيل الـ APK وحده (بلا إصدار جديد)
 
 ```bash
 npm run publish:apk        # يبني APK debug وينشره على Firebase Hosting
@@ -81,3 +94,15 @@ npm run apk:debug     # يحتاج JDK 21 + Android SDK — الناتج في م
 ```
 
 راجع `scripts/build-apk.mjs` لاكتشاف `JAVA_HOME` / `ANDROID_SDK_ROOT` تلقائيًّا.
+
+---
+
+## ٥) التحديث المباشر (OTA) — كيف يعمل
+
+- الإضافة: `@capgo/capacitor-updater` (استضافة ذاتيّة على Firebase Hosting، بلا خدمة خارجيّة).
+- `src/app/core/update.service.ts` يفحص `https://assid-center.web.app/ota/latest.json` عند
+  إقلاع التطبيق وعند عودته للواجهة؛ إن اختلف رقم الإصدار نزّل `bundle-*.zip` وفعّله في الفتحة التالية.
+- `npm run publish:ota` يبني `dist/assid-center/browser`، يضغط محتوياته، ويرفع الحزمة + `latest.json`.
+- **يكفي الويب:** تعديلات Angular/HTML/CSS/منطق TS. **يحتاج APK جديدًا:** إضافة Capacitor جديدة،
+  إذن أندرويد جديد، تغيير في `capacitor.config.ts` بخصوص الطبقة الأصليّة، رفع `versionCode`.
+- عند تثبيت APK أحدث، تُمسح الحزم المُنزَّلة ويُعاد الاعتماد على حزمة الويب المدمجة (`resetWhenUpdate`).
