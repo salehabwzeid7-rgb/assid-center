@@ -1,7 +1,7 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import type { Circle } from '../../core/models';
+import { CIRCLE_TYPE_SHORT, type Circle } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -11,6 +11,14 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <app-page-header [title]="'طلاب ' + (circle()?.name || 'الحلقة')" />
 
     <div class="page">
+      @if (circle(); as c) {
+        <p class="muted" style="margin:2px 2px 10px">
+          {{ c.name }}
+          @if (c.type) {
+            <span style="color:var(--green);font-weight:700"> · {{ typeShort[c.type] }}</span>
+          }
+        </p>
+      }
       <div class="row-between section-title">
         <span>القائمة ({{ students()?.length ?? 0 }} — منهم {{ activeCount() }} نشط)</span>
         <a routerLink="/students/new" [queryParams]="{ circle: id }">+ إضافة</a>
@@ -62,6 +70,7 @@ export class CircleStudentsPage implements OnInit {
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
+  readonly typeShort = CIRCLE_TYPE_SHORT;
   readonly circle = signal<Circle | null>(null);
   readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   readonly activeCount = computed(() => this.students()?.filter((s) => s.active).length ?? 0);

@@ -1,19 +1,15 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { NotifyService } from '../../core/notify.service';
-import {
-  ATTENDANCE_LABELS,
-  GRADE_LABELS,
-  RECITATION_KIND_LABELS,
-  type Student,
-} from '../../core/models';
+import { ATTENDANCE_LABELS, CIRCLE_TYPE_SHORT, type Circle, type Student } from '../../core/models';
 import { dmy } from '../../core/format';
-import { ayahRef } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
-type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
-
+/**
+ * ملفّ الطالب — يعرض كلّ التفاصيل مباشرةً (المستوى، جوال ولي الأمر، المقرّر)
+ * دون الحاجة لفتح شاشة فرعيّة. تسجيل التسميع والتقييم اليوميّ لا يتمّ من هنا،
+ * بل من داخل الحلقة أو الجلسة النشطة فقط.
+ */
 @Component({
   selector: 'app-student',
   imports: [RouterLink, PageHeaderComponent],
@@ -24,189 +20,109 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
       @if (student() === null && loaded()) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الطالب.</div>
       } @else if (student(); as s) {
+        <!-- بطاقة الهوية -->
         <div class="card">
           <div class="row-between">
-            <div>
-              <h2 style="font-size:1.1rem;margin:0">{{ s.name }}</h2>
-              <p class="muted" style="margin:2px 0 0">
-                {{ s.level || 'طالب' }} · {{ circleName() }}
+            <div class="grow">
+              <h2 style="font-size:1.15rem;margin:0">{{ s.name }}</h2>
+              <div class="id-meta">
+                <a
+                  class="circle-chip"
+                  [class.t-tajweed]="circle()?.type === 'tajweed'"
+                  [routerLink]="['/circle', s.circleId]"
+                >
+                  {{ circle()?.name || 'حلقة محذوفة' }}
+                  @if (circle()?.type) {
+                    <span class="dot-sep">·</span> {{ typeShort[circle()!.type!] }}
+                  }
+                </a>
                 @if (!s.active) {
-                  · <span style="color:var(--danger)">غير نشط</span>
+                  <span class="off">غير نشط</span>
                 }
-              </p>
+              </div>
             </div>
             <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'edit']">تعديل</a>
           </div>
         </div>
 
-        <div class="stack-8" style="margin:10px 0">
-          <a
-            class="btn btn-primary btn-block btn-lg"
-            [routerLink]="['/student', s.id, 'recitation']"
-          >
-            📖 تسجيل تسميع
-          </a>
-          <a class="btn btn-block" [routerLink]="['/student', s.id, 'evaluation']">
-            ✦ تقييم يومي
-          </a>
-        </div>
-
-        <div class="tabs">
-          <button [class.active]="tab() === 'overview'" (click)="tab.set('overview')">
-            نظرة عامة
-          </button>
-          <button [class.active]="tab() === 'recitation'" (click)="tab.set('recitation')">
-            التسميع
-          </button>
-          <button [class.active]="tab() === 'attendance'" (click)="tab.set('attendance')">
-            الحضور
-          </button>
-          <button [class.active]="tab() === 'evaluation'" (click)="tab.set('evaluation')">
-            التقييم
-          </button>
-        </div>
-
-        <!-- نظرة عامة -->
-        @if (tab() === 'overview') {
-          <div class="stat-grid">
-            <div class="stat">
-              <div class="num">{{ recitations()?.length ?? 0 }}</div>
-              <div class="label">جلسات تسميع</div>
-            </div>
-            <div class="stat">
-              <div class="num">{{ totalPages() }}</div>
-              <div class="label">مجموع الأوجه المسمَّعة</div>
-            </div>
-            <div class="stat">
-              <div class="num">{{ presentRate() }}٪</div>
-              <div class="label">نسبة الحضور</div>
-            </div>
-            <div class="stat">
-              <div class="num">{{ sessionsCount() }}</div>
-              <div class="label">أيام مسجّلة</div>
-            </div>
+        <!-- التفاصيل الكاملة — تُعرض مباشرةً -->
+        <div class="card details">
+          <div class="det-row">
+            <span class="k">المستوى / الصف</span>
+            <span class="v">{{ s.level || '—' }}</span>
           </div>
-
-          @if (s.currentPlan) {
-            <div class="card" style="margin-top:10px">
-              <div class="section-title" style="margin:0 0 4px">المقرر الحالي</div>
-              <div>{{ s.currentPlan }}</div>
-            </div>
-          }
-
-          <div class="card" style="margin-top:10px">
-            <div class="section-title" style="margin:0 0 8px">التواصل</div>
+          <div class="det-row">
+            <span class="k">تاريخ الميلاد</span>
+            <span class="v">{{ s.birthDate ? dmy(s.birthDate) : '—' }}</span>
+          </div>
+          <div class="det-row">
+            <span class="k">جوال ولي الأمر</span>
             @if (s.guardianPhone) {
-              <a class="btn btn-ghost btn-block" [href]="'tel:' + s.guardianPhone" dir="ltr">
-                📞 ولي الأمر: {{ s.guardianPhone }}
-              </a>
+              <a class="v link" [href]="'tel:' + s.guardianPhone" dir="ltr">{{
+                s.guardianPhone
+              }}</a>
+            } @else {
+              <span class="v">—</span>
             }
-            @if (s.phone) {
-              <a
-                class="btn btn-ghost btn-block"
-                style="margin-top:6px"
-                [href]="'tel:' + s.phone"
-                dir="ltr"
+          </div>
+          <div class="det-row col">
+            <span class="k">المقرّر الحالي</span>
+            <span class="v plan">{{ s.currentPlan || '—' }}</span>
+          </div>
+        </div>
+
+        <!-- مؤشّرات موجزة -->
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="num">{{ recitationsCount() }}</div>
+            <div class="label">جلسات تسميع</div>
+          </div>
+          <div class="stat">
+            <div class="num">{{ totalPages() }}</div>
+            <div class="label">مجموع الأوجه</div>
+          </div>
+          <div class="stat">
+            <div class="num">{{ presentRate() }}٪</div>
+            <div class="label">نسبة الحضور</div>
+          </div>
+          <div class="stat">
+            <div class="num">{{ sessionsCount() }}</div>
+            <div class="label">أيام مسجّلة</div>
+          </div>
+        </div>
+
+        <p class="hint" style="margin:12px 2px 4px">
+          يُسجَّل التسميع والتقييم اليوميّ من داخل جلسة الحلقة النشطة.
+        </p>
+
+        <!-- سجلّ الحضور -->
+        <div class="section-title">سجلّ الحضور</div>
+        <div class="card" style="display:flex;gap:14px;flex-wrap:wrap">
+          <span
+            >حاضر: <b>{{ attCount('present') }}</b></span
+          >
+          <span
+            >متأخر: <b>{{ attCount('late') }}</b></span
+          >
+          <span
+            >مأذون: <b>{{ attCount('excused') }}</b></span
+          >
+          <span
+            >غائب: <b>{{ attCount('absent') }}</b></span
+          >
+        </div>
+        @if (attendance() === undefined) {
+          <div class="spinner"></div>
+        } @else if (attendance()!.length === 0) {
+          <div class="empty"><span class="icon">📋</span> لا يوجد سجل حضور بعد.</div>
+        } @else {
+          @for (a of attendance(); track a.id) {
+            <div class="list-item" style="cursor:default">
+              <span class="grow"
+                ><span class="primary">{{ dmy(a.date) }}</span></span
               >
-                📱 الطالب: {{ s.phone }}
-              </a>
-            }
-            @if (!s.guardianPhone && !s.phone) {
-              <p class="muted" style="margin:0">لا توجد أرقام مسجّلة.</p>
-            }
-          </div>
-        }
-
-        <!-- التسميع -->
-        @if (tab() === 'recitation') {
-          @if (recitations() === undefined) {
-            <div class="spinner"></div>
-          } @else if (recitations()!.length === 0) {
-            <div class="empty"><span class="icon">📖</span> لا توجد سجلات تسميع بعد.</div>
-          } @else {
-            @for (r of recitations(); track r.id) {
-              <div class="card">
-                <div class="row-between">
-                  <span class="badge b-grade">{{ kindLabels[r.kind] }}</span>
-                  <span class="muted" style="font-size:.82rem">{{ dmy(r.date) }}</span>
-                </div>
-                <div style="margin:6px 0;font-weight:700">من ({{ from(r) }}) إلى ({{ to(r) }})</div>
-                <div class="muted" style="font-size:.86rem">
-                  {{ r.pages }} وجه · التقدير: {{ gradeLabels[r.grade] }} · أخطاء حفظ:
-                  {{ r.hifzErrors }} · تجويد: {{ r.tajweedErrors }} · تلقين: {{ r.promptCount }}
-                </div>
-                @if (r.notes) {
-                  <div style="margin-top:6px">{{ r.notes }}</div>
-                }
-                <button
-                  class="btn btn-danger"
-                  style="margin-top:8px;padding:6px 12px"
-                  (click)="delRec(r.id)"
-                >
-                  حذف
-                </button>
-              </div>
-            }
-          }
-        }
-
-        <!-- الحضور -->
-        @if (tab() === 'attendance') {
-          <div class="card" style="display:flex;gap:14px;flex-wrap:wrap">
-            <span
-              >حاضر: <b>{{ attCount('present') }}</b></span
-            >
-            <span
-              >متأخر: <b>{{ attCount('late') }}</b></span
-            >
-            <span
-              >مأذون: <b>{{ attCount('excused') }}</b></span
-            >
-            <span
-              >غائب: <b>{{ attCount('absent') }}</b></span
-            >
-          </div>
-          @if (attendance() === undefined) {
-            <div class="spinner"></div>
-          } @else if (attendance()!.length === 0) {
-            <div class="empty"><span class="icon">📋</span> لا يوجد سجل حضور بعد.</div>
-          } @else {
-            @for (a of attendance(); track a.id) {
-              <div class="list-item" style="cursor:default">
-                <span class="grow"
-                  ><span class="primary">{{ dmy(a.date) }}</span></span
-                >
-                <span [class]="'badge b-' + a.status">{{ attLabels[a.status] }}</span>
-              </div>
-            }
-          }
-        }
-
-        <!-- التقييم -->
-        @if (tab() === 'evaluation') {
-          @if (evaluations() === undefined) {
-            <div class="spinner"></div>
-          } @else if (evaluations()!.length === 0) {
-            <div class="empty"><span class="icon">⭐</span> لا توجد تقييمات بعد.</div>
-          } @else {
-            @for (e of evaluations(); track e.id) {
-              <div class="card">
-                <div class="row-between">
-                  <b>{{ dmy(e.date) }}</b>
-                  <button class="btn btn-danger" style="padding:4px 10px" (click)="delEval(e.id)">
-                    حذف
-                  </button>
-                </div>
-                <div class="muted" style="font-size:.86rem;margin-top:6px;line-height:2">
-                  الحفظ: {{ gradeLabels[e.memorization] }} · المراجعة: {{ gradeLabels[e.review] }} ·
-                  التجويد: {{ gradeLabels[e.tajweed] }} · الانتباه: {{ gradeLabels[e.attention] }} ·
-                  السلوك: {{ gradeLabels[e.behavior] }}
-                </div>
-                @if (e.notes) {
-                  <div style="margin-top:6px">{{ e.notes }}</div>
-                }
-              </div>
-            }
+              <span [class]="'badge b-' + a.status">{{ attLabels[a.status] }}</span>
+            </div>
           }
         }
       } @else {
@@ -214,28 +130,93 @@ type Tab = 'overview' | 'recitation' | 'attendance' | 'evaluation';
       }
     </div>
   `,
+  styles: [
+    `
+      .id-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .circle-chip {
+        font-weight: 700;
+        font-size: 0.8rem;
+        padding: 3px 10px;
+        border-radius: 999px;
+        background: var(--green-tint);
+        color: var(--green);
+      }
+      .circle-chip.t-tajweed {
+        background: var(--gold-tint);
+        color: var(--gold-deep);
+      }
+      .dot-sep {
+        opacity: 0.6;
+      }
+      .off {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--danger);
+      }
+      .details {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        margin-top: 10px;
+        padding: 4px 16px;
+      }
+      .det-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 11px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .det-row:last-child {
+        border-bottom: 0;
+      }
+      .det-row.col {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+      }
+      .det-row .k {
+        color: var(--text-soft);
+        font-size: 0.85rem;
+      }
+      .det-row .v {
+        font-weight: 700;
+      }
+      .det-row .v.link {
+        color: var(--green);
+      }
+      .det-row .v.plan {
+        font-weight: 400;
+        line-height: 1.7;
+      }
+    `,
+  ],
 })
 export class StudentPage implements OnInit {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
-  private notify = inject(NotifyService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly student = signal<Student | null>(null);
   readonly loaded = signal(false);
-  readonly circleName = signal('');
-  readonly tab = signal<Tab>('overview');
+  readonly circle = signal<Circle | null>(null);
 
-  readonly recitations = this.data.studentRecitations(this.id, this.destroyRef);
-  readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
-  readonly evaluations = this.data.studentEvaluations(this.id, this.destroyRef);
-
-  readonly kindLabels = RECITATION_KIND_LABELS;
-  readonly gradeLabels = GRADE_LABELS;
+  readonly typeShort = CIRCLE_TYPE_SHORT;
   readonly attLabels = ATTENDANCE_LABELS;
   readonly dmy = dmy;
 
+  private readonly recitations = this.data.studentRecitations(this.id, this.destroyRef);
+  readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
+
+  readonly recitationsCount = computed(() => this.recitations()?.length ?? 0);
   readonly totalPages = computed(() => {
     const sum = (this.recitations() ?? []).reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
@@ -252,30 +233,10 @@ export class StudentPage implements OnInit {
     const s = await this.data.getStudent(this.id);
     this.student.set(s);
     this.loaded.set(true);
-    if (s) {
-      const c = await this.data.getCircle(s.circleId);
-      this.circleName.set(c?.name ?? '');
-    }
-  }
-
-  from(r: { fromSurah: number; fromAyah: number }): string {
-    return ayahRef(r.fromSurah, r.fromAyah);
-  }
-  to(r: { toSurah: number; toAyah: number }): string {
-    return ayahRef(r.toSurah, r.toAyah);
+    if (s) this.circle.set(await this.data.getCircle(s.circleId));
   }
 
   attCount(status: string): number {
     return this.attendance()?.filter((a) => a.status === status).length ?? 0;
-  }
-
-  async delRec(id: string): Promise<void> {
-    if (!(await this.notify.confirm('حذف سجل التسميع؟', { confirmText: 'حذف', danger: true })))
-      return;
-    await this.notify.run(() => this.data.deleteRecitation(id), { success: 'حُذف سجل التسميع' });
-  }
-  async delEval(id: string): Promise<void> {
-    if (!(await this.notify.confirm('حذف التقييم؟', { confirmText: 'حذف', danger: true }))) return;
-    await this.notify.run(() => this.data.deleteEvaluation(id), { success: 'حُذف التقييم' });
   }
 }

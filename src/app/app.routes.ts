@@ -70,6 +70,12 @@ export const routes: Routes = [
           import('./pages/recitation-form/recitation-form').then((m) => m.RecitationFormPage),
       },
       {
+        // التقييم اليوميّ — يُفتح من داخل الجلسة النشطة فقط
+        path: 'session/:sessionId/evaluate/:studentId',
+        loadComponent: () =>
+          import('./pages/evaluation-form/evaluation-form').then((m) => m.EvaluationFormPage),
+      },
+      {
         path: 'student/:id',
         loadComponent: () => import('./pages/student/student').then((m) => m.StudentPage),
       },
@@ -77,16 +83,6 @@ export const routes: Routes = [
         path: 'student/:id/edit',
         loadComponent: () =>
           import('./pages/student-form/student-form').then((m) => m.StudentFormPage),
-      },
-      {
-        path: 'student/:id/recitation',
-        loadComponent: () =>
-          import('./pages/recitation-form/recitation-form').then((m) => m.RecitationFormPage),
-      },
-      {
-        path: 'student/:id/evaluation',
-        loadComponent: () =>
-          import('./pages/evaluation-form/evaluation-form').then((m) => m.EvaluationFormPage),
       },
     ],
   },

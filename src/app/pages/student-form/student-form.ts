@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
+import { circleLabel } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -23,7 +24,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <select id="circleId" name="circleId" [(ngModel)]="m.circleId" required>
             <option value="" disabled>اختر الحلقة</option>
             @for (c of circles(); track c.id) {
-              <option [value]="c.id">{{ c.name }}</option>
+              <option [value]="c.id">{{ circleLabel(c) }}</option>
             }
           </select>
         </div>
@@ -39,22 +40,16 @@ import { PageHeaderComponent } from '../../shared/page-header';
           </div>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="guardianPhone">جوال ولي الأمر</label>
-            <input
-              id="guardianPhone"
-              name="guardianPhone"
-              type="tel"
-              inputmode="tel"
-              dir="ltr"
-              [(ngModel)]="m.guardianPhone"
-            />
-          </div>
-          <div class="field">
-            <label for="phone">جوال الطالب</label>
-            <input id="phone" name="phone" type="tel" inputmode="tel" dir="ltr" [(ngModel)]="m.phone" />
-          </div>
+        <div class="field">
+          <label for="guardianPhone">جوال ولي الأمر</label>
+          <input
+            id="guardianPhone"
+            name="guardianPhone"
+            type="tel"
+            inputmode="tel"
+            dir="ltr"
+            [(ngModel)]="m.guardianPhone"
+          />
         </div>
 
         <div class="field">
@@ -87,6 +82,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
   `,
 })
 export class StudentFormPage implements OnInit {
+  readonly circleLabel = circleLabel;
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private notify = inject(NotifyService);
@@ -108,7 +104,6 @@ export class StudentFormPage implements OnInit {
     level: '',
     birthDate: '',
     guardianPhone: '',
-    phone: '',
     currentPlan: '',
     active: true,
   };
@@ -124,7 +119,6 @@ export class StudentFormPage implements OnInit {
           level: s.level ?? '',
           birthDate: s.birthDate ?? '',
           guardianPhone: s.guardianPhone ?? '',
-          phone: s.phone ?? '',
           currentPlan: s.currentPlan ?? '',
           active: s.active,
         };
@@ -150,7 +144,6 @@ export class StudentFormPage implements OnInit {
       level: this.m.level.trim() || undefined,
       birthDate: this.m.birthDate || undefined,
       guardianPhone: this.m.guardianPhone.trim() || undefined,
-      phone: this.m.phone.trim() || undefined,
       currentPlan: this.m.currentPlan.trim() || undefined,
       active: this.m.active,
     };

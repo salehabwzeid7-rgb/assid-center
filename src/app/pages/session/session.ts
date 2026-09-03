@@ -141,14 +141,23 @@ type Step = 'attendance' | 'recitation' | 'summary';
               <div class="card">
                 <div class="row-between">
                   <span class="primary" style="font-weight:700">{{ st.name }}</span>
-                  <button
-                    class="btn btn-ghost"
-                    style="padding:7px 13px"
-                    type="button"
-                    (click)="recite(st.id)"
-                  >
-                    {{ recOf(st.id) ? 'تعديل' : '＋ تسجيل' }}
-                  </button>
+                  <span style="display:flex;gap:6px">
+                    <a
+                      class="btn btn-ghost"
+                      style="padding:7px 12px"
+                      [routerLink]="['/session', id, 'evaluate', st.id]"
+                    >
+                      ✦ تقييم
+                    </a>
+                    <button
+                      class="btn btn-ghost"
+                      style="padding:7px 13px"
+                      type="button"
+                      (click)="recite(st.id)"
+                    >
+                      {{ recOf(st.id) ? 'تعديل' : '＋ تسميع' }}
+                    </button>
+                  </span>
                 </div>
                 @if (recOf(st.id); as r) {
                   <div class="muted" style="font-size:.85rem;margin-top:6px">

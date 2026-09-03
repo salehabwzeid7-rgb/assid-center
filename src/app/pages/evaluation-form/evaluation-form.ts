@@ -16,7 +16,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <div class="page">
       <form class="card" (ngSubmit)="submit()">
         @if (student(); as s) {
-          <p class="muted" style="margin-top:0">الطالب: <b>{{ s.name }}</b></p>
+          <p class="muted" style="margin-top:0">
+            الطالب: <b>{{ s.name }}</b>
+          </p>
         }
 
         <div class="field">
@@ -44,7 +46,11 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <div class="alert alert-error">{{ error() }}</div>
         }
 
-        <button class="btn btn-primary btn-block btn-lg" type="submit" [disabled]="saving() || !student()">
+        <button
+          class="btn btn-primary btn-block btn-lg"
+          type="submit"
+          [disabled]="saving() || !student()"
+        >
           {{ saving() ? 'جارٍ الحفظ…' : 'حفظ التقييم' }}
         </button>
       </form>
@@ -57,7 +63,9 @@ export class EvaluationFormPage implements OnInit {
   private notify = inject(NotifyService);
   private router = inject(Router);
 
-  readonly studentId = this.route.snapshot.paramMap.get('id')!;
+  readonly studentId =
+    this.route.snapshot.paramMap.get('studentId') ?? this.route.snapshot.paramMap.get('id')!;
+  readonly sessionId = this.route.snapshot.paramMap.get('sessionId') ?? undefined;
   readonly student = signal<Student | null>(null);
   readonly saving = signal(false);
   readonly error = signal('');
@@ -72,6 +80,10 @@ export class EvaluationFormPage implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.student.set(await this.data.getStudent(this.studentId));
+    if (this.sessionId) {
+      const session = await this.data.getSession(this.sessionId);
+      if (session) this.date = session.date;
+    }
   }
 
   async submit(): Promise<void> {
@@ -100,6 +112,13 @@ export class EvaluationFormPage implements OnInit {
       { success: 'حُفظ التقييم اليومي', error: 'تعذّر حفظ التقييم' },
     );
     this.saving.set(false);
-    if (ok) await this.router.navigate(['/student', s.id]);
+    if (!ok) return;
+    if (this.sessionId) {
+      await this.router.navigate(['/session', this.sessionId], {
+        queryParams: { step: 'summary' },
+      });
+    } else {
+      await this.router.navigate(['/student', s.id]);
+    }
   }
 }

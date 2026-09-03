@@ -46,6 +46,12 @@ export const CIRCLE_TYPE_SINGULAR: Record<CircleType, string> = {
   tajweed: 'حلقة تجويد',
 };
 
+/** كلمة الموضوع المختصرة (تُلحَق باسم الحلقة أينما ظهر: «حلقة زيد — تجويد») */
+export const CIRCLE_TYPE_SHORT: Record<CircleType, string> = {
+  memorization: 'تحفيظ',
+  tajweed: 'تجويد',
+};
+
 export const CIRCLE_TYPE_ORDER: CircleType[] = ['memorization', 'tajweed'];
 
 /**
@@ -128,13 +134,18 @@ export interface Circle {
   createdAt: number;
 }
 
+/** «اسم الحلقة — الموضوع» — يُعرَض أينما ظهرت الحلقة (الإسناد، القوائم، الترويسات). */
+export function circleLabel(c: Pick<Circle, 'name' | 'type'> | null | undefined): string {
+  if (!c) return 'حلقة محذوفة';
+  return c.type ? `${c.name} — ${CIRCLE_TYPE_SHORT[c.type]}` : c.name;
+}
+
 /** الطالب */
 export interface Student {
   id: string;
   name: string;
   circleId: string;
   guardianPhone?: string;
-  phone?: string;
   birthDate?: string;
   /** المستوى أو الصف الدراسي */
   level?: string;
