@@ -55,6 +55,18 @@ Thumbs.db
 # مخرجات APK
 /apk/
 
+# أسرار وتوقيع — لا تُودَع في Git أبدًا
+*.keystore
+*.jks
+*.p12
+*.pem
+key.properties
+android/app/google-services.json
+.env
+.env.*
+*.local.json
+.claude/settings.local.json
+
 # Firebase
 .firebase/
 firebase-debug.log
