@@ -134,16 +134,6 @@ interface CircleCard {
           <div class="num">{{ students()?.length ?? 0 }} <span class="unit">طالب</span></div>
           <div class="label">مسجّل</div>
         </div>
-        <div class="stat">
-          <div class="num">
-            @if (todayRate() === null) {
-              —
-            } @else {
-              {{ todayRate() }}<span class="unit">٪</span>
-            }
-          </div>
-          <div class="label">حضور اليوم</div>
-        </div>
       </div>
     </div>
   `,
@@ -163,7 +153,6 @@ export class DashboardPage {
   readonly circles = this.data.circles(this.destroyRef);
   readonly students = this.data.allStudents(this.destroyRef);
   private readonly sessions = this.data.allSessions(this.destroyRef);
-  private readonly attendance = this.data.allAttendance(this.destroyRef);
 
   /** لحظة حيّة تُحدَّث كل ثانية — لتشغيل العدّاد التنازليّ وإعادة تقييم «جارية / قادمة». */
   private readonly now = signal(Date.now());
@@ -193,15 +182,6 @@ export class DashboardPage {
 
   readonly openCount = computed(
     () => this.sessions()?.filter((s) => s.status === 'open').length ?? 0,
-  );
-
-  private rate(rows: { status: string }[] | undefined): number | null {
-    if (!rows || rows.length === 0) return null;
-    const good = rows.filter((a) => a.status === 'present' || a.status === 'late').length;
-    return Math.round((good / rows.length) * 100);
-  }
-  readonly todayRate = computed(() =>
-    this.rate(this.attendance()?.filter((a) => a.date === today())),
   );
 
   /**

@@ -3,13 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
-import {
-  THEME_DESC,
-  THEME_LABELS,
-  THEME_ORDER,
-  THEME_SWATCHES,
-  ThemeService,
-} from '../../core/theme.service';
+import { THEME_LABELS, THEME_ORDER, THEME_SWATCHES, ThemeService } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -22,7 +16,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
       <div class="section-title">المظهر</div>
       <div class="card">
         <p class="muted" style="margin-top:0;font-size:.86rem">
-          اختر تصميم الواجهة — التبديل فوريّ ويُحفَظ على جهازك.
+          اختر خلفية الواجهة — التبديل فوريّ ويُحفَظ على جهازك.
         </p>
         <div class="theme-list">
           @for (t of themes; track t) {
@@ -39,7 +33,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
               </span>
               <span class="theme-text">
                 <span class="theme-name">{{ labels[t] }}</span>
-                <span class="theme-desc">{{ descriptions[t] }}</span>
               </span>
               <span class="theme-check">{{ theme.theme() === t ? '✓' : '' }}</span>
             </button>
@@ -158,7 +151,6 @@ export class ProfilePage {
 
   readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;
-  readonly descriptions = THEME_DESC;
   readonly swatches = THEME_SWATCHES;
 
   name = this.auth.teacher()?.name ?? '';
