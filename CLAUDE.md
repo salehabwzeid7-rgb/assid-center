@@ -25,11 +25,13 @@
 
 ## سير الإصدار والتحديث التلقائيّ عبر GitHub
 
+- **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام · `origin` · فرع `master`).
+
 1. بعد اكتمال التغييرات والتحقّق منها، شغّل: `/deploy [patch|minor|major]` (أو `npm run release -- <level> --push`).
 2. `scripts/release.mjs` يرفع الرقم، يبني، يعمل `commit` + `tag vX.Y.Z`، ويدفع.
-3. دفع الوسم يُشغّل `.github/workflows/release.yml` → يبني APK ويرفعه إلى **GitHub Releases** تلقائيًّا.
+3. دفع الوسم يُشغّل `.github/workflows/release.yml` → يبني APK ويرفعه إلى **GitHub Releases** تلقائيًّا (رابط مباشر: `…/releases/download/vX.Y.Z/AssidCenter-Teacher-vX.Y.Z.apk`).
 4. كلّ دفع إلى `master` يُشغّل `.github/workflows/ci.yml` (فحص تنسيق + بناء).
-5. الإعداد لمرّة واحدة (ربط المستودع، توقيع الإصدار): [DEPLOY.md](DEPLOY.md).
+5. توقيع الإصدار الرسميّ (اختياريّ): [DEPLOY.md](DEPLOY.md).
 
 ## اختبار E2E
 

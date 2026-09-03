@@ -17,9 +17,10 @@ allowed-tools: Bash(npm run *), Bash(node scripts/*), Bash(git *), Bash(npx cap 
    - يعمل `git commit` + `git tag vX.Y.Z` ثمّ `git push` للفرع والوسم.
    - دفع الوسم يُشغّل workflow «إصدار APK» في GitHub Actions فيُبنى الـ APK
      ويُرفَع تلقائيًّا إلى صفحة Releases.
-3. إن لم يوجد `git remote origin` بعد: نفّذ خطوات الربط في [DEPLOY.md](../../DEPLOY.md)
-   أوّلًا (أو اطلب من المستخدم ربط المستودع)، ثمّ أعِد المحاولة.
-4. بعد الدفع: اذكر رقم الإصدار الجديد ورابطَي صفحتَي Actions وReleases في المستودع.
+3. المستودع مربوط بالفعل: `origin` = https://github.com/salehabwzeid7-rgb/assid-center (عام).
+4. بعد الدفع: راقِب `.github/workflows/release.yml` حتى ينتهي، ثمّ أعطِ المستخدم
+   الرابط المباشر: `https://github.com/salehabwzeid7-rgb/assid-center/releases/download/vX.Y.Z/AssidCenter-Teacher-vX.Y.Z.apk`
+   (ورابط أحدث نسخة الثابت `…/releases/latest`).
 
 ملاحظات:
 - لا تُصدر إلا بعد اكتمال التغييرات المطلوبة والتحقّق منها.

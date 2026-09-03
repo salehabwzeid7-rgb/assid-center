@@ -1,25 +1,16 @@
 # النشر والتحديث التلقائيّ — «مركز أسيد»
 
-هذا الملف يشرح الإعداد **لمرّة واحدة**، ثمّ سير العمل المتكرّر لإصدار نسخة APK جديدة تلقائيًّا عبر GitHub.
+هذا الملف يشرح سير العمل لإصدار نسخة APK جديدة تلقائيًّا عبر GitHub.
+
+- **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام)
+- **أحدث نسخة APK (رابط ثابت):** https://github.com/salehabwzeid7-rgb/assid-center/releases/latest
+- **رابط مباشر لنسخة محدّدة:** `https://github.com/salehabwzeid7-rgb/assid-center/releases/download/vX.Y.Z/AssidCenter-Teacher-vX.Y.Z.apk`
 
 ---
 
-## ١) ربط المستودع بـ GitHub (مرّة واحدة)
+## ١) الربط بـ GitHub — تمّ ✅
 
-المشروع مستودع Git محلّيّ بلا `remote`. اربطه:
-
-```bash
-# باستخدام GitHub CLI (الأسهل):
-gh repo create assid-center --private --source=. --remote=origin --push
-
-# أو يدويًّا:
-#   أنشئ مستودعًا فارغًا على github.com باسم assid-center، ثمّ:
-git remote add origin https://github.com/<USERNAME>/assid-center.git
-git push -u origin master
-git push origin --tags
-```
-
-بعدها تعمل سير العمل تلقائيًّا في تبويب **Actions**.
+المستودع مربوط بـ `origin` والفرع الافتراضيّ `master`. لا حاجة لإعادة هذه الخطوة.
 
 ---
 
