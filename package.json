@@ -17,6 +17,7 @@
     "android:open": "npm run cap:sync && npx cap open android",
     "apk:debug": "npm run cap:sync && node scripts/build-apk.mjs debug",
     "apk:release": "npm run cap:sync && node scripts/build-apk.mjs release",
+    "publish:apk": "node scripts/publish-apk.mjs",
     "version:bump": "node scripts/bump-version.mjs",
     "release": "node scripts/release.mjs"
   },

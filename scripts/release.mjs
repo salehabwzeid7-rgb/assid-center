@@ -61,20 +61,30 @@ run('git', ['tag', '-a', tag, '-m', `Release ${tag}`]);
 
 const hasRemote = out('git', ['remote']).length > 0;
 if (doPush && hasRemote) {
-  console.error('\n▶ ٥) دفع إلى origin (يُشغّل بناء APK على GitHub)…');
+  console.error('\n▶ ٥) دفع إلى origin (يُشغّل بناء APK ونشر إصدار على GitHub)…');
   const branch = out('git', ['branch', '--show-current']);
   run('git', ['push', 'origin', branch]);
   run('git', ['push', 'origin', tag]);
-  console.error(`\n✅ تمّ. تابِع البناء في: صفحة Actions ثمّ Releases للوسم ${tag}.`);
+
+  // نشر APK محدَّث على Firebase Hosting (رابط التحميل المباشر assid-center.web.app/download)
+  console.error('\n▶ ٦) بناء APK ونشره على Firebase Hosting…');
+  try {
+    run('node', ['scripts/publish-apk.mjs', 'debug']);
+  } catch {
+    console.error(
+      'تعذّر نشر Firebase Hosting (تحقّق من JDK 21 / Android SDK / firebase login). ' +
+        'الإصدار على GitHub Releases غير متأثّر.',
+    );
+  }
+
+  console.error(`\n✅ تمّ الإصدار ${tag}:`);
+  console.error('   • GitHub Releases: يُبنى الآن — راجِع تبويب Actions ثمّ صفحة Releases.');
+  console.error('   • رابط مباشر (فوريّ):  https://assid-center.web.app/download');
 } else {
   console.error(`\n✅ أُنشئ الالتزام والوسم ${tag} محليًّا.`);
-  if (!hasRemote) {
-    console.error(
-      'ℹ️  لا يوجد remote. اربط المستودع مرّة واحدة ثمّ ادفع:\n' +
-        '   gh repo create assid-center --private --source=. --remote=origin\n' +
-        '   git push -u origin master && git push origin --tags',
-    );
-  } else {
-    console.error('ℹ️  أضِف --push للدفع تلقائيًّا، أو نفّذ:  git push origin HEAD --follow-tags');
-  }
+  console.error(
+    hasRemote
+      ? 'ℹ️  أضِف --push للدفع تلقائيًّا، أو نفّذ:  git push origin HEAD --follow-tags'
+      : 'ℹ️  لا يوجد remote — اربط المستودع أوّلًا (راجِع DEPLOY.md).',
+  );
 }

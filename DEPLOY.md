@@ -2,9 +2,10 @@
 
 هذا الملف يشرح سير العمل لإصدار نسخة APK جديدة تلقائيًّا عبر GitHub.
 
+- **رابط التحميل المباشر (للمشاركة في واتساب):** `https://assid-center.web.app/download`
+  — يفتح فيُنزّل الـ APK فورًا (بلا صفحة)، ويثبّته أندرويد مباشرةً. صفحة تحميل بزرّ: `https://assid-center.web.app`
 - **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام)
-- **أحدث نسخة APK (رابط ثابت):** https://github.com/salehabwzeid7-rgb/assid-center/releases/latest
-- **رابط مباشر لنسخة محدّدة:** `https://github.com/salehabwzeid7-rgb/assid-center/releases/download/vX.Y.Z/AssidCenter-Teacher-vX.Y.Z.apk`
+- **أرشيف النسخ:** https://github.com/salehabwzeid7-rgb/assid-center/releases
 
 ---
 
@@ -32,11 +33,18 @@ npm run release -- major --push      # 1.2.0 → 2.0.0
 2. **تنسيق + بناء إنتاج** للتحقّق أنّ كلّ شيء يترجم.
 3. **مزامنة Capacitor** مع مجلّد `android`.
 4. **commit + وسم** `vX.Y.Z` ثمّ **دفع** الفرع والوسم.
-5. دفع الوسم يُشغّل workflow **«إصدار APK»** على GitHub:
-   - يبني الويب، يزامن Capacitor، يبني `assembleDebug`.
-   - يرفع `AssidCenter-Teacher-vX.Y.Z.apk` إلى صفحة **Releases** مع ملاحظات تلقائيّة.
+5. دفع الوسم يُشغّل workflow **«إصدار APK»** على GitHub → يبني `assembleDebug` ويرفع
+   `AssidCenter-Teacher-vX.Y.Z.apk` إلى صفحة **Releases** (أرشيف).
+6. محليًّا: يبني `scripts/publish-apk.mjs` نسخة APK وينشرها على **Firebase Hosting** →
+   يتحدّث رابط `https://assid-center.web.app/download` فورًا (هذا الرابط للمشاركة).
 
-> الـ APK الناتج **موقّع بمفتاح debug** — قابل للتثبيت مباشرةً على الأجهزة (تفعيل «تثبيت من مصادر غير معروفة»). لا يصلح لرفعه على Google Play.
+> الـ APK **موقّع بمفتاح debug** — يُثبَّت مباشرةً بعد تفعيل «تثبيت من مصادر غير معروفة». لا يصلح لمتجر Play.
+
+### تحديث الرابط المباشر وحده (بلا إصدار جديد)
+
+```bash
+npm run publish:apk        # يبني APK debug وينشره على Firebase Hosting
+```
 
 ---
 

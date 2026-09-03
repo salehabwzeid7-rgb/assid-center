@@ -23,15 +23,16 @@
 | `npm run version:bump -- minor` | رفع الرقم في `package.json` + `android/app/build.gradle` |
 | `npm run release -- patch --push` | إصدار كامل: رفع رقم → بناء → commit → tag → push |
 
-## سير الإصدار والتحديث التلقائيّ عبر GitHub
+## سير الإصدار والتحديث التلقائيّ
 
 - **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام · `origin` · فرع `master`).
+- **رابط تحميل APK المباشر (للمشاركة):** `https://assid-center.web.app/download` (Firebase Hosting، الملفّ `public-apk/app.bin` بامتداد `.bin` لأنّ خطّة Spark تمنع رفع `.apk`؛ ترويسات `firebase.json` تجعله يُنزَّل ويُثبَّت كـ APK).
 
 1. بعد اكتمال التغييرات والتحقّق منها، شغّل: `/deploy [patch|minor|major]` (أو `npm run release -- <level> --push`).
-2. `scripts/release.mjs` يرفع الرقم، يبني، يعمل `commit` + `tag vX.Y.Z`، ويدفع.
-3. دفع الوسم يُشغّل `.github/workflows/release.yml` → يبني APK ويرفعه إلى **GitHub Releases** تلقائيًّا (رابط مباشر: `…/releases/download/vX.Y.Z/AssidCenter-Teacher-vX.Y.Z.apk`).
+2. `scripts/release.mjs`: رفع الرقم → تنسيق → بناء → `commit` + `tag vX.Y.Z` → دفع → ثمّ `publish-apk.mjs` (بناء APK محليًّا + `firebase deploy --only hosting`).
+3. دفع الوسم يُشغّل `.github/workflows/release.yml` → APK إلى **GitHub Releases** (أرشيف).
 4. كلّ دفع إلى `master` يُشغّل `.github/workflows/ci.yml` (فحص تنسيق + بناء).
-5. توقيع الإصدار الرسميّ (اختياريّ): [DEPLOY.md](DEPLOY.md).
+5. تحديث الرابط المباشر وحده: `npm run publish:apk`. توقيع رسميّ: [DEPLOY.md](DEPLOY.md).
 
 ## اختبار E2E
 
