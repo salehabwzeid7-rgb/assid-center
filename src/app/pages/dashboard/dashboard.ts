@@ -64,9 +64,35 @@ interface CircleCard {
       <!-- البانر العلوي: الحلقة الجارية (عدّاد تنازليّ) أو الحلقة القادمة (تفاصيلها) -->
       @if (circleCard(); as card) {
         <a class="ops-card" [routerLink]="['/circle', card.circleId]">
-          <p class="kicker" [class.live]="card.mode === 'active'">
-            {{ card.mode === 'active' ? '● حلقة جارية الآن' : 'الحلقة القادمة' }} · {{ todayLabel }}
-          </p>
+          @if (card.mode === 'active') {
+            <p class="kicker live">● حلقة جارية الآن · {{ todayLabel }}</p>
+          } @else {
+            <!-- ترويسة الحلقة القادمة: التصنيف يمينًا، ويوم الجدولة كشارة بارزة يسارًا -->
+            <div class="ops-head">
+              <span class="kicker">الحلقة القادمة</span>
+              <span class="ops-daypill" [class.soon]="cardIsToday()">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="4.5" width="18" height="16" rx="2" />
+                  <path d="M3 9.5h18M8 3v4M16 3v4" />
+                </svg>
+                <span class="odp-day">{{
+                  cardIsToday() ? 'اليوم' : weekdayAr(card.session.date)
+                }}</span>
+                @if (!cardIsToday()) {
+                  <span class="odp-date">{{ dmy(card.session.date) }}</span>
+                }
+              </span>
+            </div>
+          }
+
           <div class="ops-circle">
             <span class="ops-circle-name">{{ card.circleName }}</span>
             @if (card.type) {
@@ -85,7 +111,6 @@ interface CircleCard {
             </div>
           } @else {
             <p class="ops-meta">
-              📅 {{ cardDay() }}<br />
               ⏰ من {{ fmt12(card.session.fromTime) }} إلى {{ fmt12(card.session.toTime) }}
               @if (cardHint()) {
                 <br />{{ cardHint() }}
@@ -355,15 +380,8 @@ export class DashboardPage {
     return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
   });
 
-  /** يوم الحلقة القادمة ونصّه: «اليوم» / «غدًا» / اسم اليوم + التاريخ. */
-  readonly cardDay = computed(() => {
-    const card = this.circleCard();
-    if (!card) return '';
-    const d = card.session.date;
-    const label = `${weekdayAr(d)} ${dmy(d)}`;
-    if (d === today()) return `اليوم · ${label}`;
-    return label;
-  });
+  /** هل موعد الحلقة القادمة اليوم نفسه؟ (تُبرَز الشارة بلون تنبيهيّ حينها) */
+  readonly cardIsToday = computed(() => this.circleCard()?.session.date === today());
 
   /** سطر توضيحيّ إضافيّ أسفل التفاصيل: «تبدأ بعد …». */
   readonly cardHint = computed(() => {

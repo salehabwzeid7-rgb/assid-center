@@ -1187,6 +1187,45 @@ a.ops-card:active {
 .ops-card .kicker.live {
   color: #ffe08a;
 }
+/* ترويسة الحلقة القادمة: التصنيف + شارة يوم الجدولة على الطرف المقابل */
+.ops-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.ops-head .kicker {
+  margin: 0;
+}
+.ops-daypill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #0b3d2b;
+  font-weight: 800;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+}
+.ops-daypill svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.85;
+}
+.ops-daypill .odp-date {
+  font-weight: 700;
+  opacity: 0.62;
+  font-variant-numeric: tabular-nums;
+}
+.ops-daypill.soon {
+  background: #ffe08a;
+  color: #5a4200;
+}
 /* اسم الحلقة + شارة نوعها (تحفيظ/تجويد) */
 .ops-circle {
   display: flex;
