@@ -1414,30 +1414,32 @@ a.ops-card:active {
   z-index: 60;
   display: flex;
   justify-content: space-around;
-  gap: 4px;
-  padding: 8px 8px calc(8px + var(--safe-bottom));
+  gap: 2px;
+  padding: 8px 4px calc(8px + var(--safe-bottom));
   background: var(--surface);
   border-top: 2px solid var(--border);
   box-shadow: 0 -1px 6px rgba(0, 0, 0, 0.07);
 }
 .bottom-nav a {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  padding: 6px 2px;
+  padding: 6px 1px;
   border-radius: 12px;
   color: var(--text-soft);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
+  white-space: nowrap;
   transition:
     color var(--ease),
     background var(--ease);
 }
 .bottom-nav a svg {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
 }
 .bottom-nav a.active {
   color: var(--green);

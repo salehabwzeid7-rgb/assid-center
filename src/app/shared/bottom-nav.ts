@@ -5,7 +5,7 @@ import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 
 /**
- * شريط التنقّل السفلي — يظهر فقط في الوجهات الرئيسية الأربع بعد تسجيل الدخول.
+ * شريط التنقّل السفلي — يظهر فقط في الوجهات الرئيسية الخمس بعد تسجيل الدخول.
  * (يختفي في شاشات النماذج والتفاصيل التي تملك زرّ رجوع خاصًّا بها.)
  */
 @Component({
@@ -45,6 +45,22 @@ import { AuthService } from '../core/auth.service';
             <path d="M12 6v14" />
           </svg>
           <span>الحلقات</span>
+        </a>
+        <a routerLink="/students" routerLinkActive="active">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="9" cy="8" r="3.2" />
+            <path d="M3.2 20c.8-3.4 3.3-5 5.8-5s5 1.6 5.8 5" />
+            <path d="M16.5 4.3a3.2 3.2 0 0 1 0 6.1M18.4 20c-.5-2.2-1.4-3.7-2.7-4.6" />
+          </svg>
+          <span>الطلاب</span>
         </a>
         <a routerLink="/schedule" routerLinkActive="active">
           <svg
@@ -92,7 +108,7 @@ export class BottomNavComponent {
     { initialValue: this.router.url.split(/[?#]/)[0] },
   );
 
-  private readonly tabs = ['/', '/circles', '/schedule', '/profile'];
+  private readonly tabs = ['/', '/circles', '/students', '/schedule', '/profile'];
 
   readonly visible = computed(() => this.auth.isLoggedIn() && this.tabs.includes(this.path()));
 }

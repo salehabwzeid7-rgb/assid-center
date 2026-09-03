@@ -29,11 +29,17 @@ export const routes: Routes = [
       },
       {
         path: 'circles/new',
-        loadComponent: () => import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),
+        loadComponent: () =>
+          import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),
       },
       {
         path: 'circle/:id/edit',
-        loadComponent: () => import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),
+        loadComponent: () =>
+          import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),
+      },
+      {
+        path: 'students',
+        loadComponent: () => import('./pages/students/students').then((m) => m.StudentsPage),
       },
       {
         path: 'students/new',
