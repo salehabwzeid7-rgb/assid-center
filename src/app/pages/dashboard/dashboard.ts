@@ -61,11 +61,11 @@ interface CircleCard {
         </div>
       </header>
 
-      <!-- البانر العلوي: الحلقة الحالية أو القادمة -->
+      <!-- البانر العلوي: الحلقة الجارية (عدّاد تنازليّ) أو الحلقة القادمة (تفاصيلها) -->
       @if (circleCard(); as card) {
         <a class="ops-card" [routerLink]="['/circle', card.circleId]">
           <p class="kicker" [class.live]="card.mode === 'active'">
-            {{ card.mode === 'active' ? '● حلقة حالية الآن' : 'الحلقة القادمة' }} · {{ todayLabel }}
+            {{ card.mode === 'active' ? '● حلقة جارية الآن' : 'الحلقة القادمة' }} · {{ todayLabel }}
           </p>
           <div class="ops-circle">
             <span class="ops-circle-name">{{ card.circleName }}</span>
@@ -73,12 +73,26 @@ interface CircleCard {
               <span class="ops-tag">{{ typeSingular[card.type] }}</span>
             }
           </div>
-          <p class="ops-meta">
-            ⏰ {{ fmtRange(card.session.fromTime, card.session.toTime) }}
-            @if (cardHint()) {
-              <br />{{ cardHint() }}
-            }
-          </p>
+
+          @if (card.mode === 'active') {
+            <!-- عدّاد تنازليّ حيّ حتى نهاية الحلقة -->
+            <div class="ops-countdown">
+              <span class="ocd-label">تنتهي بعد</span>
+              <span class="ocd-time" aria-live="polite">{{ countdownLabel() }}</span>
+              <span class="ocd-sub">
+                من {{ fmt12(card.session.fromTime) }} إلى {{ fmt12(card.session.toTime) }}
+              </span>
+            </div>
+          } @else {
+            <p class="ops-meta">
+              📅 {{ cardDay() }}<br />
+              ⏰ من {{ fmt12(card.session.fromTime) }} إلى {{ fmt12(card.session.toTime) }}
+              @if (cardHint()) {
+                <br />{{ cardHint() }}
+              }
+            </p>
+          }
+
           <span class="ops-btn">
             {{ card.mode === 'active' ? 'دخول الحلقة الآن' : 'عرض تفاصيل الحلقة' }} ‹
           </span>
@@ -234,7 +248,7 @@ export class DashboardPage {
   readonly typeSingular = CIRCLE_TYPE_SINGULAR;
   readonly dmy = dmy;
   readonly weekdayAr = weekdayAr;
-  readonly fmtRange = fmtRange;
+  readonly fmt12 = fmt12;
   readonly todayLabel = `${weekdayAr(today())} · ${dmy(today())}`;
 
   readonly circles = this.data.circles(this.destroyRef);
@@ -242,7 +256,7 @@ export class DashboardPage {
   private readonly sessions = this.data.allSessions(this.destroyRef);
   private readonly attendance = this.data.allAttendance(this.destroyRef);
 
-  /** لحظة حيّة تُحدَّث كل ٣٠ ثانية لإعادة تقييم «حالية / قادمة». */
+  /** لحظة حيّة تُحدَّث كل ثانية — لتشغيل العدّاد التنازليّ وإعادة تقييم «جارية / قادمة». */
   private readonly now = signal(Date.now());
 
   constructor() {
@@ -251,7 +265,7 @@ export class DashboardPage {
       const cs = this.circles();
       if (cs?.length) void this.scheduler.sync(cs);
     });
-    const timer = setInterval(() => this.now.set(Date.now()), 30_000);
+    const timer = setInterval(() => this.now.set(Date.now()), 1_000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
   }
 
@@ -323,19 +337,40 @@ export class DashboardPage {
     return future ? build(future, 'upcoming') : null;
   });
 
-  /** سطر توضيحيّ أسفل الوقت: «تنتهي الساعة …» أو «تبدأ بعد …». */
-  readonly cardHint = computed(() => {
+  /**
+   * العدّاد التنازليّ الحيّ للحلقة الجارية — الزمن المتبقّي حتى وقت انتهائها.
+   * الصيغة: «س:دد:ثث» عند تجاوز الساعة، وإلا «دد:ثث».
+   */
+  readonly countdownLabel = computed(() => {
+    const card = this.circleCard();
+    if (!card || card.mode !== 'active') return '';
+    const w = sessionWindow(card.session, new Date(this.now()));
+    if (!w.closesAt) return '';
+    let sec = Math.max(0, Math.round((w.closesAt.getTime() - this.now()) / 1000));
+    const h = Math.floor(sec / 3600);
+    sec -= h * 3600;
+    const m = Math.floor(sec / 60);
+    sec -= m * 60;
+    const p = (n: number) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+  });
+
+  /** يوم الحلقة القادمة ونصّه: «اليوم» / «غدًا» / اسم اليوم + التاريخ. */
+  readonly cardDay = computed(() => {
     const card = this.circleCard();
     if (!card) return '';
-    const nowDate = new Date(this.now());
-    const w = sessionWindow(card.session, nowDate);
-    if (card.mode === 'active') {
-      return w.closesAt ? `جارية الآن · تنتهي الساعة ${fmt12(card.session.toTime)}` : 'جارية الآن';
-    }
-    if (card.session.date !== today()) {
-      return `${weekdayAr(card.session.date)} ${dmy(card.session.date)}`;
-    }
-    return w.opensAt ? `تبدأ ${untilLabel(w.opensAt, nowDate)}` : 'اليوم';
+    const d = card.session.date;
+    const label = `${weekdayAr(d)} ${dmy(d)}`;
+    if (d === today()) return `اليوم · ${label}`;
+    return label;
+  });
+
+  /** سطر توضيحيّ إضافيّ أسفل التفاصيل: «تبدأ بعد …». */
+  readonly cardHint = computed(() => {
+    const card = this.circleCard();
+    if (!card || card.mode !== 'upcoming') return '';
+    const w = sessionWindow(card.session, new Date(this.now()));
+    return w.opensAt ? `تبدأ ${untilLabel(w.opensAt, new Date(this.now()))}` : '';
   });
 
   /** حلقات مفتوحة أو مجدولة اليوم فما بعد — مرتّبة تصاعديًّا، حتى ٣. */

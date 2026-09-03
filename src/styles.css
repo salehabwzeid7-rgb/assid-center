@@ -1212,7 +1212,30 @@ a.ops-card:active {
   margin: 0 0 15px;
   font-size: 0.86rem;
   color: rgba(255, 255, 255, 0.85);
-  line-height: 1.7;
+  line-height: 1.8;
+}
+/* العدّاد التنازليّ للحلقة الجارية */
+.ops-countdown {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 15px;
+}
+.ocd-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+}
+.ocd-time {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.ocd-sub {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.72);
 }
 .ops-btn {
   width: 100%;
