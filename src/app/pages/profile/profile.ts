@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import { ResetService } from '../../core/reset.service';
+import { UpdateService } from '../../core/update.service';
 import { THEME_LABELS, THEME_ORDER, THEME_SWATCHES, ThemeService } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -63,6 +64,21 @@ import { PageHeaderComponent } from '../../shared/page-header';
           (click)="save()"
         >
           حفظ البيانات
+        </button>
+      </div>
+
+      <div class="section-title">التحديثات</div>
+      <div class="card">
+        <p class="muted" style="margin-top:0;font-size:.86rem">
+          يتحدّث التطبيق تلقائيًّا عند فتحه. اضغط للتحقّق الآن.
+        </p>
+        <button
+          class="btn btn-ghost btn-block"
+          type="button"
+          [disabled]="checkingUpdate()"
+          (click)="checkUpdate()"
+        >
+          {{ checkingUpdate() ? 'جارٍ التحقّق…' : 'التحقّق من وجود تحديث' }}
         </button>
       </div>
 
@@ -169,12 +185,24 @@ export class ProfilePage {
   readonly theme = inject(ThemeService);
   readonly notify = inject(NotifyService);
   private reset = inject(ResetService);
+  private update = inject(UpdateService);
   private router = inject(Router);
 
   readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;
   readonly swatches = THEME_SWATCHES;
   readonly wiping = signal(false);
+  readonly checkingUpdate = signal(false);
+
+  /** تحقّق يدويّ من وجود تحديث مباشر (OTA). */
+  async checkUpdate(): Promise<void> {
+    this.checkingUpdate.set(true);
+    try {
+      await this.update.check(false);
+    } finally {
+      this.checkingUpdate.set(false);
+    }
+  }
 
   name = this.auth.teacher()?.name ?? '';
   phone = this.auth.teacher()?.phone ?? '';
