@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:prod)",
+      "Bash(npm run format)",
+      "Bash(npm run format:check)",
+      "Bash(npm run version:bump:*)",
+      "Bash(npm run release:*)",
+      "Bash(node scripts/bump-version.mjs:*)",
+      "Bash(node scripts/release.mjs:*)",
+      "Bash(node scripts/build-apk.mjs:*)",
+      "Bash(npx cap sync android)",
+      "Bash(git status)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)",
+      "Bash(git log:*)"
+    ]
+  }
+}

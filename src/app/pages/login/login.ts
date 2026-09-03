@@ -21,7 +21,11 @@ type Mode = 'login' | 'register';
           <button type="button" [class.active]="mode() === 'login'" (click)="setMode('login')">
             تسجيل الدخول
           </button>
-          <button type="button" [class.active]="mode() === 'register'" (click)="setMode('register')">
+          <button
+            type="button"
+            [class.active]="mode() === 'register'"
+            (click)="setMode('register')"
+          >
             حساب جديد
           </button>
         </div>

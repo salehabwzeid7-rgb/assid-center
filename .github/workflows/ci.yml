@@ -1,0 +1,29 @@
+# فحص متواصل — يعمل على كلّ دفع أو Pull Request إلى master/main.
+# يتأكّد أنّ الشيفرة منسّقة وأنّ بناء الإنتاج ينجح قبل أيّ إصدار.
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: تثبيت الاعتماديّات
+        run: npm ci
+
+      - name: فحص التنسيق (Prettier)
+        run: npm run format:check
+
+      - name: بناء الإنتاج
+        run: npm run build:prod

@@ -16,10 +16,18 @@ import { NotifyService } from '../core/notify.service';
         <div class="toast" [class]="'t-' + t.kind" (click)="notify.dismiss(t.id)">
           <span class="ico">
             @switch (t.kind) {
-              @case ('success') { ✓ }
-              @case ('error') { ✕ }
-              @case ('loading') { <span class="spin"></span> }
-              @default { ℹ }
+              @case ('success') {
+                ✓
+              }
+              @case ('error') {
+                ✕
+              }
+              @case ('loading') {
+                <span class="spin"></span>
+              }
+              @default {
+                ℹ
+              }
             }
           </span>
           <span class="msg">{{ t.text }}</span>

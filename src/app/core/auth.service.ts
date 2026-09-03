@@ -57,7 +57,11 @@ export class AuthService {
 
   /** تسجيل الدخول ببريد/اسم وكلمة مرور */
   async login(identifier: string, password: string): Promise<void> {
-    const cred = await signInWithEmailAndPassword(auth, this.identifierToEmail(identifier), password);
+    const cred = await signInWithEmailAndPassword(
+      auth,
+      this.identifierToEmail(identifier),
+      password,
+    );
     await this.loadOrCreateTeacher(cred.user);
   }
 

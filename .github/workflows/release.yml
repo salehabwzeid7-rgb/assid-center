@@ -1,0 +1,111 @@
+# إصدار APK تلقائيًّا — يعمل عند دفع وسم بصيغة vX.Y.Z (أو يدويًّا من تبويب Actions).
+# ينتج APK للتجربة (موقّع بمفتاح debug — قابل للتثبيت مباشرةً) ويرفعه إلى GitHub Releases.
+#
+# لإصدار نسخة موقّعة رسميًّا: أضِف أسرار المستودع
+#   ANDROID_KEYSTORE_BASE64 , ANDROID_KEYSTORE_PASSWORD , ANDROID_KEY_ALIAS , ANDROID_KEY_PASSWORD
+# وسيبني السير الآليّ assembleRelease موقّعًا بدل assembleDebug.
+name: إصدار APK
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {} # تشغيل يدويّ من تبويب Actions — يبني APK كأثر بناء دون نشر إصدار
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: تجهيز Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: تثبيت منصّة وأدوات البناء المطلوبة
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: تثبيت الاعتماديّات
+        run: npm ci
+
+      - name: بناء الويب + مزامنة Capacitor
+        run: |
+          npm run build:prod
+          npx cap sync android
+
+      - name: هل توجد أسرار توقيع؟
+        id: signing
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: تجهيز مفتاح التوقيع (للإصدار الموقّع)
+        if: steps.signing.outputs.release == 'true'
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.keystore
+          cat >> android/app/build.gradle <<'EOF'
+          android {
+            signingConfigs {
+              release {
+                storeFile file('release.keystore')
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+              }
+            }
+            buildTypes { release { signingConfig signingConfigs.release } }
+          }
+          EOF
+
+      - name: بناء APK
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          if [ "${{ steps.signing.outputs.release }}" = "true" ]; then
+            ./gradlew --no-daemon assembleRelease
+            echo "APK_PATH=android/app/build/outputs/apk/release" >> "$GITHUB_ENV"
+          else
+            ./gradlew --no-daemon assembleDebug
+            echo "APK_PATH=android/app/build/outputs/apk/debug" >> "$GITHUB_ENV"
+          fi
+
+      - name: تسمية الـ APK باسم الإصدار
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          SRC=$(ls $APK_PATH/*.apk | head -n1)
+          mkdir -p out
+          cp "$SRC" "out/AssidCenter-Teacher-v${VER}.apk"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+
+      - name: رفع كأثر بناء
+        uses: actions/upload-artifact@v4
+        with:
+          name: AssidCenter-Teacher-v${{ env.VER }}
+          path: out/*.apk
+
+      - name: نشر إصدار GitHub (عند وجود وسم)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: مركز أسيد v${{ env.VER }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: out/*.apk

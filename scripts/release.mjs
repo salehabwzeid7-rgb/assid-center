@@ -1,0 +1,80 @@
+/**
+ * إصدار نسخة جديدة من «مركز أسيد» ودفعها إلى GitHub.
+ *
+ *   node scripts/release.mjs [patch|minor|major|X.Y.Z] [--push] [--no-verify]
+ *
+ * الخطوات:
+ *   1. رفع رقم الإصدار (package.json + android/app/build.gradle)  ← scripts/bump-version.mjs
+ *   2. تنسيق الشيفرة + بناء الويب للإنتاج (تحقّق سريع أنّ كلّ شيء يترجم)
+ *   3. مزامنة Capacitor مع مجلّد android
+ *   4. commit + وسم Git «vX.Y.Z»
+ *   5. مع --push: دفع الفرع والوسم إلى origin → يُشغّل ذلك workflow «إصدار APK»
+ *      في GitHub Actions فيُبنى الـ APK ويُرفَع إلى «Releases» تلقائيًّا.
+ *
+ * بلا remote مضبوط، يقف السكربت عند الخطوة ٤ ويطبع تعليمات الربط.
+ */
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+
+const root = resolve(import.meta.dirname, '..');
+const args = process.argv.slice(2);
+const level = args.find((a) => !a.startsWith('--')) || 'patch';
+const doPush = args.includes('--push');
+const noVerify = args.includes('--no-verify');
+
+const run = (cmd, cmdArgs, opts = {}) =>
+  execFileSync(cmd, cmdArgs, {
+    cwd: root,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    ...opts,
+  });
+const out = (cmd, cmdArgs) =>
+  execFileSync(cmd, cmdArgs, {
+    cwd: root,
+    encoding: 'utf8',
+    shell: process.platform === 'win32',
+  }).trim();
+
+// تأكيد أنّ شجرة العمل نظيفة (عدا ما سنغيّره)
+const dirty = out('git', ['status', '--porcelain']);
+if (dirty) {
+  console.error('⚠️  هناك تغييرات غير مُلتزَمة. التزمها أو تراجع عنها قبل الإصدار:\n' + dirty);
+  process.exit(1);
+}
+
+console.error('\n▶ ١) رفع رقم الإصدار…');
+const version = out('node', ['scripts/bump-version.mjs', level]);
+const tag = `v${version}`;
+
+console.error('\n▶ ٢) تنسيق + بناء الإنتاج…');
+run('npm', ['run', 'format']);
+run('npm', ['run', 'build:prod']);
+
+console.error('\n▶ ٣) مزامنة Capacitor…');
+run('npx', ['cap', 'sync', 'android']);
+
+console.error('\n▶ ٤) commit + وسم…');
+run('git', ['add', '-A']);
+run('git', ['commit', ...(noVerify ? ['--no-verify'] : []), '-m', `chore(release): ${tag}`]);
+run('git', ['tag', '-a', tag, '-m', `Release ${tag}`]);
+
+const hasRemote = out('git', ['remote']).length > 0;
+if (doPush && hasRemote) {
+  console.error('\n▶ ٥) دفع إلى origin (يُشغّل بناء APK على GitHub)…');
+  const branch = out('git', ['branch', '--show-current']);
+  run('git', ['push', 'origin', branch]);
+  run('git', ['push', 'origin', tag]);
+  console.error(`\n✅ تمّ. تابِع البناء في: صفحة Actions ثمّ Releases للوسم ${tag}.`);
+} else {
+  console.error(`\n✅ أُنشئ الالتزام والوسم ${tag} محليًّا.`);
+  if (!hasRemote) {
+    console.error(
+      'ℹ️  لا يوجد remote. اربط المستودع مرّة واحدة ثمّ ادفع:\n' +
+        '   gh repo create assid-center --private --source=. --remote=origin\n' +
+        '   git push -u origin master && git push origin --tags',
+    );
+  } else {
+    console.error('ℹ️  أضِف --push للدفع تلقائيًّا، أو نفّذ:  git push origin HEAD --follow-tags');
+  }
+}
