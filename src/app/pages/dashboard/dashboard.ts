@@ -1,11 +1,26 @@
-import { Component, DestroyRef, computed, effect, inject } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { DataService, today } from '../../core/data.service';
 import { dmy, relativeDay, weekdayAr } from '../../core/format';
-import { fmtRange } from '../../core/time';
+import { fmt12, fmtRange, sessionWindow, untilLabel } from '../../core/time';
 import { SchedulerService } from '../../core/scheduler.service';
-import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
+import {
+  CIRCLE_TYPE_SINGULAR,
+  SESSION_STATUS_LABELS,
+  type CircleType,
+  type Session,
+} from '../../core/models';
+
+/** بطاقة الحلقة المعروضة أعلى الرئيسية */
+interface CircleCard {
+  session: Session;
+  circleId: string;
+  circleName: string;
+  type: CircleType | null;
+  /** active = حلقة جارية الآن ضمن وقتها · upcoming = الحلقة القادمة */
+  mode: 'active' | 'upcoming';
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -18,7 +33,7 @@ import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
           <h1>أهلاً، {{ firstName() }} 👋</h1>
         </div>
         <div class="greet-actions">
-          <button class="bell" type="button" routerLink="/schedule" aria-label="الحصص المفتوحة">
+          <button class="bell" type="button" routerLink="/schedule" aria-label="الحلقات المفتوحة">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -46,23 +61,35 @@ import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
         </div>
       </header>
 
-      <!-- البانر العلوي: ملخّص المعلّم لليوم -->
-      <section class="ops-card">
-        <p class="kicker">ملخّص اليوم · {{ todayLabel }}</p>
-        <div class="ops-stats">
-          <div>
-            <span class="v">{{ activeToday() }}</span>
-            <span class="k">حلقة نشطة اليوم</span>
+      <!-- البانر العلوي: الحلقة الحالية أو القادمة -->
+      @if (circleCard(); as card) {
+        <a class="ops-card" [routerLink]="['/circle', card.circleId]">
+          <p class="kicker" [class.live]="card.mode === 'active'">
+            {{ card.mode === 'active' ? '● حلقة حالية الآن' : 'الحلقة القادمة' }} · {{ todayLabel }}
+          </p>
+          <div class="ops-circle">
+            <span class="ops-circle-name">{{ card.circleName }}</span>
+            @if (card.type) {
+              <span class="ops-tag">{{ typeSingular[card.type] }}</span>
+            }
           </div>
-          <div>
-            <span class="v">{{ overallRate() === null ? '—' : overallRate() + '٪' }}</span>
-            <span class="k">معدّل الحضور العام</span>
-          </div>
-        </div>
-        <button class="ops-btn" type="button" (click)="goToSessions()">
-          {{ openToday() ? 'متابعة حصص اليوم' : 'بدء حصص اليوم' }} ‹
-        </button>
-      </section>
+          <p class="ops-meta">
+            ⏰ {{ fmtRange(card.session.fromTime, card.session.toTime) }}
+            @if (cardHint()) {
+              <br />{{ cardHint() }}
+            }
+          </p>
+          <span class="ops-btn">
+            {{ card.mode === 'active' ? 'دخول الحلقة الآن' : 'عرض تفاصيل الحلقة' }} ‹
+          </span>
+        </a>
+      } @else {
+        <section class="ops-card">
+          <p class="kicker">{{ todayLabel }}</p>
+          <p class="ops-meta" style="margin-bottom:0">لا توجد حلقات مجدولة اليوم.</p>
+          <a class="ops-btn" routerLink="/circles" style="margin-top:14px">كل الحلقات ‹</a>
+        </section>
+      }
 
       <div class="stat-row">
         <div class="stat">
@@ -161,7 +188,7 @@ import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
       </div>
 
       <div class="row-between section-title">
-        <span>الحصص القادمة</span>
+        <span>الحلقات القادمة</span>
         <a routerLink="/schedule">عرض الكل</a>
       </div>
 
@@ -170,7 +197,7 @@ import { SESSION_STATUS_LABELS, type Session } from '../../core/models';
       } @else if (upcoming()!.length === 0) {
         <div class="empty">
           <span class="icon">🗓️</span>
-          لا توجد حصص قادمة — ابدأ حصّة من صفحة الحلقة.
+          لا توجد حلقات قادمة مجدولة.
         </div>
       } @else {
         @for (s of upcoming(); track s.id) {
@@ -201,12 +228,13 @@ export class DashboardPage {
   private destroyRef = inject(DestroyRef);
   private data = inject(DataService);
   private auth = inject(AuthService);
-  private router = inject(Router);
   private scheduler = inject(SchedulerService);
 
   readonly statusLabels = SESSION_STATUS_LABELS;
+  readonly typeSingular = CIRCLE_TYPE_SINGULAR;
   readonly dmy = dmy;
   readonly weekdayAr = weekdayAr;
+  readonly fmtRange = fmtRange;
   readonly todayLabel = `${weekdayAr(today())} · ${dmy(today())}`;
 
   readonly circles = this.data.circles(this.destroyRef);
@@ -214,12 +242,17 @@ export class DashboardPage {
   private readonly sessions = this.data.allSessions(this.destroyRef);
   private readonly attendance = this.data.allAttendance(this.destroyRef);
 
+  /** لحظة حيّة تُحدَّث كل ٣٠ ثانية لإعادة تقييم «حالية / قادمة». */
+  private readonly now = signal(Date.now());
+
   constructor() {
-    // جدولة تلقائية للحصص القادمة عند تحميل قائمة الحلقات
+    // جدولة تلقائية للحلقات القادمة عند تحميل قائمة الحلقات
     effect(() => {
       const cs = this.circles();
       if (cs?.length) void this.scheduler.sync(cs);
     });
+    const timer = setInterval(() => this.now.set(Date.now()), 30_000);
+    this.destroyRef.onDestroy(() => clearInterval(timer));
   }
 
   readonly firstName = computed(
@@ -239,27 +272,73 @@ export class DashboardPage {
     () => this.sessions()?.filter((s) => s.status === 'open').length ?? 0,
   );
 
-  /** عدد الحلقات التي لها حصّة بتاريخ اليوم. */
-  readonly activeToday = computed(() => {
-    const t = today();
-    return new Set((this.sessions() ?? []).filter((s) => s.date === t).map((s) => s.circleId)).size;
-  });
-
-  readonly openToday = computed(() =>
-    (this.sessions() ?? []).some((s) => s.date === today() && s.status === 'open'),
-  );
-
   private rate(rows: { status: string }[] | undefined): number | null {
     if (!rows || rows.length === 0) return null;
     const good = rows.filter((a) => a.status === 'present' || a.status === 'late').length;
     return Math.round((good / rows.length) * 100);
   }
-  readonly overallRate = computed(() => this.rate(this.attendance()));
   readonly todayRate = computed(() =>
     this.rate(this.attendance()?.filter((a) => a.date === today())),
   );
 
-  /** حصص مفتوحة أو مجدولة اليوم فما بعد — مرتّبة تصاعديًّا، حتى ٣. */
+  /**
+   * البطاقة الخضراء أعلى الرئيسية:
+   *  ١) حلقة جارية الآن (وقتها الحاليّ ضمن نافذة الحلقة) — mode 'active'.
+   *  ٢) وإلا أقرب حلقة قادمة اليوم — mode 'upcoming'.
+   *  ٣) وإلا أقرب حلقة مجدولة في الأيام التالية — mode 'upcoming'.
+   */
+  readonly circleCard = computed<CircleCard | null>(() => {
+    const all = this.sessions();
+    const cs = this.circles();
+    if (!all || !cs) return null;
+    const t = today();
+    const nowDate = new Date(this.now());
+    const build = (s: Session, mode: 'active' | 'upcoming'): CircleCard => {
+      const c = cs.find((x) => x.id === s.circleId);
+      return {
+        session: s,
+        circleId: s.circleId,
+        circleName: c?.name ?? 'الحلقة',
+        type: c?.type ?? null,
+        mode,
+      };
+    };
+
+    const todaySessions = all
+      .filter((s) => s.date === t && s.status !== 'closed')
+      .sort((a, b) => (a.fromTime ?? '').localeCompare(b.fromTime ?? ''));
+
+    const active = todaySessions.find((s) => sessionWindow(s, nowDate).state === 'now');
+    if (active) return build(active, 'active');
+
+    const next = todaySessions.find((s) => sessionWindow(s, nowDate).state === 'before');
+    if (next) return build(next, 'upcoming');
+
+    const future = all
+      .filter((s) => s.status === 'scheduled' && s.date > t)
+      .sort(
+        (a, b) =>
+          a.date.localeCompare(b.date) || (a.fromTime ?? '').localeCompare(b.fromTime ?? ''),
+      )[0];
+    return future ? build(future, 'upcoming') : null;
+  });
+
+  /** سطر توضيحيّ أسفل الوقت: «تنتهي الساعة …» أو «تبدأ بعد …». */
+  readonly cardHint = computed(() => {
+    const card = this.circleCard();
+    if (!card) return '';
+    const nowDate = new Date(this.now());
+    const w = sessionWindow(card.session, nowDate);
+    if (card.mode === 'active') {
+      return w.closesAt ? `جارية الآن · تنتهي الساعة ${fmt12(card.session.toTime)}` : 'جارية الآن';
+    }
+    if (card.session.date !== today()) {
+      return `${weekdayAr(card.session.date)} ${dmy(card.session.date)}`;
+    }
+    return w.opensAt ? `تبدأ ${untilLabel(w.opensAt, nowDate)}` : 'اليوم';
+  });
+
+  /** حلقات مفتوحة أو مجدولة اليوم فما بعد — مرتّبة تصاعديًّا، حتى ٣. */
   readonly upcoming = computed<Session[] | undefined>(() => {
     const all = this.sessions();
     if (all === undefined) return undefined;
@@ -269,11 +348,6 @@ export class DashboardPage {
       .sort((a, b) => a.date.localeCompare(b.date) || b.createdAt - a.createdAt)
       .slice(0, 3);
   });
-
-  goToSessions(): void {
-    const open = (this.sessions() ?? []).find((s) => s.date === today() && s.status === 'open');
-    void this.router.navigate(open ? ['/session', open.id] : ['/circles']);
-  }
 
   private circle(id: string) {
     return this.circles()?.find((c) => c.id === id);

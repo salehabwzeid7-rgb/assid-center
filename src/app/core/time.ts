@@ -87,12 +87,13 @@ export function untilLabel(target: Date, now: Date = new Date()): string {
   mins -= days * 1440;
   const hrs = Math.floor(mins / 60);
   mins -= hrs * 60;
-  const word = (n: number, one: string, two: string, few: string) =>
-    n === 1 ? one : n === 2 ? two : `${n} ${few}`;
+  // تصريف عربيّ: 1 مفرد · 2 مثنّى · 3-10 جمع · 11+ مفرد منصوب
+  const word = (n: number, one: string, two: string, few: string, many: string) =>
+    n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`;
   const parts: string[] = [];
-  if (days) parts.push(word(days, 'يوم', 'يومين', 'أيام'));
-  if (hrs) parts.push(word(hrs, 'ساعة', 'ساعتين', 'ساعات'));
-  if (mins && !days) parts.push(word(mins, 'دقيقة', 'دقيقتين', 'دقائق'));
+  if (days) parts.push(word(days, 'يوم', 'يومين', 'أيام', 'يومًا'));
+  if (hrs) parts.push(word(hrs, 'ساعة', 'ساعتين', 'ساعات', 'ساعة'));
+  if (mins && !days) parts.push(word(mins, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة'));
   return 'بعد ' + parts.join(' و');
 }
 

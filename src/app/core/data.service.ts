@@ -380,25 +380,34 @@ export class DataService {
     const target = new Set(dates);
     const t = today();
 
+    const from = circle.fromTime ?? '';
+    const to = circle.toTime ?? '';
+
     const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circle.id)));
     const existingDates = new Set<string>();
     const stale: typeof snap.docs = [];
+    const retime: typeof snap.docs = [];
     for (const d of snap.docs) {
       const s = d.data() as Session;
       existingDates.add(s.date);
-      // جلسة مجدولة مستقبليّة لم تعُد ضمن الأيام المختارة → تُلغى
-      if (s.status === 'scheduled' && s.date >= t && !target.has(s.date)) stale.push(d);
+      if (s.status === 'scheduled' && s.date >= t) {
+        // جلسة مجدولة مستقبليّة لم تعُد ضمن الأيام المختارة → تُلغى
+        if (!target.has(s.date)) stale.push(d);
+        // أو تغيّر توقيت الحلقة → يُحدَّث على الجلسة المجدولة
+        else if (s.fromTime !== from || s.toTime !== to) retime.push(d);
+      }
     }
     const missing = dates.filter((d) => !existingDates.has(d));
 
     await Promise.all([
       ...stale.map((d) => deleteDoc(d.ref)),
+      ...retime.map((d) => updateDoc(d.ref, { fromTime: from, toTime: to })),
       ...missing.map((date) =>
         setDoc(this.ref(COL.sessions, `${circle.id}_${date}`), {
           circleId: circle.id,
           date,
-          fromTime: circle.fromTime ?? '',
-          toTime: circle.toTime ?? '',
+          fromTime: from,
+          toTime: to,
           status: 'scheduled' as SessionStatus,
           createdAt: Date.now(),
         }),
