@@ -3,15 +3,27 @@
   <head>
     <meta charset="utf-8" />
     <title>مركز أسيد لتحفيظ القرآن الكريم</title>
+    <script>
+      // تطبيق السمة المحفوظة قبل إقلاع Angular (لتفادي وميض الألوان)
+      try {
+        var t = localStorage.getItem('assid-center:theme');
+        document.documentElement.setAttribute(
+          'data-app-theme',
+          t === 'zumurrud' ? 'zumurrud' : 'misk',
+        );
+      } catch (e) {
+        document.documentElement.setAttribute('data-app-theme', 'misk');
+      }
+    </script>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#0e7d51" />
+    <meta name="theme-color" content="#3b6b4a" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Amiri+Quran&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&family=Amiri+Quran&display=swap"
       rel="stylesheet"
     />
   </head>

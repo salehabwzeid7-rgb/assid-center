@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { Location } from '@angular/common';
 import { App as CapApp } from '@capacitor/app';
+import { ThemeService } from './core/theme.service';
 import { BottomNavComponent } from './shared/bottom-nav';
 import { ToastHostComponent } from './shared/toast-host';
 
@@ -18,6 +19,8 @@ import { ToastHostComponent } from './shared/toast-host';
 })
 export class App {
   private location = inject(Location);
+  // تهيئة السمة مبكرًا (تُطبَّق على <html>)
+  private theme = inject(ThemeService);
 
   constructor() {
     CapApp.addListener('backButton', ({ canGoBack }) => {
