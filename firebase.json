@@ -52,6 +52,17 @@
           },
           { "key": "Cache-Control", "value": "no-cache, max-age=0" }
         ]
+      },
+      {
+        "source": "/ota/bundle-*.zip",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "source": "/ota/latest.json",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0" },
+          { "key": "Access-Control-Allow-Origin", "value": "*" }
+        ]
       }
     ]
   },

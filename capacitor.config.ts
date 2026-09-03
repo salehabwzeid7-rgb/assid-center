@@ -8,6 +8,14 @@ const config: CapacitorConfig = {
   android: {
     allowMixedContent: false,
   },
+  plugins: {
+    // تحديث مباشر (OTA) — الفحص والتفعيل يُداران يدويًّا من UpdateService
+    CapacitorUpdater: {
+      autoUpdate: false,
+      resetWhenUpdate: true,
+      appReadyTimeout: 15000,
+    },
+  },
 };
 
 export default config;

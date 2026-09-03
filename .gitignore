@@ -56,6 +56,8 @@ Thumbs.db
 /apk/
 # نسخة APK المُجهَّزة للنشر على Firebase Hosting (تُبنى وقت النشر)
 /public-apk/*.bin
+# حزم التحديث المباشر (OTA) — تُبنى وقت النشر
+/public-apk/ota/
 
 # أسرار وتوقيع — لا تُودَع في Git أبدًا
 *.keystore

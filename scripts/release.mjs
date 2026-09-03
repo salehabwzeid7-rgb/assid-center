@@ -70,8 +70,16 @@ if (doPush && hasRemote) {
   run('git', ['push', 'origin', branch]);
   run('git', ['push', 'origin', tag]);
 
+  // نشر تحديث مباشر (OTA) — يصل الأجهزة المُثبَّتة فورًا دون إعادة تنزيل APK
+  console.error('\n▶ ٦) نشر تحديث مباشر (OTA) على Firebase Hosting…');
+  try {
+    run('node', ['scripts/publish-ota.mjs']);
+  } catch {
+    console.error('تعذّر نشر التحديث المباشر (تحقّق من firebase login). لا يؤثّر على GitHub Releases.');
+  }
+
   // نشر APK محدَّث على Firebase Hosting (رابط التحميل المباشر assid-center.web.app/download)
-  console.error('\n▶ ٦) بناء APK ونشره على Firebase Hosting…');
+  console.error('\n▶ ٧) بناء APK ونشره على Firebase Hosting…');
   try {
     run('node', ['scripts/publish-apk.mjs', 'debug']);
   } catch {
@@ -82,6 +90,7 @@ if (doPush && hasRemote) {
   }
 
   console.error(`\n✅ تمّ الإصدار ${tag}:`);
+  console.error('   • تحديث مباشر (OTA): يصل الأجهزة المُثبَّتة تلقائيًّا عند فتح التطبيق.');
   console.error('   • GitHub Releases: يُبنى الآن — راجِع تبويب Actions ثمّ صفحة Releases.');
   console.error('   • رابط مباشر (فوريّ):  https://assid-center.web.app/download');
 } else {
