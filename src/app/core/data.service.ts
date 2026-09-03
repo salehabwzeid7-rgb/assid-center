@@ -11,6 +11,7 @@ import {
   onSnapshot,
   query,
   where,
+  writeBatch,
   type CollectionReference,
   type Query,
   type DocumentData,
@@ -515,6 +516,35 @@ export class DataService {
 
   async deleteEvaluation(id: string): Promise<void> {
     await deleteDoc(this.ref(COL.evaluations, id));
+  }
+
+  // ---------- حذف شامل (مرحلة الاختبار فقط) ----------
+
+  /**
+   * يحذف كلّ مستندات مجموعات البيانات السبع من Firestore (الحلقات، الطلاب،
+   * الجلسات، الحضور، التسميع، التقييم، السرد). لا يمسّ مجموعة teachers ولا
+   * حسابات المصادقة. يعمل على دفعات ≤ ٤٠٠ مستند.
+   * يُرجع إجماليّ عدد المستندات المحذوفة.
+   */
+  async wipeAllData(): Promise<number> {
+    let deleted = 0;
+    for (const name of Object.values(COL)) {
+      // نكرّر لأنّ getDocs قد يعيد صفحةً واحدة كبيرة؛ الحذف على دفعات
+      // ثمّ إعادة الجلب حتى تفرغ المجموعة تمامًا.
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const snap = await getDocs(query(this.col(name)));
+        if (snap.empty) break;
+        for (let i = 0; i < snap.docs.length; i += 400) {
+          const batch = writeBatch(db);
+          const chunk = snap.docs.slice(i, i + 400);
+          chunk.forEach((d) => batch.delete(d.ref));
+          await batch.commit();
+          deleted += chunk.length;
+        }
+      }
+    }
+    return deleted;
   }
 }
 

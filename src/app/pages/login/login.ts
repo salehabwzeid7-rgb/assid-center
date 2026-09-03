@@ -78,9 +78,46 @@ type Mode = 'login' | 'register';
               type="button"
               class="pw-toggle"
               [attr.aria-label]="showPw() ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'"
+              [attr.aria-pressed]="showPw()"
               (click)="showPw.set(!showPw())"
             >
-              {{ showPw() ? '🙈' : '👁' }}
+              @if (showPw()) {
+                <!-- عين مشطوبة — إخفاء -->
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M10.7 5.1A10.6 10.6 0 0 1 12 5c6.3 0 9.9 6.4 9.9 6.4a10.7 10.7 0 0 1-1.7 2.3"
+                  />
+                  <path
+                    d="M6.6 6.6A10.7 10.7 0 0 0 2.1 11.4a1 1 0 0 0 0 .7A10.4 10.4 0 0 0 12 19a9.9 9.9 0 0 0 5.4-1.6"
+                  />
+                  <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+                  <path d="m2 2 20 20" />
+                </svg>
+              } @else {
+                <!-- عين — إظهار -->
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M2.1 12.3a1 1 0 0 1 0-.7 10.4 10.4 0 0 1 19.8 0 1 1 0 0 1 0 .7 10.4 10.4 0 0 1-19.8 0Z"
+                  />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              }
             </button>
           </div>
           <div class="hint">6 خانات على الأقل، أرقام أو حروف مثل <bdi>123456</bdi></div>
@@ -113,20 +150,41 @@ type Mode = 'login' | 'register';
       .pw-wrap {
         position: relative;
       }
+      /* حقل كلمة المرور LTR والأيقونة على الحافة اليمنى فيزيائيًّا؛
+         نبعد نصّ الإدخال عنها بحشو أيمن كافٍ فلا يتداخل معها إطلاقًا. */
       .pw-wrap input {
-        padding-inline-end: 44px;
+        padding-right: 46px;
+        padding-left: 12px;
       }
       .pw-toggle {
         position: absolute;
-        inset-inline-end: 6px;
+        right: 4px;
         top: 50%;
         transform: translateY(-50%);
+        width: 38px;
+        height: 38px;
+        display: grid;
+        place-items: center;
         background: none;
         border: none;
-        font-size: 1.15rem;
-        line-height: 1;
-        padding: 6px;
+        border-radius: 8px;
+        color: var(--text-soft);
         cursor: pointer;
+        transition:
+          color var(--ease),
+          background var(--ease);
+      }
+      .pw-toggle:hover {
+        color: var(--text);
+        background: var(--surface-2);
+      }
+      .pw-toggle:active {
+        transform: translateY(-50%) scale(0.92);
+      }
+      .pw-toggle svg {
+        width: 20px;
+        height: 20px;
+        display: block;
       }
     `,
   ],
