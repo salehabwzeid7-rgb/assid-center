@@ -129,6 +129,72 @@ export const SURAHS: SurahInfo[] = [
   { n: 114, name: 'الناس', ayahs: 6 },
 ];
 
+/* ==========================================================================
+   الأجزاء الثلاثون — بداية كل جزء [رقم السورة, رقم الآية] برواية حفص.
+   ========================================================================== */
+
+export const JUZ_START: readonly (readonly [number, number])[] = [
+  [1, 1],
+  [2, 142],
+  [2, 253],
+  [3, 93],
+  [4, 24],
+  [4, 148],
+  [5, 82],
+  [6, 111],
+  [7, 88],
+  [8, 41],
+  [9, 93],
+  [11, 6],
+  [12, 53],
+  [15, 1],
+  [17, 1],
+  [18, 75],
+  [21, 1],
+  [23, 1],
+  [25, 21],
+  [27, 56],
+  [29, 46],
+  [33, 31],
+  [36, 28],
+  [39, 32],
+  [41, 47],
+  [46, 1],
+  [51, 31],
+  [58, 1],
+  [67, 1],
+  [78, 1],
+];
+
+/** سور كل جزء (الفهرس 0 = الجزء الأول) — قائمة أرقام السور التي يحويها الجزء كليًّا أو جزئيًّا. */
+export const JUZ_SURAHS: readonly (readonly number[])[] = JUZ_START.map((start, i) => {
+  const first = start[0];
+  const next = JUZ_START[i + 1];
+  // آخر سورة في الجزء: إن بدأ الجزء التالي من آية 1 فالسورة السابقة له، وإلا فسورة بدايته نفسها.
+  const last = next ? (next[1] > 1 ? next[0] : next[0] - 1) : 114;
+  const out: number[] = [];
+  for (let s = first; s <= last; s++) out.push(s);
+  return out;
+});
+
+/** أرقام الأجزاء التي تحوي سورةً ما (قد تقع سورة طويلة في أكثر من جزء). */
+export function juzOfSurah(n: number): number[] {
+  const res: number[] = [];
+  JUZ_SURAHS.forEach((list, i) => {
+    if (list.includes(n)) res.push(i + 1);
+  });
+  return res;
+}
+
+/** كل أرقام السور ضمن نطاق (من سورة → إلى سورة) شاملًا الطرفين. */
+export function surahsBetween(from: number, to: number): number[] {
+  const a = Math.min(from, to);
+  const b = Math.max(from, to);
+  const out: number[] = [];
+  for (let s = a; s <= b; s++) out.push(s);
+  return out;
+}
+
 /** الحصول على معلومات سورة برقمها */
 export function surah(n: number): SurahInfo | undefined {
   return SURAHS.find((s) => s.n === n);

@@ -14,6 +14,7 @@ import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { circleLabel, type Student } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
+import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
 /**
  * قسم «الطلاب» — صفحة مخصّصة بالكامل لإدارة الطلاب:
@@ -22,7 +23,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
  */
 @Component({
   selector: 'app-students',
-  imports: [FormsModule, RouterLink, PageHeaderComponent],
+  imports: [FormsModule, RouterLink, PageHeaderComponent, QuranTrackerComponent],
   template: `
     <app-page-header title="الطلاب" [back]="false" />
 
@@ -146,12 +147,17 @@ import { PageHeaderComponent } from '../../shared/page-header';
             </div>
 
             <div class="field">
-              <label for="m-plan">المقرّر الحالي</label>
+              <label>المقرّر الحالي (المحفوظ من القرآن)</label>
+              <app-quran-tracker [(value)]="m.memorizedSurahs" />
+            </div>
+
+            <div class="field">
+              <label for="m-plan">ملاحظة على الخطّة (اختياري)</label>
               <textarea
                 id="m-plan"
                 name="m-plan"
                 [(ngModel)]="m.currentPlan"
-                placeholder="مثال: حفظ جزء عمّ + مراجعة سورة البقرة"
+                placeholder="مثال: التركيز على إتقان جزء تبارك"
               ></textarea>
             </div>
 
@@ -206,7 +212,15 @@ export class StudentsPage {
   readonly saving = signal(false);
   readonly error = signal('');
 
-  m = { name: '', circleId: '', level: '', birthDate: '', guardianPhone: '', currentPlan: '' };
+  m = {
+    name: '',
+    circleId: '',
+    level: '',
+    birthDate: '',
+    guardianPhone: '',
+    currentPlan: '',
+    memorizedSurahs: [] as number[],
+  };
 
   constructor() {
     // تركيز حقل الاسم فور فتح النافذة
@@ -233,6 +247,7 @@ export class StudentsPage {
       birthDate: '',
       guardianPhone: '',
       currentPlan: '',
+      memorizedSurahs: [],
     };
     this.error.set('');
     this.adding.set(true);
@@ -258,6 +273,7 @@ export class StudentsPage {
           birthDate: this.m.birthDate || undefined,
           guardianPhone: this.m.guardianPhone.trim() || undefined,
           currentPlan: this.m.currentPlan.trim() || undefined,
+          memorizedSurahs: [...this.m.memorizedSurahs].sort((a, b) => a - b),
           active: true,
         }),
       { success: 'أُضيف الطالب', error: 'تعذّر إضافة الطالب' },

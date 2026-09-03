@@ -432,6 +432,25 @@ export class DataService {
     await updateDoc(this.ref(COL.students, id), { active });
   }
 
+  /**
+   * يضمّ سورًا إلى سجلّ المقرّر القرآنيّ للطالب (دمج بلا تكرار).
+   * يُستدعى تلقائيًّا عند تسجيل «حفظ جديد» في الجلسة/التسميع.
+   * يُرجع عدد السور المضافة فعليًّا.
+   */
+  async mergeStudentMemorizedSurahs(studentId: string, surahs: number[]): Promise<number> {
+    const valid = surahs.filter((n) => Number.isInteger(n) && n >= 1 && n <= 114);
+    if (valid.length === 0) return 0;
+    const student = await this.getStudent(studentId);
+    if (!student) return 0;
+    const set = new Set(student.memorizedSurahs ?? []);
+    const before = set.size;
+    valid.forEach((n) => set.add(n));
+    if (set.size === before) return 0;
+    const next = [...set].sort((a, b) => a - b);
+    await updateDoc(this.ref(COL.students, studentId), { memorizedSurahs: next });
+    return set.size - before;
+  }
+
   async addRecitation(input: NewRecitation): Promise<string> {
     const created = await addDoc(this.col(COL.recitations), {
       ...clean(input),

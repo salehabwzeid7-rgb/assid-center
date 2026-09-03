@@ -9,7 +9,7 @@ import {
   type RecitationKind,
   type Student,
 } from '../../core/models';
-import { SURAHS, surah } from '../../core/quran-data';
+import { SURAHS, surah, surahsBetween } from '../../core/quran-data';
 import { GradePickerComponent } from '../../shared/grade-picker';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -22,7 +22,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <div class="page">
       <form class="card" (ngSubmit)="submit()">
         @if (student(); as s) {
-          <p class="muted" style="margin-top:0">الطالب: <b>{{ s.name }}</b></p>
+          <p class="muted" style="margin-top:0">
+            الطالب: <b>{{ s.name }}</b>
+          </p>
         }
 
         @if (!sessionId) {
@@ -111,29 +113,59 @@ import { PageHeaderComponent } from '../../shared/page-header';
         <div class="field-row">
           <div class="field">
             <label for="hifzErrors">أخطاء الحفظ</label>
-            <input id="hifzErrors" name="hifzErrors" type="number" inputmode="numeric" min="0" [(ngModel)]="m.hifzErrors" />
+            <input
+              id="hifzErrors"
+              name="hifzErrors"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              [(ngModel)]="m.hifzErrors"
+            />
           </div>
           <div class="field">
             <label for="tajweedErrors">أخطاء التجويد</label>
-            <input id="tajweedErrors" name="tajweedErrors" type="number" inputmode="numeric" min="0" [(ngModel)]="m.tajweedErrors" />
+            <input
+              id="tajweedErrors"
+              name="tajweedErrors"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              [(ngModel)]="m.tajweedErrors"
+            />
           </div>
         </div>
 
         <div class="field">
           <label for="promptCount">عدد مرات التلقين (الفتح على الطالب)</label>
-          <input id="promptCount" name="promptCount" type="number" inputmode="numeric" min="0" [(ngModel)]="m.promptCount" />
+          <input
+            id="promptCount"
+            name="promptCount"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            [(ngModel)]="m.promptCount"
+          />
         </div>
 
         <div class="field">
           <label for="notes">ملاحظات المعلّم</label>
-          <textarea id="notes" name="notes" [(ngModel)]="m.notes" placeholder="ملاحظات حول الأداء والتجويد والمواضع المتكررة…"></textarea>
+          <textarea
+            id="notes"
+            name="notes"
+            [(ngModel)]="m.notes"
+            placeholder="ملاحظات حول الأداء والتجويد والمواضع المتكررة…"
+          ></textarea>
         </div>
 
         @if (error()) {
           <div class="alert alert-error">{{ error() }}</div>
         }
 
-        <button class="btn btn-primary btn-block btn-lg" type="submit" [disabled]="saving() || !student()">
+        <button
+          class="btn btn-primary btn-block btn-lg"
+          type="submit"
+          [disabled]="saving() || !student()"
+        >
           {{ saving() ? 'جارٍ الحفظ…' : editing() ? 'حفظ التعديلات' : 'حفظ سجل التسميع' }}
         </button>
       </form>
@@ -250,6 +282,20 @@ export class RecitationFormPage implements OnInit {
     );
     this.saving.set(false);
     if (!ok) return;
+
+    // مزامنة المقرّر: «حفظ جديد» يُضيف سوره تلقائيًّا إلى سجلّ الطالب القرآنيّ
+    if (this.m.kind === 'new') {
+      const added = await this.data.mergeStudentMemorizedSurahs(
+        s.id,
+        surahsBetween(fromSurah, toSurah),
+      );
+      if (added > 0) {
+        this.notify.success(
+          added === 1 ? 'أُضيفت سورة إلى مقرّر الطالب' : `أُضيفت ${added} سور إلى مقرّر الطالب`,
+        );
+      }
+    }
+
     if (sid) {
       await this.router.navigate(['/session', sid], { queryParams: { step: 'recitation' } });
     } else {

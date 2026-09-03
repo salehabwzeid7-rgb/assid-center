@@ -3,6 +3,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { ATTENDANCE_LABELS, CIRCLE_TYPE_SHORT, type Circle, type Student } from '../../core/models';
 import { dmy } from '../../core/format';
+import { JUZ_SURAHS } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 /**
@@ -69,6 +70,36 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <span class="k">المقرّر الحالي</span>
             <span class="v plan">{{ s.currentPlan || '—' }}</span>
           </div>
+        </div>
+
+        <!-- المقرّر القرآنيّ — يُزامَن تلقائيًّا مع الجلسات والتعديل -->
+        <div class="section-title">المقرّر القرآنيّ</div>
+        <div class="card">
+          @if (memoCount() === 0) {
+            <p class="muted" style="margin:0">
+              لم يُسجَّل حفظ بعد — يُحدَّث تلقائيًّا عند تسجيل «حفظ جديد» في الجلسة، أو من «تعديل».
+            </p>
+          } @else {
+            <p class="muted" style="margin:0 0 10px">
+              <b style="color:var(--green)">{{ fullJuz() }}</b> جزءًا كاملًا ·
+              <b style="color:var(--green)">{{ memoCount() }}</b> سورة محفوظة
+            </p>
+            <div class="juz-strip">
+              @for (c of juzCells(); track c.juz) {
+                <span
+                  class="jz"
+                  [class.partial]="c.state === 'partial'"
+                  [class.full]="c.state === 'full'"
+                  [attr.title]="'الجزء ' + c.juz + ' — ' + c.have + '/' + c.total"
+                >
+                  {{ c.juz }}
+                </span>
+              }
+            </div>
+          }
+          @if (s.currentPlan) {
+            <p style="margin:12px 0 0;line-height:1.8">{{ s.currentPlan }}</p>
+          }
         </div>
 
         <!-- مؤشّرات موجزة -->
@@ -196,6 +227,33 @@ import { PageHeaderComponent } from '../../shared/page-header';
         font-weight: 400;
         line-height: 1.7;
       }
+      .juz-strip {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 4px;
+      }
+      .jz {
+        display: grid;
+        place-items: center;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-soft);
+        font-variant-numeric: tabular-nums;
+      }
+      .jz.partial {
+        background: var(--gold-tint);
+        border-color: var(--gold);
+        color: var(--gold-deep);
+      }
+      .jz.full {
+        background: var(--green);
+        border-color: var(--green);
+        color: #fff;
+      }
     `,
   ],
 })
@@ -215,6 +273,22 @@ export class StudentPage implements OnInit {
 
   private readonly recitations = this.data.studentRecitations(this.id, this.destroyRef);
   readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
+
+  private readonly memorized = computed(() => new Set(this.student()?.memorizedSurahs ?? []));
+  readonly memoCount = computed(() => this.memorized().size);
+  readonly juzCells = computed(() => {
+    const set = this.memorized();
+    return JUZ_SURAHS.map((list, i) => {
+      const have = list.filter((n) => set.has(n)).length;
+      return {
+        juz: i + 1,
+        have,
+        total: list.length,
+        state: have === 0 ? 'none' : have === list.length ? 'full' : 'partial',
+      };
+    });
+  });
+  readonly fullJuz = computed(() => this.juzCells().filter((c) => c.state === 'full').length);
 
   readonly recitationsCount = computed(() => this.recitations()?.length ?? 0);
   readonly totalPages = computed(() => {

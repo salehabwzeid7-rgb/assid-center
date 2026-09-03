@@ -151,6 +151,8 @@ export interface Student {
   level?: string;
   /** المقرر الحالي (وصف حر) */
   currentPlan?: string;
+  /** أرقام السور المحفوظة (1..114) — سجلّ المقرّر القرآنيّ للطالب */
+  memorizedSurahs?: number[];
   active: boolean;
   createdAt: number;
 }

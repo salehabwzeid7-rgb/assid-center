@@ -5,10 +5,11 @@ import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { circleLabel } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
+import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
 @Component({
   selector: 'app-student-form',
-  imports: [FormsModule, PageHeaderComponent],
+  imports: [FormsModule, PageHeaderComponent, QuranTrackerComponent],
   template: `
     <app-page-header [title]="editing() ? 'تعديل بيانات الطالب' : 'إضافة طالب'" />
 
@@ -53,12 +54,17 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </div>
 
         <div class="field">
-          <label for="currentPlan">المقرر الحالي</label>
+          <label>المقرر الحالي (المحفوظ من القرآن)</label>
+          <app-quran-tracker [(value)]="m.memorizedSurahs" />
+        </div>
+
+        <div class="field">
+          <label for="currentPlan">ملاحظة على الخطّة (اختياري)</label>
           <textarea
             id="currentPlan"
             name="currentPlan"
             [(ngModel)]="m.currentPlan"
-            placeholder="مثال: حفظ جزء عمّ + مراجعة سورة البقرة"
+            placeholder="مثال: التركيز على إتقان جزء تبارك قبل الانتقال"
           ></textarea>
         </div>
 
@@ -105,6 +111,7 @@ export class StudentFormPage implements OnInit {
     birthDate: '',
     guardianPhone: '',
     currentPlan: '',
+    memorizedSurahs: [] as number[],
     active: true,
   };
 
@@ -120,6 +127,7 @@ export class StudentFormPage implements OnInit {
           birthDate: s.birthDate ?? '',
           guardianPhone: s.guardianPhone ?? '',
           currentPlan: s.currentPlan ?? '',
+          memorizedSurahs: [...(s.memorizedSurahs ?? [])],
           active: s.active,
         };
       } else {
@@ -145,6 +153,7 @@ export class StudentFormPage implements OnInit {
       birthDate: this.m.birthDate || undefined,
       guardianPhone: this.m.guardianPhone.trim() || undefined,
       currentPlan: this.m.currentPlan.trim() || undefined,
+      memorizedSurahs: [...this.m.memorizedSurahs].sort((a, b) => a - b),
       active: this.m.active,
     };
     const editing = this.editing() && this.id;
