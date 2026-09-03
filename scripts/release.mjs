@@ -22,18 +22,22 @@ const level = args.find((a) => !a.startsWith('--')) || 'patch';
 const doPush = args.includes('--push');
 const noVerify = args.includes('--no-verify');
 
+// على ويندوز، npm/npx ملفّات .cmd وتحتاج shell؛ أمّا git/node فملفّات تنفيذيّة
+// تُستدعى مباشرةً (بلا shell) وإلا أعاد cmd.exe تفسير الأقواس والنقطتين في الوسائط.
+const needsShell = (cmd) =>
+  process.platform === 'win32' && ['npm', 'npx', 'yarn', 'pnpm'].includes(cmd);
 const run = (cmd, cmdArgs, opts = {}) =>
   execFileSync(cmd, cmdArgs, {
     cwd: root,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell: needsShell(cmd),
     ...opts,
   });
 const out = (cmd, cmdArgs) =>
   execFileSync(cmd, cmdArgs, {
     cwd: root,
     encoding: 'utf8',
-    shell: process.platform === 'win32',
+    shell: needsShell(cmd),
   }).trim();
 
 // تأكيد أنّ شجرة العمل نظيفة (عدا ما سنغيّره)
