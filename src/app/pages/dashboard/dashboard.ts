@@ -125,14 +125,46 @@ interface CircleCard {
         </section>
       }
 
+      <!-- بطاقتا الملخّص: نصفان متساويان يملآن عرض الشاشة بالتساوي -->
       <div class="stat-row">
         <div class="stat">
-          <div class="num">{{ circles()?.length ?? 0 }} <span class="unit">حلقة</span></div>
-          <div class="label">مسجّلة</div>
+          <span class="stat-body">
+            <span class="num">{{ circles()?.length ?? 0 }} <span class="unit">حلقة</span></span>
+            <span class="label">مسجّلة</span>
+          </span>
+          <span class="stat-ico" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="8.5" />
+              <circle cx="12" cy="12" r="3.2" />
+            </svg>
+          </span>
         </div>
         <div class="stat">
-          <div class="num">{{ students()?.length ?? 0 }} <span class="unit">طالب</span></div>
-          <div class="label">مسجّل</div>
+          <span class="stat-body">
+            <span class="num">{{ students()?.length ?? 0 }} <span class="unit">طالب</span></span>
+            <span class="label">مسجّل</span>
+          </span>
+          <span class="stat-ico" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M15.5 19v-1.4a3.5 3.5 0 0 0-3.5-3.5H7a3.5 3.5 0 0 0-3.5 3.5V19" />
+              <circle cx="9.5" cy="8" r="3.2" />
+              <path d="M20.5 19v-1.4a3.5 3.5 0 0 0-2.7-3.4M15.5 5.1a3.2 3.2 0 0 1 0 5.8" />
+            </svg>
+          </span>
         </div>
       </div>
     </div>
