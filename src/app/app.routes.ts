@@ -24,6 +24,11 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/schedule/schedule').then((m) => m.SchedulePage),
       },
       {
+        path: 'sard',
+        loadComponent: () =>
+          import('./pages/sard-dashboard/sard-dashboard').then((m) => m.SardDashboardPage),
+      },
+      {
         path: 'profile',
         loadComponent: () => import('./pages/profile/profile').then((m) => m.ProfilePage),
       },

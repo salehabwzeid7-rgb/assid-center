@@ -12,9 +12,11 @@ import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
 import {
   initializeFirestore,
   connectFirestoreEmulator,
+  memoryLocalCache,
   persistentLocalCache,
   persistentMultipleTabManager,
   type Firestore,
+  type FirestoreSettings,
 } from 'firebase/firestore';
 import { environment } from '../../environments/environment';
 import { isFirebaseConfigured } from '../../environments/firebase.config';
@@ -39,12 +41,26 @@ export const firebaseApp: FirebaseApp = initializeApp(appConfig);
 
 export const auth: Auth = getAuth(firebaseApp);
 
-export const db: Firestore = initializeFirestore(firebaseApp, {
-  // تخزين محلي دائم (IndexedDB) → عمل دون اتصال + مزامنة تلقائية عند العودة
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+/**
+ * تخزين محلي دائم (IndexedDB) متعدّد التبويبات → عمل كامل دون اتصال ومزامنة
+ * لحظيّة تلقائية عند عودة الشبكة. عند تعذّر IndexedDB (تصفّح خاصّ/تخزين محجوب)
+ * نرجع إلى ذاكرة الجلسة حتى لا يتعطّل التطبيق.
+ */
+function makeDb(): Firestore {
   // ضروري لموثوقية Firestore داخل WebView على أندرويد/الجوال
-  experimentalAutoDetectLongPolling: true,
-});
+  const base: FirestoreSettings = { experimentalAutoDetectLongPolling: true };
+  try {
+    return initializeFirestore(firebaseApp, {
+      ...base,
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch (e) {
+    console.warn('[مركز أسيد] تعذّر تفعيل التخزين المحلي الدائم — العمل بذاكرة الجلسة فقط', e);
+    return initializeFirestore(firebaseApp, { ...base, localCache: memoryLocalCache() });
+  }
+}
+
+export const db: Firestore = makeDb();
 
 if (environment.useEmulator) {
   connectAuthEmulator(auth, environment.emulator.authUrl, { disableWarnings: true });

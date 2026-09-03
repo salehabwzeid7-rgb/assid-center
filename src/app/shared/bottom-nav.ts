@@ -62,7 +62,7 @@ import { AuthService } from '../core/auth.service';
           </svg>
           <span>الطلاب</span>
         </a>
-        <a routerLink="/schedule" routerLinkActive="active">
+        <a routerLink="/sard" routerLinkActive="active">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -72,10 +72,11 @@ import { AuthService } from '../core/auth.service';
             stroke-linejoin="round"
             aria-hidden="true"
           >
-            <rect x="3" y="4.5" width="18" height="16" rx="2" />
-            <path d="M3 9.5h18M8 3v4M16 3v4" />
+            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5Z" />
+            <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5" />
+            <path d="M9 8h6M9 11h4" />
           </svg>
-          <span>الجدول</span>
+          <span>السرد</span>
         </a>
         <a routerLink="/profile" routerLinkActive="active">
           <svg
@@ -108,7 +109,7 @@ export class BottomNavComponent {
     { initialValue: this.router.url.split(/[?#]/)[0] },
   );
 
-  private readonly tabs = ['/', '/circles', '/students', '/schedule', '/profile'];
+  private readonly tabs = ['/', '/circles', '/students', '/sard', '/profile'];
 
   readonly visible = computed(() => this.auth.isLoggedIn() && this.tabs.includes(this.path()));
 }
