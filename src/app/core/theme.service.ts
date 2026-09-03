@@ -20,7 +20,7 @@ export const THEME_LABELS: Record<AppTheme, string> = {
 };
 
 export const THEME_DESC: Record<AppTheme, string> = {
-  misk: 'خلفية كريميّة دافئة + أخضر غابيّ وأزرق إردوازيّ + خطّ Cairo وبطاقات ناعمة وزخرفة نجمة',
+  misk: 'مطابِق لتصميم Figma — خلفية كريميّة #F5F1E8 + أزرار خضراء #3B6B4A + خطّ Cairo (فاتح دائمًا)',
   zumurrud: 'التصميم السابق — أبيض ناصع + أخضر زمرّديّ + خطّ Tajawal',
 };
 
