@@ -48,38 +48,9 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   --ease: 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --green: #2fa576;
-    --green-deep: #1c6b4c;
-    --green-mid: #37b384;
-    --green-tint: #16241d;
-    --header-grad: linear-gradient(135deg, #12503a 0%, #0c3327 100%);
-
-    --gold: #d8bd77;
-    --gold-deep: #c2a558;
-    --gold-tint: #241f12;
-    --gold-tint2: #201c11;
-
-    --bg: #0e1512;
-    --surface: #161e1a;
-    --surface-2: #1e2822;
-    --text: #e8ede9;
-    --text-soft: #9db0a6;
-    --border: #2b352e;
-
-    --danger: #e0685c;
-    --danger-bg: #33201d;
-    --ok: #46b779;
-    --ok-bg: #16311f;
-    --warn: #d9a441;
-    --warn-bg: #322612;
-
-    --shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 12px 34px rgba(0, 0, 0, 0.55);
-  }
+  /* التطبيق فاتح دائمًا — لا يتبع الوضع الداكن للنظام في أيّ خلفية. */
+  color-scheme: light;
 }
 
 * {
@@ -754,27 +725,6 @@ textarea {
   /* زخرفة نجميّة ثمانيّة خفيفة لخلفية الزمرّد */
   --zumurrud-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M20 3 L28 12 L37 20 L28 28 L20 37 L12 28 L3 20 L12 12 Z'/%3E%3Ccircle cx='20' cy='20' r='2.5'/%3E%3C/g%3E%3C/svg%3E");
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --green: #2aa876;
-    --green-deep: #0e7d51;
-    --green-mid: #38bd87;
-    --green-tint: #0f231a;
-    --header-grad: linear-gradient(135deg, #0c6644 0%, #063d29 100%);
-    --gold: #26c281;
-    --gold-deep: #1fa06a;
-    --gold-tint: #10261d;
-    --gold-tint2: #0c1f17;
-    --bg: #0b110e;
-    --surface: #121a15;
-    --surface-2: #1a241e;
-    --text: #e9f1ec;
-    --text-soft: #9db3a7;
-    --border: #28352e;
-    --ok: #26c281;
-    --ok-bg: #10261d;
-  }
-}
 /* شارات زمرّدية */
 .badge.b-present,
 .badge.b-grade {
@@ -917,11 +867,6 @@ textarea {
   background-color: rgba(11, 107, 70, 0.05);
   -webkit-mask: var(--zumurrud-pattern) repeat 0 0 / 40px 40px;
   mask: var(--zumurrud-pattern) repeat 0 0 / 40px 40px;
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-app-theme='zumurrud'] .app-shell::before {
-    background-color: rgba(42, 168, 118, 0.06);
-  }
 }
 
 /* ==========================================================================
