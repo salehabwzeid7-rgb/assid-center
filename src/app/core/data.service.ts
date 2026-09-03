@@ -1,4 +1,4 @@
-import { Injectable, signal, type Signal, type DestroyRef } from '@angular/core';
+import { Injectable, computed, signal, type Signal, type DestroyRef } from '@angular/core';
 import {
   collection,
   doc,
@@ -22,9 +22,11 @@ import {
   COL,
   type Circle,
   type CircleType,
+  type TajweedLevel,
   type Student,
   type Session,
   type SessionStatus,
+  studentCircleIds,
   type AttendanceRecord,
   type RecitationRecord,
   type EvaluationRecord,
@@ -67,6 +69,7 @@ export function upcomingDatesFor(weekdays: number[], horizonDays: number): strin
 type NewCircle = {
   name: string;
   type: CircleType;
+  tajweedLevel?: TajweedLevel;
   weekdays: number[];
   fromTime: string;
   toTime: string;
@@ -124,9 +127,10 @@ export class DataService {
     return this.live<Circle>(query(this.col(COL.circles)), destroyRef, this.byNameAr);
   }
 
+  /** طلاب حلقة معيّنة — يدعم التسجيل المتعدّد (circleIds) والقديم (circleId). */
   studentsByCircle(circleId: string, destroyRef?: DestroyRef): Signal<Student[] | undefined> {
-    const q = query(this.col(COL.students), where('circleId', '==', circleId));
-    return this.live<Student>(q, destroyRef, this.byNameAr);
+    const all = this.allStudents(destroyRef);
+    return computed(() => all()?.filter((s) => studentCircleIds(s).includes(circleId)));
   }
 
   allStudents(destroyRef?: DestroyRef): Signal<Student[] | undefined> {
@@ -343,14 +347,18 @@ export class DataService {
   // ---------- كتابة ----------
 
   async addCircle(input: NewCircle): Promise<string> {
-    const created = await addDoc(this.col(COL.circles), {
-      name: input.name.trim(),
-      type: input.type,
-      weekdays: [...input.weekdays].sort((a, b) => a - b),
-      fromTime: input.fromTime,
-      toTime: input.toTime,
-      createdAt: Date.now(),
-    });
+    const created = await addDoc(
+      this.col(COL.circles),
+      clean({
+        name: input.name.trim(),
+        type: input.type,
+        tajweedLevel: input.tajweedLevel,
+        weekdays: [...input.weekdays].sort((a, b) => a - b),
+        fromTime: input.fromTime,
+        toTime: input.toTime,
+        createdAt: Date.now(),
+      }),
+    );
     return created.id;
   }
 

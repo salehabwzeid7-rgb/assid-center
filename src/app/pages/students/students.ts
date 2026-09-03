@@ -12,7 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
-import { circleLabel, type Student } from '../../core/models';
+import { circleLabel, studentCircleIds, type Student } from '../../core/models';
 import { completedJuz } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { QuranTrackerComponent } from '../../shared/quran-tracker';
@@ -73,7 +73,7 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
               <span class="grow">
                 <span class="primary">{{ s.name }}</span>
                 <span class="secondary">
-                  {{ circleLabelFor(s.circleId) }}
+                  {{ circlesLabel(s) }}
                   @if (s.level) {
                     · {{ s.level }}
                   }
@@ -110,13 +110,19 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
             </div>
 
             <div class="field">
-              <label for="m-circle">الحلقة *</label>
-              <select id="m-circle" name="m-circle" [(ngModel)]="m.circleId">
-                <option value="" disabled>اختر الحلقة</option>
+              <label>الحلقات * — يمكن اختيار أكثر من حلقة</label>
+              <div class="circle-picks">
                 @for (c of circles(); track c.id) {
-                  <option [value]="c.id">{{ circleLabel(c) }}</option>
+                  <label class="circle-pick" [class.on]="m.circleIds.includes(c.id)">
+                    <input
+                      type="checkbox"
+                      [checked]="m.circleIds.includes(c.id)"
+                      (change)="toggleCircle(c.id)"
+                    />
+                    <span>{{ circleLabel(c) }}</span>
+                  </label>
                 }
-              </select>
+              </div>
             </div>
 
             <div class="field-row">
@@ -185,6 +191,30 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
         overflow-y: auto;
         text-align: start;
       }
+      .circle-picks {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .circle-pick {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xs);
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .circle-pick.on {
+        background: var(--green-tint);
+        border-color: var(--green);
+      }
+      .circle-pick input {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }
       .add-modal h3 {
         margin-bottom: 14px;
       }
@@ -216,13 +246,19 @@ export class StudentsPage {
 
   m = {
     name: '',
-    circleId: '',
+    circleIds: [] as string[],
     level: '',
     birthDate: '',
     guardianPhone: '',
     currentPlan: '',
     memorizedSurahs: [] as number[],
   };
+
+  toggleCircle(id: string): void {
+    this.m.circleIds = this.m.circleIds.includes(id)
+      ? this.m.circleIds.filter((x) => x !== id)
+      : [...this.m.circleIds, id];
+  }
 
   constructor() {
     // تركيز حقل الاسم فور فتح النافذة
@@ -237,14 +273,19 @@ export class StudentsPage {
     return term ? list.filter((s) => s.name.includes(term)) : list;
   });
 
-  circleLabelFor(id: string): string {
-    return circleLabel(this.circles()?.find((c) => c.id === id));
+  circlesLabel(s: Student): string {
+    const cs = this.circles() ?? [];
+    const names = studentCircleIds(s)
+      .map((id) => cs.find((c) => c.id === id))
+      .filter((c): c is NonNullable<typeof c> => !!c)
+      .map((c) => circleLabel(c));
+    return names.length ? names.join(' · ') : 'بلا حلقة';
   }
 
   openAdd(): void {
     this.m = {
       name: '',
-      circleId: '',
+      circleIds: [],
       level: '',
       birthDate: '',
       guardianPhone: '',
@@ -262,7 +303,7 @@ export class StudentsPage {
   async submitAdd(): Promise<void> {
     const name = this.m.name.trim();
     if (!name) return void this.error.set('أدخل اسم الطالب');
-    if (!this.m.circleId) return void this.error.set('اختر الحلقة');
+    if (this.m.circleIds.length === 0) return void this.error.set('اختر حلقة واحدة على الأقلّ');
 
     this.saving.set(true);
     this.error.set('');
@@ -270,7 +311,7 @@ export class StudentsPage {
       () =>
         this.data.addStudent({
           name,
-          circleId: this.m.circleId,
+          circleIds: [...this.m.circleIds],
           level: this.m.level.trim() || undefined,
           birthDate: this.m.birthDate || undefined,
           guardianPhone: this.m.guardianPhone.trim() || undefined,

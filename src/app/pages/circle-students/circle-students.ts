@@ -1,7 +1,7 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { CIRCLE_TYPE_SHORT, type Circle } from '../../core/models';
+import { circleTypeLabel, type Circle } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -14,8 +14,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
       @if (circle(); as c) {
         <p class="muted" style="margin:2px 2px 10px">
           {{ c.name }}
-          @if (c.type) {
-            <span style="color:var(--green);font-weight:700"> · {{ typeShort[c.type] }}</span>
+          @if (typeLabel(c)) {
+            <span style="color:var(--green);font-weight:700"> · {{ typeLabel(c) }}</span>
           }
         </p>
       }
@@ -70,8 +70,10 @@ export class CircleStudentsPage implements OnInit {
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
-  readonly typeShort = CIRCLE_TYPE_SHORT;
   readonly circle = signal<Circle | null>(null);
+  typeLabel(c: Circle): string {
+    return circleTypeLabel(c);
+  }
   readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   readonly activeCount = computed(() => this.students()?.filter((s) => s.active).length ?? 0);
 

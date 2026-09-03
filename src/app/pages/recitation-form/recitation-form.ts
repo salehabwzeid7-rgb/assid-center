@@ -7,6 +7,7 @@ import {
   RECITATION_KIND_LABELS,
   TASMIE_PASS,
   scoreOf,
+  studentCircleIds,
   type RecitationKind,
   type Student,
 } from '../../core/models';
@@ -190,6 +191,8 @@ export class RecitationFormPage implements OnInit {
   readonly sessionId = this.route.snapshot.paramMap.get('sessionId') ?? undefined;
 
   readonly student = signal<Student | null>(null);
+  /** حلقة الجلسة — تُخزَّن مع سجلّ التسميع كسياق. */
+  private circleId = '';
   readonly saving = signal(false);
   readonly editing = signal(false);
   readonly error = signal('');
@@ -219,7 +222,10 @@ export class RecitationFormPage implements OnInit {
 
     if (this.sessionId) {
       const session = await this.data.getSession(this.sessionId);
-      if (session) this.m.date = session.date;
+      if (session) {
+        this.m.date = session.date;
+        this.circleId = session.circleId;
+      }
       const existing = await this.data.getSessionRecitation(this.sessionId, this.studentId);
       if (existing) {
         this.editing.set(true);
@@ -264,7 +270,7 @@ export class RecitationFormPage implements OnInit {
     this.error.set('');
     const payload = {
       studentId: s.id,
-      circleId: s.circleId,
+      circleId: this.circleId || studentCircleIds(s)[0] || '',
       sessionId: this.sessionId,
       date: this.m.date,
       kind: this.m.kind,

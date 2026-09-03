@@ -4,10 +4,10 @@ import { DataService, today } from '../../core/data.service';
 import { dmy, weekdayAr } from '../../core/format';
 import { fmt12, fmtRange, sessionWindow, untilLabel } from '../../core/time';
 import {
-  CIRCLE_TYPE_SINGULAR,
   SESSION_STATUS_LABELS,
   WEEKDAY_LABELS,
   WEEKDAY_ORDER,
+  circleTypeLabel,
   type Circle,
   type Session,
 } from '../../core/models';
@@ -32,10 +32,10 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <div class="page">
       @if (circle(); as c) {
         <div class="circle-meta">
-          @if (c.type) {
-            <span class="tag" [class.t-tajweed]="c.type === 'tajweed'">{{
-              typeSingular[c.type]
-            }}</span>
+          @if (typeLabel(c)) {
+            <span class="tag" [class.t-tajweed]="c.type === 'tajweed'"
+              >حلقة {{ typeLabel(c) }}</span
+            >
           }
           @if (c.weekdays?.length) {
             <span class="muted">{{ weekdaysLabel(c.weekdays!) }}</span>
@@ -252,7 +252,9 @@ export class CirclePage implements OnInit {
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly circle = signal<Circle | null>(null);
   readonly statusLabels = SESSION_STATUS_LABELS;
-  readonly typeSingular = CIRCLE_TYPE_SINGULAR;
+  typeLabel(c: Circle): string {
+    return circleTypeLabel(c);
+  }
   readonly todayIso = today();
   readonly todayLabel = dmy(this.todayIso);
 

@@ -1,147 +1,105 @@
-import { Component, DestroyRef, computed, inject } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { SARD_PASS, circleLabel, passLabel, type Circle, type Student } from '../../core/models';
+import {
+  circleLabel,
+  isHifzCircle,
+  studentCircleIds,
+  type Circle,
+  type Student,
+} from '../../core/models';
 import { analyzeSard, type SardAnalysis } from '../../core/sard';
 import { PageHeaderComponent } from '../../shared/page-header';
+import { ProgressRingComponent } from '../../shared/progress-ring';
 
 interface Row {
   student: Student;
-  circle: string;
+  circles: string;
   a: SardAnalysis;
 }
 
 /**
- * لوحة «السرد» — إدارة مراجعة الأجزاء المحفوظة لكلّ طلاب المركز،
- * موزّعة على أقسام: سردوا · لم يسردوا · عليهم سرد · قريبون من السرد.
+ * لوحة «السرد» — إحصائيات عامّة قابلة للطيّ في الأعلى، ثم قائمة بطلاب حلقات
+ * التحفيظ فقط (تُستثنى حلقات التجويد) مع عدد الأجزاء المسرودة وحلقة تقدّم
+ * الجزء الجاري (الجزء = ٢٠ صفحة).
  */
 @Component({
   selector: 'app-sard-dashboard',
-  imports: [RouterLink, PageHeaderComponent],
+  imports: [RouterLink, PageHeaderComponent, ProgressRingComponent],
   template: `
     <app-page-header title="السرد" [back]="false" />
 
     <div class="page">
-      @if (students() === undefined || serds() === undefined) {
+      @if (students() === undefined || serds() === undefined || circles() === undefined) {
         <div class="spinner"></div>
       } @else {
-        <!-- ملخّص علويّ -->
-        <div class="stat-grid">
-          <div class="stat">
-            <div class="num">{{ byCat('revised').length }}</div>
-            <div class="label">سردوا</div>
-          </div>
-          <div class="stat">
-            <div class="num">{{ byCat('due').length + byCat('not_revised').length }}</div>
-            <div class="label">عليهم سرد</div>
-          </div>
-          <div class="stat">
-            <div class="num">{{ near().length }}</div>
-            <div class="label">قريبون</div>
-          </div>
-        </div>
+        <!-- إحصائيات عامّة (قابلة للطيّ) -->
+        <button class="stats-toggle" type="button" (click)="showStats.set(!showStats())">
+          <span>📊 إحصائيات عامّة</span>
+          <span class="chev">{{ showStats() ? '▲' : '▼' }}</span>
+        </button>
 
-        @if (activeRows().length === 0 && near().length === 0) {
+        @if (showStats()) {
+          <div class="card stats-card">
+            <div class="stat-grid">
+              <div class="stat">
+                <div class="num">{{ count('revised') }}</div>
+                <div class="label">أتمّوا السرد</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ count('due') + count('not_revised') }}</div>
+                <div class="label">عليهم سرد</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ nearCount() }}</div>
+                <div class="label">قريبون من السرد</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ totalRevisedJuz() }}</div>
+                <div class="label">مجموع الأجزاء المسرودة</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ totalBlocks() }}</div>
+                <div class="label">كتل مُتقنة (٣ أجزاء)</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
+                <div class="label">متوسّط درجات السرد</div>
+              </div>
+            </div>
+            <p class="muted" style="margin:10px 2px 0;font-size:.82rem">
+              من إجمالي {{ hifzRows().length }} طالب في حلقات التحفيظ · عتبة النجاح ٩٠٪
+            </p>
+          </div>
+        }
+
+        <!-- طلاب حلقات التحفيظ -->
+        <div class="section-title">طلاب التحفيظ ({{ hifzRows().length }})</div>
+
+        @if (hifzRows().length === 0) {
           <div class="empty">
             <span class="icon">📗</span>
-            لا يوجد طلاب أكملوا حفظ جزء بعد. تظهر متابعة السرد هنا فور إكمال أوّل جزء.
+            لا يوجد طلاب في حلقات تحفيظ بعد.
           </div>
-        }
-
-        <!-- ١ · عليهم سرد (بدؤوا وبقي عليهم) -->
-        @if (byCat('due').length) {
-          <div class="section-title">طلاب عليهم سرد ({{ byCat('due').length }})</div>
-          @for (r of byCat('due'); track r.student.id) {
-            <a class="list-item due" [routerLink]="['/student', r.student.id, 'serd']">
-              <span class="avatar">{{ r.a.pendingCount }}</span>
+        } @else {
+          @for (r of hifzRows(); track r.student.id) {
+            <a class="list-item srow" [routerLink]="['/student', r.student.id, 'serd']">
+              <app-progress-ring
+                [size]="46"
+                [value]="r.a.currentJuz ? r.a.currentJuz.fraction : r.a.completedJuz.length ? 1 : 0"
+                [text]="ringText(r.a)"
+              />
               <span class="grow">
                 <span class="primary">{{ r.student.name }}</span>
-                <span class="secondary">{{ r.circle }} · {{ subtitle(r) }}</span>
-                <span class="tags">
-                  @for (j of r.a.unrevisedJuz; track j) {
-                    <span class="t warn">الجزء {{ j }}</span>
+                <span class="secondary">{{ r.circles }}</span>
+                <span class="srow-data">
+                  <span class="chip-j">{{ r.a.revisedJuz.length }} جزء مسرود</span>
+                  @if (r.a.currentJuz) {
+                    <span class="chip-p">
+                      الجزء {{ r.a.currentJuz.juz }} · {{ r.a.currentJuz.pages }}/20 صفحة
+                    </span>
                   }
-                  @for (b of r.a.readyBlocks; track b) {
-                    <span class="t gold">سرد مجمّع {{ blockJuz(b) }}</span>
-                  }
-                </span>
-              </span>
-              @if (r.a.avgScore !== null) {
-                <span
-                  class="badge"
-                  [class.b-present]="r.a.avgScore >= sardPass"
-                  [class.b-absent]="r.a.avgScore < sardPass"
-                  >{{ r.a.avgScore }}٪</span
-                >
-              }
-            </a>
-          }
-        }
-
-        <!-- ٢ · لم يسردوا (أكملوا جزءًا ولم يسجّلوا أيّ سرد) -->
-        @if (byCat('not_revised').length) {
-          <div class="section-title">
-            الطلاب الذين لم يسردوا ({{ byCat('not_revised').length }})
-          </div>
-          @for (r of byCat('not_revised'); track r.student.id) {
-            <a class="list-item warn-row" [routerLink]="['/student', r.student.id, 'serd']">
-              <span class="avatar">{{ r.a.completedJuz.length }}</span>
-              <span class="grow">
-                <span class="primary">{{ r.student.name }}</span>
-                <span class="secondary">
-                  {{ r.circle }} · {{ r.a.completedJuz.length }} جزء مكتمل لم يُسرد
-                </span>
-              </span>
-              <span class="chevron">‹</span>
-            </a>
-          }
-        }
-
-        <!-- ٣ · سردوا (لا معلّقات) -->
-        @if (byCat('revised').length) {
-          <div class="section-title">الطلاب الذين سردوا ({{ byCat('revised').length }})</div>
-          @for (r of byCat('revised'); track r.student.id) {
-            <a class="list-item ok" [routerLink]="['/student', r.student.id, 'serd']">
-              <span class="avatar">✓</span>
-              <span class="grow">
-                <span class="primary">{{ r.student.name }}</span>
-                <span class="secondary">
-                  {{ r.circle }} · {{ r.a.revisedJuz.length }} جزء مسرود
-                  @if (r.a.doneBlocks.length) {
-                    · {{ r.a.doneBlocks.length }} كتلة مُتقنة
-                  }
-                </span>
-                <span class="tags">
-                  @for (j of r.a.revisedJuz; track j) {
-                    <span class="t ok">{{ j }} · {{ r.a.juzLastScore.get(j) }}٪</span>
-                  }
-                </span>
-              </span>
-              @if (r.a.avgScore !== null) {
-                <span
-                  class="badge"
-                  [class.b-present]="r.a.avgScore >= sardPass"
-                  [class.b-absent]="r.a.avgScore < sardPass"
-                  >{{ r.a.avgScore }}٪ · {{ verdict(r.a.avgScore) }}</span
-                >
-              }
-            </a>
-          }
-        }
-
-        <!-- ٤ · قريبون من السرد -->
-        @if (near().length) {
-          <div class="section-title">طلاب قريبون من السرد ({{ near().length }})</div>
-          @for (r of near(); track r.student.id) {
-            <a class="list-item near" [routerLink]="['/student', r.student.id, 'serd']">
-              <span class="avatar">≈</span>
-              <span class="grow">
-                <span class="primary">{{ r.student.name }}</span>
-                <span class="secondary">{{ r.circle }}</span>
-                <span class="tags">
-                  @for (n of r.a.nearJuz; track n.juz) {
-                    <span class="t">الجزء {{ n.juz }} — {{ n.have }}/{{ n.total }}</span>
-                  }
+                  <span class="chip-st" [class]="'st-' + r.a.category">{{ status(r.a) }}</span>
                 </span>
               </span>
               <span class="chevron">‹</span>
@@ -153,49 +111,61 @@ interface Row {
   `,
   styles: [
     `
-      .list-item {
-        align-items: flex-start;
-      }
-      .list-item .avatar {
-        margin-top: 2px;
-      }
-      .list-item.due {
-        border-inline-start: 4px solid var(--warn, #a07030);
-      }
-      .list-item.warn-row {
-        border-inline-start: 4px solid var(--danger);
-      }
-      .list-item.ok {
-        border-inline-start: 4px solid var(--green);
-      }
-      .list-item.near {
-        border-inline-start: 4px solid var(--gold);
-      }
-      .tags {
+      .stats-toggle {
+        width: 100%;
         display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        margin-top: 6px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        font-weight: 800;
+        cursor: pointer;
       }
-      .t {
-        font-size: 0.68rem;
-        font-weight: 700;
-        padding: 2px 7px;
-        border-radius: 999px;
-        background: var(--surface-2);
+      .stats-toggle .chev {
+        font-size: 0.7rem;
         color: var(--text-soft);
       }
-      .t.warn {
-        background: var(--warn-bg, #f3e8d8);
-        color: var(--warn, #a07030);
+      .stats-card {
+        margin-top: 10px;
       }
-      .t.gold {
+      .srow {
+        align-items: center;
+        gap: 12px;
+      }
+      .srow-data {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+      }
+      .srow-data span {
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+      .chip-j {
+        background: var(--green-tint);
+        color: var(--green);
+      }
+      .chip-p {
         background: var(--gold-tint);
         color: var(--gold-deep);
       }
-      .t.ok {
-        background: var(--green-tint);
-        color: var(--green);
+      .chip-st.st-revised {
+        background: var(--ok-bg, #e7ede1);
+        color: var(--ok, #3b6b4a);
+      }
+      .chip-st.st-due,
+      .chip-st.st-not_revised {
+        background: var(--warn-bg, #f3e8d8);
+        color: var(--warn, #a07030);
+      }
+      .chip-st.st-none {
+        background: var(--surface-2);
+        color: var(--text-soft);
       }
     `,
   ],
@@ -207,7 +177,7 @@ export class SardDashboardPage {
   readonly students = this.data.allStudents(this.destroyRef);
   readonly circles = this.data.circles(this.destroyRef);
   readonly serds = this.data.allSerds(this.destroyRef);
-  readonly sardPass = SARD_PASS;
+  readonly showStats = signal(false);
 
   private readonly circleMap = computed(() => {
     const m = new Map<string, Circle>();
@@ -215,39 +185,57 @@ export class SardDashboardPage {
     return m;
   });
 
-  readonly rows = computed<Row[]>(() => {
+  /** الطلاب في حلقات تحفيظ فقط (تُستثنى حلقات التجويد الخالصة). */
+  readonly hifzRows = computed<Row[]>(() => {
     const serds = this.serds() ?? [];
+    const cm = this.circleMap();
     return (this.students() ?? [])
       .filter((s) => s.active)
-      .map((student) => ({
+      .map((student) => {
+        const cs = studentCircleIds(student)
+          .map((id) => cm.get(id))
+          .filter((c): c is Circle => !!c);
+        return { student, cs, a: analyzeSard(student, serds) };
+      })
+      .filter(({ cs }) => cs.length === 0 || cs.some((c) => isHifzCircle(c)))
+      .map(({ student, cs, a }) => ({
         student,
-        circle: circleLabel(this.circleMap().get(student.circleId)),
-        a: analyzeSard(student, serds),
+        circles: cs.map((c) => circleLabel(c)).join(' · ') || 'بلا حلقة',
+        a,
       }))
       .sort(
         (x, y) =>
-          y.a.pendingCount - x.a.pendingCount || x.student.name.localeCompare(y.student.name, 'ar'),
+          y.a.pendingCount - x.a.pendingCount ||
+          y.a.revisedJuz.length - x.a.revisedJuz.length ||
+          x.student.name.localeCompare(y.student.name, 'ar'),
       );
   });
 
-  /** كلّ الطلاب الذين لديهم جزء مكتمل (بأيّ تصنيف عدا 'none'). */
-  readonly activeRows = computed(() => this.rows().filter((r) => r.a.category !== 'none'));
+  count(cat: 'revised' | 'due' | 'not_revised'): number {
+    return this.hifzRows().filter((r) => r.a.category === cat).length;
+  }
+  readonly nearCount = computed(() => this.hifzRows().filter((r) => r.a.nearJuz.length > 0).length);
+  readonly totalRevisedJuz = computed(() =>
+    this.hifzRows().reduce((t, r) => t + r.a.revisedJuz.length, 0),
+  );
+  readonly totalBlocks = computed(() =>
+    this.hifzRows().reduce((t, r) => t + r.a.doneBlocks.length, 0),
+  );
+  readonly avgScore = computed<number | null>(() => {
+    const vals = this.hifzRows()
+      .map((r) => r.a.avgScore)
+      .filter((v): v is number => v !== null);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+  });
 
-  byCat(cat: 'revised' | 'not_revised' | 'due'): Row[] {
-    return this.rows().filter((r) => r.a.category === cat);
+  ringText(a: SardAnalysis): string {
+    if (a.currentJuz) return `${a.currentJuz.pages}/20`;
+    return a.completedJuz.length ? '✓' : '—';
   }
-  readonly near = computed(() => this.rows().filter((r) => r.a.nearJuz.length > 0));
-
-  subtitle(r: Row): string {
-    const parts: string[] = [];
-    if (r.a.unrevisedJuz.length) parts.push(`${r.a.unrevisedJuz.length} جزء غير مسرود`);
-    if (r.a.readyBlocks.length) parts.push(`${r.a.readyBlocks.length} سرد مجمّع مطلوب`);
-    return parts.join(' · ') || 'مكتمل';
-  }
-  blockJuz(block: number): string {
-    return `${block * 3 - 2}·${block * 3 - 1}·${block * 3}`;
-  }
-  verdict(score: number): string {
-    return passLabel(score, SARD_PASS);
+  status(a: SardAnalysis): string {
+    if (a.category === 'revised') return 'مكتمل';
+    if (a.category === 'not_revised') return 'لم يسرد';
+    if (a.category === 'due') return `عليه ${a.pendingCount} سرد`;
+    return a.nearJuz.length ? 'قريب من جزء' : 'لم يبدأ';
   }
 }

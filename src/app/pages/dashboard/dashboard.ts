@@ -2,15 +2,10 @@ import { Component, DestroyRef, computed, effect, inject, signal } from '@angula
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { DataService, today } from '../../core/data.service';
-import { dmy, relativeDay, weekdayAr } from '../../core/format';
-import { fmt12, fmtRange, sessionWindow, untilLabel } from '../../core/time';
+import { dmy, weekdayAr } from '../../core/format';
+import { fmt12, sessionWindow, untilLabel } from '../../core/time';
 import { SchedulerService } from '../../core/scheduler.service';
-import {
-  CIRCLE_TYPE_SINGULAR,
-  SESSION_STATUS_LABELS,
-  type CircleType,
-  type Session,
-} from '../../core/models';
+import { CIRCLE_TYPE_SINGULAR, type CircleType, type Session } from '../../core/models';
 
 /** بطاقة الحلقة المعروضة أعلى الرئيسية */
 interface CircleCard {
@@ -150,116 +145,6 @@ interface CircleCard {
           <div class="label">حضور اليوم</div>
         </div>
       </div>
-
-      <div class="section-title">إجراءات سريعة</div>
-      <div class="qa-grid">
-        <a class="qa" routerLink="/circles/new">
-          <span class="qa-ico">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 6c-1.8-1.3-4.2-2-7-2v14c2.8 0 5.2.7 7 2 1.8-1.3 4.2-2 7-2V4c-2.8 0-5.2.7-7 2Z"
-              />
-              <path d="M12 6v14" />
-            </svg>
-          </span>
-          <span class="qa-label">حلقة جديدة</span>
-        </a>
-        <a class="qa" routerLink="/students/new">
-          <span class="qa-ico">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="9.5" cy="8" r="3.3" />
-              <path d="M3.5 20c.9-3.3 3.3-4.8 6-4.8 1.3 0 2.5.3 3.5 1" />
-              <path d="M17.5 14v6M14.5 17h6" />
-            </svg>
-          </span>
-          <span class="qa-label">طالب جديد</span>
-        </a>
-        <a class="qa" routerLink="/circles">
-          <span class="qa-ico">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M12 3 3 7.5 12 12l9-4.5L12 3Z" />
-              <path d="M3 12.5 12 17l9-4.5M3 17 12 21.5 21 17" />
-            </svg>
-          </span>
-          <span class="qa-label">كل الحلقات</span>
-        </a>
-        <a class="qa" routerLink="/schedule">
-          <span class="qa-ico">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <rect x="3" y="4.5" width="18" height="16" rx="2" />
-              <path d="M3 9.5h18M8 3v4M16 3v4" />
-            </svg>
-          </span>
-          <span class="qa-label">الجدول</span>
-        </a>
-      </div>
-
-      <div class="row-between section-title">
-        <span>الحلقات القادمة</span>
-        <a routerLink="/schedule">عرض الكل</a>
-      </div>
-
-      @if (upcoming() === undefined) {
-        <div class="spinner"></div>
-      } @else if (upcoming()!.length === 0) {
-        <div class="empty">
-          <span class="icon">🗓️</span>
-          لا توجد حلقات قادمة مجدولة.
-        </div>
-      } @else {
-        @for (s of upcoming(); track s.id) {
-          <a class="list-item" [routerLink]="['/session', s.id]">
-            <span class="avatar">{{ circleInitial(s.circleId) }}</span>
-            <span class="grow">
-              <span class="primary">{{ circleName(s.circleId) }}</span>
-              <span class="secondary">{{ weekdayAr(s.date) }}{{ timeLabel(s) }}</span>
-            </span>
-            <span class="when">
-              <span class="day">{{ relDay(s.date) }}</span>
-              <span
-                [class]="
-                  'badge b-' +
-                  (s.status === 'open' ? 'late' : s.status === 'scheduled' ? 'grade' : 'present')
-                "
-              >
-                {{ statusLabels[s.status] }}
-              </span>
-            </span>
-          </a>
-        }
-      }
     </div>
   `,
 })
@@ -269,11 +154,10 @@ export class DashboardPage {
   private auth = inject(AuthService);
   private scheduler = inject(SchedulerService);
 
-  readonly statusLabels = SESSION_STATUS_LABELS;
   readonly typeSingular = CIRCLE_TYPE_SINGULAR;
+  readonly fmt12 = fmt12;
   readonly dmy = dmy;
   readonly weekdayAr = weekdayAr;
-  readonly fmt12 = fmt12;
   readonly todayLabel = `${weekdayAr(today())} · ${dmy(today())}`;
 
   readonly circles = this.data.circles(this.destroyRef);
@@ -390,33 +274,4 @@ export class DashboardPage {
     const w = sessionWindow(card.session, new Date(this.now()));
     return w.opensAt ? `تبدأ ${untilLabel(w.opensAt, new Date(this.now()))}` : '';
   });
-
-  /** حلقات مفتوحة أو مجدولة اليوم فما بعد — مرتّبة تصاعديًّا، حتى ٣. */
-  readonly upcoming = computed<Session[] | undefined>(() => {
-    const all = this.sessions();
-    if (all === undefined) return undefined;
-    const t = today();
-    return all
-      .filter((s) => s.status === 'open' || s.date >= t)
-      .sort((a, b) => a.date.localeCompare(b.date) || b.createdAt - a.createdAt)
-      .slice(0, 3);
-  });
-
-  private circle(id: string) {
-    return this.circles()?.find((c) => c.id === id);
-  }
-  circleName(id: string): string {
-    return this.circle(id)?.name ?? 'الحلقة';
-  }
-  circleInitial(id: string): string {
-    return this.circleName(id).charAt(0);
-  }
-  timeLabel(s: Session): string {
-    const r = fmtRange(s.fromTime, s.toTime);
-    return r ? ' · ' + r : '';
-  }
-
-  relDay(date: string): string {
-    return relativeDay(date, today());
-  }
 }

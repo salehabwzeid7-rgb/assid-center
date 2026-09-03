@@ -54,6 +54,17 @@ export const CIRCLE_TYPE_SHORT: Record<CircleType, string> = {
 
 export const CIRCLE_TYPE_ORDER: CircleType[] = ['memorization', 'tajweed'];
 
+/** مستوى حلقة التجويد */
+export type TajweedLevel = 'intro' | 'intermediate' | 'advanced';
+
+export const TAJWEED_LEVEL_LABELS: Record<TajweedLevel, string> = {
+  intro: 'تمهيدية',
+  intermediate: 'متوسطة',
+  advanced: 'متقدمة',
+};
+
+export const TAJWEED_LEVEL_ORDER: TajweedLevel[] = ['intro', 'intermediate', 'advanced'];
+
 /**
  * أيام الأسبوع — القيمة = ‏Date.getDay()‎ (0 = الأحد … 6 = السبت).
  * الترتيب يبدأ بالسبت (بداية الأسبوع الدراسيّ في المنطقة).
@@ -138,6 +149,8 @@ export interface Circle {
   name: string;
   /** نوع الحلقة (مطلوب للحلقات الجديدة) */
   type?: CircleType;
+  /** مستوى حلقة التجويد (لحلقات type='tajweed' فقط) */
+  tajweedLevel?: TajweedLevel;
   /** أيام التكرار الأسبوعيّ — قيم ‏getDay()‎ (مطلوب للحلقات الجديدة) */
   weekdays?: number[];
   /** بداية نافذة الحصّة «HH:MM» 24 ساعة (مطلوب للحلقات الجديدة) */
@@ -151,17 +164,39 @@ export interface Circle {
   createdAt: number;
 }
 
-/** «اسم الحلقة — الموضوع» — يُعرَض أينما ظهرت الحلقة (الإسناد، القوائم، الترويسات). */
-export function circleLabel(c: Pick<Circle, 'name' | 'type'> | null | undefined): string {
+/** وصف نوع الحلقة ومستواها: «تجويد تمهيدية» أو «تحفيظ». */
+export function circleTypeLabel(
+  c: Pick<Circle, 'type' | 'tajweedLevel'> | null | undefined,
+): string {
+  if (!c?.type) return '';
+  if (c.type === 'tajweed') {
+    return c.tajweedLevel ? `تجويد ${TAJWEED_LEVEL_LABELS[c.tajweedLevel]}` : 'تجويد';
+  }
+  return 'تحفيظ';
+}
+
+/** «اسم الحلقة — الموضوع/المستوى» — يُعرَض أينما ظهرت الحلقة (الإسناد، القوائم، الترويسات). */
+export function circleLabel(
+  c: Pick<Circle, 'name' | 'type' | 'tajweedLevel'> | null | undefined,
+): string {
   if (!c) return 'حلقة محذوفة';
-  return c.type ? `${c.name} — ${CIRCLE_TYPE_SHORT[c.type]}` : c.name;
+  const t = circleTypeLabel(c);
+  return t ? `${c.name} — ${t}` : c.name;
+}
+
+/** هل الحلقة حلقة تحفيظ؟ (بلا نوع = تحفيظ للتوافق مع الحلقات القديمة). */
+export function isHifzCircle(c: Pick<Circle, 'type'> | null | undefined): boolean {
+  return !!c && (c.type === 'memorization' || c.type === undefined);
 }
 
 /** الطالب */
 export interface Student {
   id: string;
   name: string;
-  circleId: string;
+  /** الحلقات المُسجَّل فيها الطالب (قد تكون تحفيظًا وتجويدًا معًا). */
+  circleIds: string[];
+  /** @deprecated حلقة مفردة قديمة — تُقرأ عبر studentCircleIds */
+  circleId?: string;
   guardianPhone?: string;
   birthDate?: string;
   /** المستوى أو الصف الدراسي */
@@ -172,6 +207,15 @@ export interface Student {
   memorizedSurahs?: number[];
   active: boolean;
   createdAt: number;
+}
+
+/** حلقات الطالب — يدعم القيمة الجديدة (circleIds) والقديمة (circleId). */
+export function studentCircleIds(
+  s: Pick<Student, 'circleIds' | 'circleId'> | null | undefined,
+): string[] {
+  if (!s) return [];
+  if (s.circleIds?.length) return s.circleIds;
+  return s.circleId ? [s.circleId] : [];
 }
 
 /** جلسة الحلقة (حصّة) */

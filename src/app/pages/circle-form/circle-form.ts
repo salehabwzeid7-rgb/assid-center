@@ -7,9 +7,12 @@ import { SchedulerService } from '../../core/scheduler.service';
 import {
   CIRCLE_TYPE_LABELS,
   CIRCLE_TYPE_ORDER,
+  TAJWEED_LEVEL_LABELS,
+  TAJWEED_LEVEL_ORDER,
   WEEKDAY_LABELS,
   WEEKDAY_ORDER,
   type CircleType,
+  type TajweedLevel,
 } from '../../core/models';
 import { isValidHHMM, minutesOfDay } from '../../core/time';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -33,7 +36,12 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
           <label>نوع الحلقة *</label>
           <div class="type-grid">
             @for (t of typeOrder; track t) {
-              <button type="button" class="type-opt" [class.active]="type === t" (click)="type = t">
+              <button
+                type="button"
+                class="type-opt"
+                [class.active]="type === t"
+                (click)="pickType(t)"
+              >
                 <span class="type-ico" aria-hidden="true">
                   @if (t === 'memorization') {
                     <!-- مصحف مفتوح — الحفظ -->
@@ -70,6 +78,30 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
             }
           </div>
         </div>
+
+        <!-- مستوى حلقة التجويد -->
+        @if (type === 'tajweed') {
+          <div class="field">
+            <label>مستوى حلقة التجويد *</label>
+            <div class="lvl-grid">
+              @for (l of levelOrder; track l) {
+                <button
+                  type="button"
+                  class="lvl-opt"
+                  [class.active]="tajweedLevel === l"
+                  (click)="pickLevel(l)"
+                >
+                  {{ levelLabels[l] }}
+                </button>
+              }
+            </div>
+            @if (tajweedLevel) {
+              <p class="hint" style="margin:8px 0 0">
+                يظهر اسم الحلقة وجدولها بالمستوى: «{{ autoName() }}».
+              </p>
+            }
+          </div>
+        }
 
         <!-- أيام التكرار -->
         <div class="field">
@@ -158,6 +190,27 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
         width: 26px;
         height: 26px;
       }
+      .lvl-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .lvl-opt {
+        padding: 12px 4px;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-xs);
+        background: var(--surface);
+        color: var(--text-soft);
+        font-weight: 700;
+        font-size: 0.86rem;
+        cursor: pointer;
+        transition: all var(--ease);
+      }
+      .lvl-opt.active {
+        border-color: var(--gold);
+        background: var(--gold-tint);
+        color: var(--gold-deep);
+      }
       .day-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -195,16 +248,42 @@ export class CircleFormPage implements OnInit {
 
   readonly typeLabels = CIRCLE_TYPE_LABELS;
   readonly typeOrder = CIRCLE_TYPE_ORDER;
+  readonly levelLabels = TAJWEED_LEVEL_LABELS;
+  readonly levelOrder = TAJWEED_LEVEL_ORDER;
   readonly weekdayLabels = WEEKDAY_LABELS;
   readonly weekdayOrder = WEEKDAY_ORDER;
 
   name = '';
   type: CircleType | null = null;
+  tajweedLevel: TajweedLevel | null = null;
   readonly days = signal<number[]>([]);
   fromTime = '';
   toTime = '';
   readonly saving = signal(false);
   readonly error = signal('');
+
+  /** آخر اسم مُقترَح تلقائيًّا — لمعرفة إن كان المعلّم عدّل الاسم يدويًّا. */
+  private lastAutoName = '';
+
+  /** الاسم المُقترَح حسب المستوى: «حلقة تجويد تمهيدية». */
+  autoName(): string {
+    return this.tajweedLevel ? `حلقة تجويد ${this.levelLabels[this.tajweedLevel]}` : '';
+  }
+
+  pickType(t: CircleType): void {
+    this.type = t;
+    if (t !== 'tajweed') this.tajweedLevel = null;
+  }
+
+  pickLevel(l: TajweedLevel): void {
+    this.tajweedLevel = l;
+    // يُطبَّق الاسم تلقائيًّا ما لم يكن المعلّم قد كتب اسمًا خاصًّا
+    const auto = this.autoName();
+    if (this.name.trim() === '' || this.name.trim() === this.lastAutoName) {
+      this.name = auto;
+      this.lastAutoName = auto;
+    }
+  }
 
   toggleDay(d: number): void {
     const cur = this.days();
@@ -218,6 +297,7 @@ export class CircleFormPage implements OnInit {
     if (c) {
       this.name = c.name;
       this.type = c.type ?? null;
+      this.tajweedLevel = c.tajweedLevel ?? null;
       this.days.set(c.weekdays ?? []);
       this.fromTime = c.fromTime ?? '';
       this.toTime = c.toTime ?? '';
@@ -230,6 +310,8 @@ export class CircleFormPage implements OnInit {
   async submit(): Promise<void> {
     if (!this.name.trim()) return void this.error.set('أدخل اسم الحلقة');
     if (!this.type) return void this.error.set('اختر نوع الحلقة');
+    if (this.type === 'tajweed' && !this.tajweedLevel)
+      return void this.error.set('اختر مستوى حلقة التجويد');
     if (this.days().length === 0)
       return void this.error.set('اختر يومًا واحدًا على الأقل لتكرار الحلقة');
     if (
@@ -244,6 +326,7 @@ export class CircleFormPage implements OnInit {
     const payload = {
       name: this.name.trim(),
       type: this.type,
+      tajweedLevel: this.type === 'tajweed' ? (this.tajweedLevel ?? undefined) : undefined,
       weekdays: this.days(),
       fromTime: this.fromTime,
       toTime: this.toTime,

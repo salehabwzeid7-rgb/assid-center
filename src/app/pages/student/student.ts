@@ -1,7 +1,13 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { ATTENDANCE_LABELS, CIRCLE_TYPE_SHORT, type Circle, type Student } from '../../core/models';
+import {
+  ATTENDANCE_LABELS,
+  circleTypeLabel,
+  studentCircleIds,
+  type Circle,
+  type Student,
+} from '../../core/models';
 import { dmy } from '../../core/format';
 import { JUZ_SURAHS, completedJuz } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -27,16 +33,21 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="grow">
               <h2 style="font-size:1.15rem;margin:0">{{ s.name }}</h2>
               <div class="id-meta">
-                <a
-                  class="circle-chip"
-                  [class.t-tajweed]="circle()?.type === 'tajweed'"
-                  [routerLink]="['/circle', s.circleId]"
-                >
-                  {{ circle()?.name || 'حلقة محذوفة' }}
-                  @if (circle()?.type) {
-                    <span class="dot-sep">·</span> {{ typeShort[circle()!.type!] }}
-                  }
-                </a>
+                @for (c of studentCircles(); track c.id) {
+                  <a
+                    class="circle-chip"
+                    [class.t-tajweed]="c.type === 'tajweed'"
+                    [routerLink]="['/circle', c.id]"
+                  >
+                    {{ c.name }}
+                    @if (typeText(c)) {
+                      <span class="dot-sep">·</span> {{ typeText(c) }}
+                    }
+                  </a>
+                }
+                @if (studentCircles().length === 0) {
+                  <span class="off">بلا حلقة</span>
+                }
                 @if (!s.active) {
                   <span class="off">غير نشط</span>
                 }
@@ -286,11 +297,22 @@ export class StudentPage implements OnInit {
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly student = signal<Student | null>(null);
   readonly loaded = signal(false);
-  readonly circle = signal<Circle | null>(null);
 
-  readonly typeShort = CIRCLE_TYPE_SHORT;
+  private readonly allCircles = this.data.circles(this.destroyRef);
+  readonly studentCircles = computed(() => {
+    const cs = this.allCircles() ?? [];
+    return studentCircleIds(this.student()).flatMap((id) => {
+      const c = cs.find((x) => x.id === id);
+      return c ? [c] : [];
+    });
+  });
+
   readonly attLabels = ATTENDANCE_LABELS;
   readonly dmy = dmy;
+
+  typeText(c: Circle): string {
+    return circleTypeLabel(c);
+  }
 
   private readonly recitations = this.data.studentRecitations(this.id, this.destroyRef);
   readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
@@ -340,10 +362,8 @@ export class StudentPage implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    const s = await this.data.getStudent(this.id);
-    this.student.set(s);
+    this.student.set(await this.data.getStudent(this.id));
     this.loaded.set(true);
-    if (s) this.circle.set(await this.data.getCircle(s.circleId));
   }
 
   attCount(status: string): number {

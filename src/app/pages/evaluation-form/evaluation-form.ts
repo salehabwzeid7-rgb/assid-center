@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
-import { SARD_PASS, type Student } from '../../core/models';
+import { SARD_PASS, studentCircleIds, type Student } from '../../core/models';
 import { ScoreInputComponent } from '../../shared/score-input';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -92,6 +92,7 @@ export class EvaluationFormPage implements OnInit {
     this.route.snapshot.paramMap.get('studentId') ?? this.route.snapshot.paramMap.get('id')!;
   readonly sessionId = this.route.snapshot.paramMap.get('sessionId') ?? undefined;
   readonly student = signal<Student | null>(null);
+  private circleId = '';
   readonly saving = signal(false);
   readonly error = signal('');
 
@@ -108,7 +109,10 @@ export class EvaluationFormPage implements OnInit {
     this.student.set(await this.data.getStudent(this.studentId));
     if (this.sessionId) {
       const session = await this.data.getSession(this.sessionId);
-      if (session) this.date = session.date;
+      if (session) {
+        this.date = session.date;
+        this.circleId = session.circleId;
+      }
     }
   }
 
@@ -125,7 +129,7 @@ export class EvaluationFormPage implements OnInit {
         this.data
           .addEvaluation({
             studentId: s.id,
-            circleId: s.circleId,
+            circleId: this.circleId || studentCircleIds(s)[0] || '',
             date: this.date,
             memorization: this.memorization(),
             review: this.review(),

@@ -34,7 +34,14 @@ export interface SardAnalysis {
   category: SardCategory;
   /** عدد ما على الطالب سرده (أجزاء غير مسرودة + كتل جاهزة) */
   pendingCount: number;
+  /**
+   * الجزء الجاري حفظه الآن + تقدّمه (الجزء = ٢٠ صفحة).
+   * أقرب جزء جزئيّ إلى الاكتمال؛ null إن لم يوجد جزء جزئيّ.
+   */
+  currentJuz: { juz: number; fraction: number; pages: number } | null;
 }
+
+const JUZ_PAGES = 20;
 
 export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): SardAnalysis {
   const mem = student.memorizedSurahs ?? [];
@@ -85,6 +92,19 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
   else if (pendingCount > 0) category = 'due';
   else category = 'revised';
 
+  // الجزء الجاري: أقرب جزء جزئيّ إلى الاكتمال (١ = مكتمل)، والتقدّم بصيغة صفحات من ٢٠.
+  let currentJuz: SardAnalysis['currentJuz'] = null;
+  let bestFraction = -1;
+  JUZ_SURAHS.forEach((list, i) => {
+    const have = list.filter((n) => memSet.has(n)).length;
+    if (have === 0 || have === list.length) return;
+    const fraction = have / list.length;
+    if (fraction > bestFraction) {
+      bestFraction = fraction;
+      currentJuz = { juz: i + 1, fraction, pages: Math.round(fraction * JUZ_PAGES) };
+    }
+  });
+
   return {
     completedJuz: completed,
     revisedJuz,
@@ -97,5 +117,6 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
     juzLastScore,
     category,
     pendingCount,
+    currentJuz,
   };
 }

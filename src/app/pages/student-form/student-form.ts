@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
-import { circleLabel } from '../../core/models';
+import { circleLabel, studentCircleIds } from '../../core/models';
 import { completedJuz } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { QuranTrackerComponent } from '../../shared/quran-tracker';
@@ -22,13 +22,22 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
         </div>
 
         <div class="field">
-          <label for="circleId">الحلقة *</label>
-          <select id="circleId" name="circleId" [(ngModel)]="m.circleId" required>
-            <option value="" disabled>اختر الحلقة</option>
+          <label>الحلقات * — يمكن اختيار أكثر من حلقة (تحفيظ + تجويد معًا)</label>
+          @if (circles() && circles()!.length === 0) {
+            <p class="muted" style="margin:0">لا توجد حلقات بعد — أنشئ حلقة أوّلًا.</p>
+          }
+          <div class="circle-picks">
             @for (c of circles(); track c.id) {
-              <option [value]="c.id">{{ circleLabel(c) }}</option>
+              <label class="circle-pick" [class.on]="m.circleIds.includes(c.id)">
+                <input
+                  type="checkbox"
+                  [checked]="m.circleIds.includes(c.id)"
+                  (change)="toggleCircle(c.id)"
+                />
+                <span>{{ circleLabel(c) }}</span>
+              </label>
             }
-          </select>
+          </div>
         </div>
 
         <div class="field-row">
@@ -87,6 +96,34 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
       </form>
     </div>
   `,
+  styles: [
+    `
+      .circle-picks {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .circle-pick {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xs);
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .circle-pick.on {
+        background: var(--green-tint);
+        border-color: var(--green);
+      }
+      .circle-pick input {
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+      }
+    `,
+  ],
 })
 export class StudentFormPage implements OnInit {
   readonly circleLabel = circleLabel;
@@ -107,7 +144,7 @@ export class StudentFormPage implements OnInit {
 
   m = {
     name: '',
-    circleId: '',
+    circleIds: [] as string[],
     level: '',
     birthDate: '',
     guardianPhone: '',
@@ -116,6 +153,12 @@ export class StudentFormPage implements OnInit {
     active: true,
   };
 
+  toggleCircle(id: string): void {
+    this.m.circleIds = this.m.circleIds.includes(id)
+      ? this.m.circleIds.filter((x) => x !== id)
+      : [...this.m.circleIds, id];
+  }
+
   async ngOnInit(): Promise<void> {
     if (this.id) {
       this.editing.set(true);
@@ -123,7 +166,7 @@ export class StudentFormPage implements OnInit {
       if (s) {
         this.m = {
           name: s.name,
-          circleId: s.circleId,
+          circleIds: studentCircleIds(s),
           level: s.level ?? '',
           birthDate: s.birthDate ?? '',
           guardianPhone: s.guardianPhone ?? '',
@@ -136,20 +179,20 @@ export class StudentFormPage implements OnInit {
       }
       this.cdr.markForCheck();
     } else if (this.circleParam) {
-      this.m.circleId = this.circleParam;
+      this.m.circleIds = [this.circleParam];
     }
   }
 
   async submit(): Promise<void> {
-    if (!this.m.name.trim() || !this.m.circleId) {
-      this.error.set('أدخل اسم الطالب واختر الحلقة');
+    if (!this.m.name.trim() || this.m.circleIds.length === 0) {
+      this.error.set('أدخل اسم الطالب واختر حلقة واحدة على الأقلّ');
       return;
     }
     this.saving.set(true);
     this.error.set('');
     const payload = {
       name: this.m.name.trim(),
-      circleId: this.m.circleId,
+      circleIds: [...this.m.circleIds],
       level: this.m.level.trim() || undefined,
       birthDate: this.m.birthDate || undefined,
       guardianPhone: this.m.guardianPhone.trim() || undefined,

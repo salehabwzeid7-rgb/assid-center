@@ -10,6 +10,7 @@ import {
   TASMIE_PASS,
   passLabel,
   scoreOf,
+  studentCircleIds,
   type AttendanceStatus,
   type Session,
 } from '../../core/models';
@@ -369,7 +370,7 @@ export class SessionPage implements OnInit {
   readonly students = computed(() => {
     const cid = this.circleId();
     if (!cid) return undefined;
-    return this.allStudents()?.filter((s) => s.circleId === cid && s.active);
+    return this.allStudents()?.filter((s) => s.active && studentCircleIds(s).includes(cid));
   });
   readonly attendance = this.data.sessionAttendance(this.id, this.destroyRef);
   readonly recitations = this.data.sessionRecitations(this.id, this.destroyRef);

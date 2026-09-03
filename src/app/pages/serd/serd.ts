@@ -5,9 +5,10 @@ import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import {
   SARD_PASS,
+  isHifzCircle,
   passLabel,
   scoreOf,
-  type Circle,
+  studentCircleIds,
   type SerdRecord,
   type Student,
 } from '../../core/models';
@@ -313,9 +314,9 @@ export class SerdPage implements OnInit {
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly setup = signal(this.route.snapshot.queryParamMap.get('setup') === '1');
   readonly student = signal<Student | null>(null);
-  readonly circle = signal<Circle | null>(null);
   readonly loaded = signal(false);
 
+  private readonly allCircles = this.data.circles(this.destroyRef);
   readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
   readonly dmy = dmy;
   readonly sardPass = SARD_PASS;
@@ -381,10 +382,16 @@ export class SerdPage implements OnInit {
   readonly masteredBlocks = computed(() => this.blockRows().filter((b) => b.done).length);
 
   async ngOnInit(): Promise<void> {
-    const s = await this.data.getStudent(this.id);
-    this.student.set(s);
+    this.student.set(await this.data.getStudent(this.id));
     this.loaded.set(true);
-    if (s) this.circle.set(await this.data.getCircle(s.circleId));
+  }
+
+  /** حلقة التحفيظ المرتبطة بالطالب (لتخزين سياق سجلّ السرد). */
+  private hifzCircleId(s: Student): string {
+    const cs = this.allCircles() ?? [];
+    const ids = studentCircleIds(s);
+    const hifz = ids.find((id) => isHifzCircle(cs.find((c) => c.id === id)));
+    return hifz ?? ids[0] ?? '';
   }
 
   scopeText(r: SerdRecord): string {
@@ -431,7 +438,7 @@ export class SerdPage implements OnInit {
         this.data
           .addSerd({
             studentId: s.id,
-            circleId: s.circleId,
+            circleId: this.hifzCircleId(s),
             scope: rec.scope,
             juz: rec.juz,
             juzList: rec.juzList,
@@ -458,7 +465,7 @@ export class SerdPage implements OnInit {
           list.map((r) =>
             this.data.addSerd({
               studentId: s.id,
-              circleId: s.circleId,
+              circleId: this.hifzCircleId(s),
               scope: 'juz',
               juz: r.juz,
               score: this.batchScore(),

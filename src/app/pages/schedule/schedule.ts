@@ -5,8 +5,8 @@ import { dmy, weekdayAr } from '../../core/format';
 import { fmtRange, sessionWindow, untilLabel } from '../../core/time';
 import { SchedulerService } from '../../core/scheduler.service';
 import {
-  CIRCLE_TYPE_SINGULAR,
   SESSION_STATUS_LABELS,
+  circleTypeLabel,
   type Circle,
   type Session,
 } from '../../core/models';
@@ -35,10 +35,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
               <span class="grow">
                 <span class="primary">
                   {{ circleName(s.circleId) }}
-                  @if (circleType(s.circleId); as ct) {
-                    <span class="stag" [class.t-tajweed]="ct === 'tajweed'">
-                      {{ ct === 'tajweed' ? 'تجويد' : 'تحفيظ' }}
-                    </span>
+                  @if (circleTypeText(s.circleId); as ct) {
+                    <span class="stag" [class.t-tajweed]="isTajweed(s.circleId)">{{ ct }}</span>
                   }
                 </span>
                 <span class="secondary">
@@ -111,7 +109,6 @@ export class SchedulePage {
   private scheduler = inject(SchedulerService);
 
   readonly statusLabels = SESSION_STATUS_LABELS;
-  readonly typeSingular = CIRCLE_TYPE_SINGULAR;
   readonly dmy = dmy;
   readonly weekdayAr = weekdayAr;
   readonly fmtRange = fmtRange;
@@ -147,8 +144,11 @@ export class SchedulePage {
   circleName(id: string): string {
     return this.circle(id)?.name ?? 'الحلقة';
   }
-  circleType(id: string) {
-    return this.circle(id)?.type ?? null;
+  circleTypeText(id: string): string {
+    return circleTypeLabel(this.circle(id));
+  }
+  isTajweed(id: string): boolean {
+    return this.circle(id)?.type === 'tajweed';
   }
   dayNum(date: string): string {
     return date.slice(8, 10);

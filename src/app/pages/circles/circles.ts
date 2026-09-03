@@ -6,6 +6,8 @@ import {
   CIRCLE_TYPE_LABELS,
   WEEKDAY_LABELS,
   WEEKDAY_ORDER,
+  circleTypeLabel,
+  studentCircleIds,
   type Circle,
   type CircleType,
 } from '../../core/models';
@@ -56,9 +58,9 @@ type Filter = 'all' | CircleType;
                 }
               </span>
             </span>
-            @if (c.type) {
+            @if (typeLabel(c)) {
               <span class="ctype" [class.t-tajweed]="c.type === 'tajweed'">
-                {{ c.type === 'tajweed' ? 'تجويد' : 'تحفيظ' }}
+                {{ typeLabel(c) }}
               </span>
             }
           </a>
@@ -131,7 +133,10 @@ export class CirclesPage {
       .map((d) => WEEKDAY_LABELS[d])
       .join('، ');
   }
+  typeLabel(c: Circle): string {
+    return circleTypeLabel(c);
+  }
   studentCount(circleId: string): number {
-    return this.students()?.filter((s) => s.circleId === circleId).length ?? 0;
+    return this.students()?.filter((s) => studentCircleIds(s).includes(circleId)).length ?? 0;
   }
 }
