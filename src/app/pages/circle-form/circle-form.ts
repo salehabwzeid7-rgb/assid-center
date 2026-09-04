@@ -142,11 +142,20 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
       </form>
 
       @if (editing()) {
-        <div class="card">
-          <button class="btn btn-danger btn-block" type="button" (click)="remove()">
-            حذف الحلقة
+        <div class="section-title">منطقة الخطر</div>
+        <div class="card danger-zone">
+          <p class="hint" style="margin-top:0">
+            حذف نهائيّ للحلقة وكلّ حصصها وسجلّات الحضور والتسميع المرتبطة بها — من هذا الجهاز ومن
+            Firebase معًا. لا يُحذف الطلاب (تُزال الحلقة من قوائمهم فقط). لا يمكن التراجع.
+          </p>
+          <button
+            class="btn btn-danger btn-block"
+            type="button"
+            [disabled]="deleting()"
+            (click)="remove()"
+          >
+            {{ deleting() ? 'جارٍ الحذف…' : '🗑️ حذف الحلقة نهائيًّا' }}
           </button>
-          <p class="hint">لا يُحذف طلاب الحلقة، لكن تختفي من قائمتك وتُلغى حصصها المجدولة.</p>
         </div>
       }
     </div>
@@ -232,6 +241,9 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
         background: var(--green-tint);
         color: var(--green);
       }
+      .danger-zone {
+        border: 1px solid var(--danger);
+      }
     `,
   ],
 })
@@ -260,6 +272,7 @@ export class CircleFormPage implements OnInit {
   fromTime = '';
   toTime = '';
   readonly saving = signal(false);
+  readonly deleting = signal(false);
   readonly error = signal('');
 
   /** آخر اسم مُقترَح تلقائيًّا — لمعرفة إن كان المعلّم عدّل الاسم يدويًّا. */
@@ -360,16 +373,22 @@ export class CircleFormPage implements OnInit {
   }
 
   async remove(): Promise<void> {
-    if (!this.id) return;
-    const ok = await this.notify.confirm('حذف هذه الحلقة؟', {
-      message: 'لا يُحذف طلاب الحلقة، لكنها تختفي من قائمتك وتُلغى حصصها المجدولة.',
-      confirmText: 'حذف',
+    if (!this.id || this.deleting()) return;
+    const ok = await this.notify.confirm('حذف هذه الحلقة نهائيًّا؟', {
+      message:
+        'سيُحذف نهائيًّا: الحلقة، وكلّ حصصها، وسجلّات الحضور والتسميع المرتبطة بها — من هذا ' +
+        'الجهاز ومن Firebase معًا. لا يُحذف الطلاب (تُزال الحلقة من قوائمهم فقط). لا يمكن التراجع.',
+      confirmText: 'حذف نهائيّ',
       danger: true,
     });
     if (!ok) return;
+    this.deleting.set(true);
     const done = await this.notify.run(() => this.data.deleteCircle(this.id!).then(() => true), {
-      success: 'حُذفت الحلقة',
+      loading: 'جارٍ حذف الحلقة…',
+      success: 'حُذفت الحلقة نهائيًّا',
+      error: 'تعذّر حذف الحلقة — أعِد المحاولة',
     });
+    this.deleting.set(false);
     if (done) await this.router.navigateByUrl('/circles');
   }
 }

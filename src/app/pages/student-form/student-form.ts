@@ -94,10 +94,32 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
           {{ saving() ? 'جارٍ الحفظ…' : editing() ? 'حفظ التعديلات' : 'إضافة الطالب' }}
         </button>
       </form>
+
+      @if (editing()) {
+        <div class="section-title">منطقة الخطر</div>
+        <div class="card danger-zone">
+          <p class="hint" style="margin-top:0">
+            حذف نهائيّ للطالب وكلّ سجلّاته (الحضور، التسميع، التقييم، السرد، الاختبار) — من هذا
+            الجهاز ومن Firebase معًا. لا يمكن التراجع. للاحتفاظ بسجلّاته مع إخفائه فقط، ألغِ تفعيل
+            «الطالب نشط» أعلاه بدل الحذف.
+          </p>
+          <button
+            class="btn btn-danger btn-block"
+            type="button"
+            [disabled]="deleting()"
+            (click)="remove()"
+          >
+            {{ deleting() ? 'جارٍ الحذف…' : '🗑️ حذف الطالب نهائيًّا' }}
+          </button>
+        </div>
+      }
     </div>
   `,
   styles: [
     `
+      .danger-zone {
+        border: 1px solid var(--danger);
+      }
       .circle-picks {
         display: flex;
         flex-direction: column;
@@ -139,6 +161,7 @@ export class StudentFormPage implements OnInit {
 
   readonly circles = this.data.circles(this.destroyRef);
   readonly saving = signal(false);
+  readonly deleting = signal(false);
   readonly error = signal('');
   readonly editing = signal(false);
 
@@ -217,5 +240,26 @@ export class StudentFormPage implements OnInit {
       return;
     }
     await this.router.navigate(['/student', targetId]);
+  }
+
+  /** حذف نهائيّ للطالب وكلّ سجلّاته — بتأكيد قبل التنفيذ. */
+  async remove(): Promise<void> {
+    if (!this.id || this.deleting()) return;
+    const ok = await this.notify.confirm('حذف هذا الطالب نهائيًّا؟', {
+      message:
+        `سيُحذف نهائيًّا «${this.m.name.trim() || 'الطالب'}» وكلّ سجلّاته: الحضور، التسميع، ` +
+        'التقييم اليوميّ، السرد، والاختبار — من هذا الجهاز ومن Firebase معًا. لا يمكن التراجع.',
+      confirmText: 'حذف نهائيّ',
+      danger: true,
+    });
+    if (!ok) return;
+    this.deleting.set(true);
+    const done = await this.notify.run(() => this.data.deleteStudent(this.id!).then(() => true), {
+      loading: 'جارٍ حذف الطالب…',
+      success: 'حُذف الطالب نهائيًّا',
+      error: 'تعذّر حذف الطالب — أعِد المحاولة',
+    });
+    this.deleting.set(false);
+    if (done) await this.router.navigateByUrl('/students');
   }
 }

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
@@ -42,7 +42,7 @@ interface Recording {
     <app-page-header [title]="'الاختبار — ' + (student()?.name || 'الطالب')" />
 
     <div class="page">
-      @if (student() === null && loaded()) {
+      @if (student() === null) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الطالب.</div>
       } @else if (student(); as s) {
         @if (setup()) {
@@ -239,7 +239,7 @@ interface Recording {
     `,
   ],
 })
-export class ExamPage implements OnInit {
+export class ExamPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private notify = inject(NotifyService);
@@ -247,8 +247,8 @@ export class ExamPage implements OnInit {
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly setup = signal(this.route.snapshot.queryParamMap.get('setup') === '1');
-  readonly student = signal<Student | null>(null);
-  readonly loaded = signal(false);
+  /** إشارة حيّة — تنعكس تعديلات المقرّر فورًا على تنبيهات الاختبار (undefined=تحميل · null=محذوف). */
+  readonly student = this.data.studentLive(this.id, this.destroyRef);
 
   private readonly allCircles = this.data.circles(this.destroyRef);
   readonly exams = this.data.examsByStudent(this.id, this.destroyRef);
@@ -290,11 +290,6 @@ export class ExamPage implements OnInit {
     const vals = (this.exams() ?? []).map((e) => scoreOf(e));
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
   });
-
-  async ngOnInit(): Promise<void> {
-    this.student.set(await this.data.getStudent(this.id));
-    this.loaded.set(true);
-  }
 
   /** حلقة التحفيظ المرتبطة بالطالب (لتخزين سياق سجلّ الاختبار). */
   private hifzCircleId(s: Student): string {

@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import {
@@ -6,7 +6,6 @@ import {
   circleTypeLabel,
   studentCircleIds,
   type Circle,
-  type Student,
 } from '../../core/models';
 import { dmy } from '../../core/format';
 import { JUZ_SURAHS, completedJuz } from '../../core/quran-data';
@@ -24,7 +23,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
     <app-page-header [title]="student()?.name || 'الطالب'" />
 
     <div class="page">
-      @if (student() === null && loaded()) {
+      @if (student() === null) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الطالب.</div>
       } @else if (student(); as s) {
         <!-- بطاقة الهوية -->
@@ -302,14 +301,14 @@ import { PageHeaderComponent } from '../../shared/page-header';
     `,
   ],
 })
-export class StudentPage implements OnInit {
+export class StudentPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
-  readonly student = signal<Student | null>(null);
-  readonly loaded = signal(false);
+  /** إشارة حيّة — تنعكس أيّ تعديلات على الطالب فورًا (undefined=تحميل · null=محذوف). */
+  readonly student = this.data.studentLive(this.id, this.destroyRef);
 
   private readonly allCircles = this.data.circles(this.destroyRef);
   readonly studentCircles = computed(() => {
@@ -389,11 +388,6 @@ export class StudentPage implements OnInit {
     const ok = list.filter((a) => a.status === 'present' || a.status === 'late').length;
     return Math.round((ok / list.length) * 100);
   });
-
-  async ngOnInit(): Promise<void> {
-    this.student.set(await this.data.getStudent(this.id));
-    this.loaded.set(true);
-  }
 
   attCount(status: string): number {
     return this.attendance()?.filter((a) => a.status === status).length ?? 0;

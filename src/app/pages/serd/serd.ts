@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
@@ -53,7 +53,7 @@ interface Recording {
     <app-page-header [title]="'السرد — ' + (student()?.name || 'الطالب')" />
 
     <div class="page">
-      @if (student() === null && loaded()) {
+      @if (student() === null) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الطالب.</div>
       } @else if (student(); as s) {
         @if (setup()) {
@@ -305,7 +305,7 @@ interface Recording {
     `,
   ],
 })
-export class SerdPage implements OnInit {
+export class SerdPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private notify = inject(NotifyService);
@@ -313,8 +313,8 @@ export class SerdPage implements OnInit {
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
   readonly setup = signal(this.route.snapshot.queryParamMap.get('setup') === '1');
-  readonly student = signal<Student | null>(null);
-  readonly loaded = signal(false);
+  /** إشارة حيّة — تنعكس تعديلات المقرّر فورًا على تنبيهات السرد (undefined=تحميل · null=محذوف). */
+  readonly student = this.data.studentLive(this.id, this.destroyRef);
 
   private readonly allCircles = this.data.circles(this.destroyRef);
   readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
@@ -380,11 +380,6 @@ export class SerdPage implements OnInit {
     return out;
   });
   readonly masteredBlocks = computed(() => this.blockRows().filter((b) => b.done).length);
-
-  async ngOnInit(): Promise<void> {
-    this.student.set(await this.data.getStudent(this.id));
-    this.loaded.set(true);
-  }
 
   /** حلقة التحفيظ المرتبطة بالطالب (لتخزين سياق سجلّ السرد). */
   private hifzCircleId(s: Student): string {

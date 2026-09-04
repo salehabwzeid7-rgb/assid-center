@@ -12,7 +12,9 @@ import {
   query,
   where,
   writeBatch,
+  deleteField,
   type CollectionReference,
+  type DocumentReference,
   type Query,
   type DocumentData,
 } from 'firebase/firestore';
@@ -92,6 +94,27 @@ export class DataService {
     return doc(db, name, id);
   }
 
+  /**
+   * ينفّذ قائمة عمليّات حذف/تحديث على دفعات ذرّيّة (≤ ٤٥٠ عمليّة لكلّ دفعة، حدّ
+   * Firestore ٥٠٠). كلّ دفعة إمّا تنجح كاملةً أو تفشل كاملةً؛ والتغيير ينعكس فورًا
+   * على التخزين المحلّيّ (IndexedDB) وعلى السحابة عبر نفس مستمعي onSnapshot.
+   */
+  private async runBatched(
+    ops: (
+      | { kind: 'delete'; ref: DocumentReference }
+      | { kind: 'update'; ref: DocumentReference; data: Record<string, unknown> }
+    )[],
+  ): Promise<void> {
+    for (let i = 0; i < ops.length; i += 450) {
+      const batch = writeBatch(db);
+      for (const op of ops.slice(i, i + 450)) {
+        if (op.kind === 'delete') batch.delete(op.ref);
+        else batch.update(op.ref, op.data);
+      }
+      await batch.commit();
+    }
+  }
+
   private byNameAr = (a: { name: string }, b: { name: string }) =>
     a.name.localeCompare(b.name, 'ar');
   private byDateDesc = (
@@ -138,6 +161,29 @@ export class DataService {
 
   allStudents(destroyRef?: DestroyRef): Signal<Student[] | undefined> {
     return this.live<Student>(query(this.col(COL.students)), destroyRef, this.byNameAr);
+  }
+
+  /**
+   * الطالب كإشارة حيّة تتحدّث لحظيًّا مع Firestore:
+   *   undefined = جارٍ التحميل · null = غير موجود (أو حُذف) · Student = موجود.
+   * تُستخدم في صفحات الطالب/السرد/الاختبار حتى تنعكس أيّ تعديلات (كإضافة حفظ
+   * جديد أثناء الجلسة) فورًا على سجلّات السرد والاختبار دون إعادة فتح الصفحة.
+   */
+  studentLive(id: string, destroyRef?: DestroyRef): Signal<Student | null | undefined> {
+    const all = this.allStudents(destroyRef);
+    return computed(() => {
+      const list = all();
+      return list === undefined ? undefined : (list.find((s) => s.id === id) ?? null);
+    });
+  }
+
+  /** الحلقة كإشارة حيّة (undefined=تحميل · null=غير موجودة · Circle=موجودة). */
+  circleLive(id: string, destroyRef?: DestroyRef): Signal<Circle | null | undefined> {
+    const all = this.circles(destroyRef);
+    return computed(() => {
+      const list = all();
+      return list === undefined ? undefined : (list.find((c) => c.id === id) ?? null);
+    });
   }
 
   // ---------- الجلسات ----------
@@ -372,15 +418,39 @@ export class DataService {
     await updateDoc(this.ref(COL.circles, id), clean(next));
   }
 
-  /** حذف الحلقة وجلساتها المجدولة (تبقى الجلسات المفتوحة/المنتهية كسجلّ). */
+  /**
+   * حذف نهائيّ وكامل للحلقة من السحابة والتخزين المحلّيّ معًا:
+   *   • كلّ جلسات الحلقة (مجدولة/مفتوحة/منتهية).
+   *   • كلّ سجلّات الحضور والتسميع المرتبطة بالحلقة.
+   *   • إزالة الحلقة من قائمة حلقات كلّ طالب مسجَّل فيها (لا يُحذف الطلاب).
+   *   • مستند الحلقة نفسه.
+   * تبقى سجلّات السرد والاختبار (تقدّم الطالب في الحفظ) لأنّها ملك الطالب لا الحلقة.
+   */
   async deleteCircle(id: string): Promise<void> {
-    const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', id)));
-    await Promise.all([
-      ...snap.docs
-        .filter((d) => (d.data() as Session).status === 'scheduled')
-        .map((d) => deleteDoc(d.ref)),
-      deleteDoc(this.ref(COL.circles, id)),
+    const [sessions, attendance, recitations, students] = await Promise.all([
+      getDocs(query(this.col(COL.sessions), where('circleId', '==', id))),
+      getDocs(query(this.col(COL.attendance), where('circleId', '==', id))),
+      getDocs(query(this.col(COL.recitations), where('circleId', '==', id))),
+      getDocs(this.col(COL.students)),
     ]);
+
+    const ops: Parameters<DataService['runBatched']>[0] = [];
+    for (const d of [...sessions.docs, ...attendance.docs, ...recitations.docs]) {
+      ops.push({ kind: 'delete', ref: d.ref });
+    }
+    for (const d of students.docs) {
+      const s = d.data() as Student;
+      const ids = studentCircleIds(s);
+      if (ids.includes(id)) {
+        ops.push({
+          kind: 'update',
+          ref: d.ref,
+          data: { circleIds: ids.filter((x) => x !== id), circleId: deleteField() },
+        });
+      }
+    }
+    ops.push({ kind: 'delete', ref: this.ref(COL.circles, id) });
+    await this.runBatched(ops);
   }
 
   /**
@@ -444,6 +514,22 @@ export class DataService {
 
   async setStudentActive(id: string, active: boolean): Promise<void> {
     await updateDoc(this.ref(COL.students, id), { active });
+  }
+
+  /**
+   * حذف نهائيّ وكامل للطالب من السحابة والتخزين المحلّيّ معًا:
+   * مستند الطالب + كلّ سجلّاته (الحضور، التسميع، التقييم اليوميّ، السرد، الاختبار).
+   * لا يمسّ الحلقات. العمليّة ذرّيّة على دفعات وتنعكس لحظيًّا على كلّ الأجهزة.
+   */
+  async deleteStudent(id: string): Promise<void> {
+    const cols = [COL.attendance, COL.recitations, COL.evaluations, COL.serd, COL.exams];
+    const snaps = await Promise.all(
+      cols.map((c) => getDocs(query(this.col(c), where('studentId', '==', id)))),
+    );
+    const ops: Parameters<DataService['runBatched']>[0] = [];
+    for (const snap of snaps) for (const d of snap.docs) ops.push({ kind: 'delete', ref: d.ref });
+    ops.push({ kind: 'delete', ref: this.ref(COL.students, id) });
+    await this.runBatched(ops);
   }
 
   /**

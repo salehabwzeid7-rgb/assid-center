@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
 import { dmy, weekdayAr } from '../../core/format';
@@ -46,6 +46,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
           @if (!c.weekdays?.length && c.schedule) {
             <span class="muted">🕌 {{ c.schedule }}</span>
           }
+          <a class="edit-link" [routerLink]="['/circle', id, 'edit']">✎ تعديل الحلقة</a>
         </div>
       }
 
@@ -193,6 +194,18 @@ import { PageHeaderComponent } from '../../shared/page-header';
         background: var(--gold-tint);
         color: var(--gold-deep);
       }
+      .edit-link {
+        font-weight: 700;
+        font-size: 0.8rem;
+        color: var(--green);
+        text-decoration: none;
+        padding: 3px 10px;
+        border: 1px solid var(--green);
+        border-radius: 999px;
+      }
+      .edit-link:active {
+        background: var(--green-tint);
+      }
       .locked {
         display: flex;
         align-items: center;
@@ -243,14 +256,15 @@ import { PageHeaderComponent } from '../../shared/page-header';
     `,
   ],
 })
-export class CirclePage implements OnInit {
+export class CirclePage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
-  readonly circle = signal<Circle | null>(null);
+  /** إشارة حيّة — يعكس أيّ تعديل على الحلقة فورًا (undefined=تحميل · null=محذوفة). */
+  readonly circle = this.data.circleLive(this.id, this.destroyRef);
   readonly statusLabels = SESSION_STATUS_LABELS;
   typeLabel(c: Circle): string {
     return circleTypeLabel(c);
@@ -313,10 +327,6 @@ export class CirclePage implements OnInit {
   constructor() {
     const timer = setInterval(() => this.now.set(Date.now()), 30_000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
-  }
-
-  async ngOnInit(): Promise<void> {
-    this.circle.set(await this.data.getCircle(this.id));
   }
 
   rangeLabel(c: Circle): string {
