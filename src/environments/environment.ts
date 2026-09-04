@@ -11,7 +11,9 @@ import { firebaseConfig } from './firebase.config';
 
 export const environment = {
   production: false,
-  useEmulator: false,
+  // التطوير يتّصل بمحاكي Firebase المحلّيّ (يُشغّله `npm run dev`) — لا يمسّ السحابة.
+  // لتصحيح بيانات الإنتاج محليًّا: بدّلها مؤقّتًا إلى false.
+  useEmulator: true,
   emulator: {
     authUrl: 'http://127.0.0.1:9099',
     firestoreHost: '127.0.0.1',
