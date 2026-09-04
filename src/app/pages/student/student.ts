@@ -55,6 +55,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
               <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'serd']">السرد</a>
+              <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'exam']">الاختبار</a>
               <a class="btn btn-ghost" [routerLink]="['/student', s.id, 'edit']">تعديل</a>
             </div>
           </div>
@@ -97,7 +98,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <p class="muted" style="margin:0 0 10px">
               <b style="color:var(--green)">{{ fullJuz() }}</b> جزءًا كاملًا ·
               <b style="color:var(--green)">{{ memoCount() }}</b> سورة محفوظة ·
-              <b style="color:var(--green)">{{ revisedJuzCount() }}</b> جزءًا مسرودًا
+              <b style="color:var(--green)">{{ revisedJuzCount() }}</b> جزءًا مسرودًا ·
+              <b style="color:var(--green)">{{ examinedJuzCount() }}</b> جزءًا مُختبَرًا
             </p>
             <div class="juz-strip">
               @for (c of juzCells(); track c.juz) {
@@ -116,6 +118,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
           @if (unrevisedJuz().length) {
             <a class="serd-alert" [routerLink]="['/student', s.id, 'serd']">
               🔔 أكمل الطالب حفظ {{ unrevisedJuz().length }} جزءًا ولم يُسجَّل سردها — سجّل السرد ›
+            </a>
+          }
+          @if (pendingExamJuz().length) {
+            <a class="serd-alert exam-alert" [routerLink]="['/student', s.id, 'exam']">
+              📝 أكمل الطالب حفظ {{ pendingExamJuz().length }} جزءًا ولم يُسجَّل اختبارها — سجّل
+              الاختبار ›
             </a>
           }
 
@@ -286,6 +294,11 @@ import { PageHeaderComponent } from '../../shared/page-header';
         font-weight: 700;
         font-size: 0.86rem;
       }
+      .serd-alert.exam-alert {
+        margin-top: 8px;
+        background: var(--green-tint);
+        color: var(--green);
+      }
     `,
   ],
 })
@@ -317,6 +330,7 @@ export class StudentPage implements OnInit {
   private readonly recitations = this.data.studentRecitations(this.id, this.destroyRef);
   readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
   private readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
+  private readonly exams = this.data.examsByStudent(this.id, this.destroyRef);
 
   private readonly memorized = computed(() => new Set(this.student()?.memorizedSurahs ?? []));
   readonly memoCount = computed(() => this.memorized().size);
@@ -346,6 +360,21 @@ export class StudentPage implements OnInit {
   /** أجزاء مكتملة الحفظ ولم تُسرد بعد — مصدر تنبيه السرد. */
   readonly unrevisedJuz = computed(() =>
     completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => !this.revisedJuzSet().has(j)),
+  );
+
+  /** أرقام الأجزاء المكتملة حفظًا التي اختُبر كلٌّ منها مرّة واحدة على الأقلّ. */
+  private readonly examinedJuzSet = computed(() => new Set((this.exams() ?? []).map((e) => e.juz)));
+  readonly examinedJuzCount = computed(
+    () =>
+      completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) =>
+        this.examinedJuzSet().has(j),
+      ).length,
+  );
+  /** أجزاء مكتملة الحفظ ولم تُختبر بعد — مصدر تنبيه الاختبار (كلّ جزء مستقلّ). */
+  readonly pendingExamJuz = computed(() =>
+    completedJuz(this.student()?.memorizedSurahs ?? []).filter(
+      (j) => !this.examinedJuzSet().has(j),
+    ),
   );
 
   readonly recitationsCount = computed(() => this.recitations()?.length ?? 0);

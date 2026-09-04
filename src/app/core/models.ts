@@ -99,6 +99,8 @@ export const RECITATION_KIND_LABELS: Record<RecitationKind, string> = {
 
 /** عتبة نجاح السرد والتقييم اليوميّ */
 export const SARD_PASS = 90;
+/** عتبة نجاح اختبار الجزء (مماثلة للسرد) */
+export const EXAM_PASS = 90;
 /** عتبة نجاح التسميع داخل الجلسة */
 export const TASMIE_PASS = 95;
 
@@ -329,6 +331,31 @@ export interface SerdRecord {
   createdAt: number;
 }
 
+/**
+ * سجلّ اختبار جزء — اختبار مستقلّ تمامًا لكلّ جزء مكتمل الحفظ على حِدة.
+ *
+ * الفرق الجوهريّ عن السرد: السرد يتطلّب كتلة مجمّعة من ٣ أجزاء متتالية عند
+ * المرحلة النهائيّة، أمّا الاختبار فمستقلّ لكلّ جزء — كلّما أتمّ الطالب حفظ جزء
+ * (٣٠، ٢٩، …) يُفتح اختبار خاصّ بذلك الجزء وحده، بلا أيّ شرط كتلة.
+ */
+export interface ExamRecord {
+  id: string;
+  studentId: string;
+  circleId: string;
+  /** رقم الجزء المُختبَر (١..٣٠) */
+  juz: number;
+  /** درجة الاختبار ٠..١٠٠ (عتبة النجاح ٩٠٪ = EXAM_PASS) */
+  score: number;
+  /** رقم محاولة الاختبار لهذا الجزء (١ = أوّل اختبار …) */
+  attempt: number;
+  date: string;
+  sessionId?: string;
+  /** اسم المُختبِر (اختياريّ) */
+  examiner?: string;
+  notes?: string;
+  createdAt: number;
+}
+
 /** أسماء المجموعات المشتركة على مستوى الجذر */
 export const COL = {
   circles: 'circles',
@@ -338,6 +365,7 @@ export const COL = {
   recitations: 'recitations',
   evaluations: 'evaluations',
   serd: 'serd',
+  exams: 'exams',
 } as const;
 
 /** مجموعة ملفّات المعلّمين (اسم/جوال فقط) */

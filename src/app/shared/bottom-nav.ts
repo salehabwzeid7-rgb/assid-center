@@ -76,7 +76,7 @@ import { AuthService } from '../core/auth.service';
             <path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5" />
             <path d="M9 8h6M9 11h4" />
           </svg>
-          <span>السرد</span>
+          <span class="nav-dual">سرد واختبار</span>
         </a>
         <a routerLink="/profile" routerLinkActive="active">
           <svg

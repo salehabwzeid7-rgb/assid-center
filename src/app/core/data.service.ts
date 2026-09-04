@@ -32,6 +32,7 @@ import {
   type RecitationRecord,
   type EvaluationRecord,
   type SerdRecord,
+  type ExamRecord,
 } from './models';
 
 /** التاريخ الحالي بصيغة YYYY-MM-DD (توقيت الجهاز المحلي) */
@@ -79,6 +80,7 @@ type NewStudent = Omit<Student, 'id' | 'createdAt'>;
 type NewRecitation = Omit<RecitationRecord, 'id' | 'createdAt'>;
 type NewEvaluation = Omit<EvaluationRecord, 'id' | 'createdAt'>;
 type NewSerd = Omit<SerdRecord, 'id' | 'createdAt'>;
+type NewExam = Omit<ExamRecord, 'id' | 'createdAt'>;
 
 @Injectable({ providedIn: 'root' })
 export class DataService {
@@ -494,6 +496,31 @@ export class DataService {
     await deleteDoc(this.ref(COL.serd, id));
   }
 
+  // ---------- الاختبار (اختبار مستقلّ لكلّ جزء محفوظ) ----------
+
+  examsByStudent(studentId: string, destroyRef?: DestroyRef): Signal<ExamRecord[] | undefined> {
+    const q = query(this.col(COL.exams), where('studentId', '==', studentId));
+    return this.live<ExamRecord>(q, destroyRef, this.byDateDesc);
+  }
+
+  circleExams(circleId: string, destroyRef?: DestroyRef): Signal<ExamRecord[] | undefined> {
+    const q = query(this.col(COL.exams), where('circleId', '==', circleId));
+    return this.live<ExamRecord>(q, destroyRef, this.byDateDesc);
+  }
+
+  allExams(destroyRef?: DestroyRef): Signal<ExamRecord[] | undefined> {
+    return this.live<ExamRecord>(query(this.col(COL.exams)), destroyRef, this.byDateDesc);
+  }
+
+  async addExam(input: NewExam): Promise<string> {
+    const created = await addDoc(this.col(COL.exams), { ...clean(input), createdAt: Date.now() });
+    return created.id;
+  }
+
+  async deleteExam(id: string): Promise<void> {
+    await deleteDoc(this.ref(COL.exams, id));
+  }
+
   async addRecitation(input: NewRecitation): Promise<string> {
     const created = await addDoc(this.col(COL.recitations), {
       ...clean(input),
@@ -521,8 +548,8 @@ export class DataService {
   // ---------- حذف شامل (مرحلة الاختبار فقط) ----------
 
   /**
-   * يحذف كلّ مستندات مجموعات البيانات السبع من Firestore (الحلقات، الطلاب،
-   * الجلسات، الحضور، التسميع، التقييم، السرد). لا يمسّ مجموعة teachers ولا
+   * يحذف كلّ مستندات مجموعات البيانات من Firestore (الحلقات، الطلاب، الجلسات،
+   * الحضور، التسميع، التقييم، السرد، الاختبار). لا يمسّ مجموعة teachers ولا
    * حسابات المصادقة. يعمل على دفعات ≤ ٤٠٠ مستند.
    * يُرجع إجماليّ عدد المستندات المحذوفة.
    */

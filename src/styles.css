@@ -1469,6 +1469,11 @@ a.ops-card:active {
   width: 21px;
   height: 21px;
 }
+/* تبويب «سرد واختبار» — نصّ أطول قليلًا، نصغّره ليتّسق مع بقيّة التبويبات */
+.bottom-nav a span.nav-dual {
+  font-size: 0.6rem;
+  letter-spacing: -0.015em;
+}
 .bottom-nav a.active {
   color: var(--green);
   background: var(--green-tint);

@@ -25,6 +25,7 @@ service cloud.firestore {
     match /recitations/{id}  { allow read, write: if signedIn(); }
     match /evaluations/{id}  { allow read, write: if signedIn(); }
     match /serd/{id}         { allow read, write: if signedIn(); }
+    match /exams/{id}        { allow read, write: if signedIn(); }
 
     // ملفّات المعلّمين (اسم/جوال) — كلٌّ يعدّل ملفّه، ويقرأ الجميع
     match /teachers/{uid} {
