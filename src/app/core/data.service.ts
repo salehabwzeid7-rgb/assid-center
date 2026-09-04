@@ -198,6 +198,19 @@ export class DataService {
     return this.live<Session>(query(this.col(COL.sessions)), destroyRef, this.byDateDesc);
   }
 
+  /**
+   * الجلسة كإشارة حيّة (undefined=تحميل · null=غير موجودة · Session=موجودة).
+   * تُستخدم في صفحة الجلسة حتى تنعكس أيّ تعديلات (حالة/ملاحظة/إعادة فتح) فورًا
+   * وعبر كلّ الأجهزة.
+   */
+  sessionLive(id: string, destroyRef?: DestroyRef): Signal<Session | null | undefined> {
+    const all = this.allSessions(destroyRef);
+    return computed(() => {
+      const list = all();
+      return list === undefined ? undefined : (list.find((s) => s.id === id) ?? null);
+    });
+  }
+
   async getSession(id: string): Promise<Session | null> {
     const s = await getDoc(this.ref(COL.sessions, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;

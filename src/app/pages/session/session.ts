@@ -1,6 +1,6 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import {
@@ -8,27 +8,26 @@ import {
   ATTENDANCE_ORDER,
   SESSION_STATUS_LABELS,
   TASMIE_PASS,
-  passLabel,
   scoreOf,
   studentCircleIds,
   type AttendanceStatus,
-  type Session,
 } from '../../core/models';
 import { dmy } from '../../core/format';
 import { fmt12, sessionWindow, untilLabel } from '../../core/time';
 import { completedJuz, surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
+import { RecitationPanelComponent } from '../../shared/recitation-panel';
 
-type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
+type Step = 'attendance' | 'summary' | 'serd';
 
 @Component({
   selector: 'app-session',
-  imports: [FormsModule, RouterLink, PageHeaderComponent],
+  imports: [FormsModule, RouterLink, PageHeaderComponent, RecitationPanelComponent],
   template: `
     <app-page-header [title]="'جلسة ' + dateLabel()" />
 
     <div class="page">
-      @if (notFound()) {
+      @if (session() === null) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الجلسة.</div>
       } @else if (locked(); as lk) {
         <div class="empty">
@@ -81,15 +80,18 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
           }
         </div>
 
+        @if (s.status === 'closed') {
+          <div class="edit-banner">
+            ✎ الجلسة منتهية — يمكنك تعديل الحضور والتسميع وإضافة تسميعات، وتُحفظ التغييرات فورًا.
+          </div>
+        }
+
         <div class="tabs" style="margin-top:12px">
           <button [class.active]="step() === 'attendance'" (click)="step.set('attendance')">
-            ١ · الحضور
-          </button>
-          <button [class.active]="step() === 'recitation'" (click)="step.set('recitation')">
-            ٢ · التسميع
+            الحضور والتسميع
           </button>
           <button [class.active]="step() === 'summary'" (click)="step.set('summary')">
-            ٣ · الملخّص
+            الملخّص
           </button>
           <button [class.active]="step() === 'serd'" (click)="step.set('serd')">السرد</button>
         </div>
@@ -99,16 +101,20 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
         } @else if (students()!.length === 0) {
           <div class="empty"><span class="icon">👤</span> لا يوجد طلاب نشطون في هذه الحلقة.</div>
         } @else {
-          <!-- ١ · الحضور -->
+          <!-- الحضور والتسميع -->
           @if (step() === 'attendance') {
             <div class="row-between section-title">
-              <span>الحضور {{ presentTotal() }}/{{ students()!.length }}</span>
+              <span>
+                الحضور {{ presentTotal() }}/{{ students()!.length }} · التسميع
+                {{ recitedTotal() }}/{{ students()!.length }}
+              </span>
               <button class="chip" type="button" (click)="markAllPresent()">تعيين الكل حاضر</button>
             </div>
+
             @for (st of students(); track st.id) {
-              <div class="card">
-                <div class="primary" style="font-weight:700;margin-bottom:8px">{{ st.name }}</div>
-                <div class="chips">
+              <div class="card std-card">
+                <div class="primary" style="font-weight:700">{{ st.name }}</div>
+                <div class="chips" style="margin-top:8px">
                   @for (opt of attOrder; track opt) {
                     <button
                       type="button"
@@ -123,55 +129,25 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
                     </button>
                   }
                 </div>
-              </div>
-            }
-            <button
-              class="btn btn-primary btn-block btn-lg"
-              type="button"
-              (click)="step.set('recitation')"
-            >
-              التالي: التسميع ›
-            </button>
-          }
 
-          <!-- ٢ · التسميع -->
-          @if (step() === 'recitation') {
-            <div class="section-title">التسميع {{ recitedTotal() }}/{{ students()!.length }}</div>
-            @for (st of students(); track st.id) {
-              <div class="card">
-                <div class="row-between">
-                  <span class="primary" style="font-weight:700">{{ st.name }}</span>
-                  <span style="display:flex;gap:6px">
-                    <a
-                      class="btn btn-ghost"
-                      style="padding:7px 12px"
-                      [routerLink]="['/session', id, 'evaluate', st.id]"
-                    >
-                      ✦ تقييم
-                    </a>
-                    <button
-                      class="btn btn-ghost"
-                      style="padding:7px 13px"
-                      type="button"
-                      (click)="recite(st.id)"
-                    >
-                      {{ recOf(st.id) ? 'تعديل' : '＋ تسميع' }}
-                    </button>
-                  </span>
-                </div>
-                @if (recOf(st.id); as r) {
-                  <div class="muted" style="font-size:.85rem;margin-top:6px">
-                    {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ← {{ surahName(r.toSurah) }}
-                    {{ r.toAyah }} · {{ r.pages }} وجه · {{ scoreOf(r) }}٪ ·
-                    {{ verdict(scoreOf(r)) }}
-                  </div>
-                } @else {
-                  <div class="muted" style="font-size:.82rem;margin-top:4px">
-                    لم يُسجَّل تسميع بعد
+                @if (isPresent(st.id)) {
+                  <app-recitation-panel
+                    [sessionId]="id"
+                    [studentId]="st.id"
+                    [circleId]="s.circleId"
+                    [date]="s.date"
+                    [existing]="recOf(st.id)"
+                  />
+                } @else if (recOf(st.id); as r) {
+                  <div class="muted rp-done">
+                    سُجّل تسميع سابق: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
+                    {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
+                    {{ scoreOf(r) }}٪
                   </div>
                 }
               </div>
             }
+
             <button
               class="btn btn-primary btn-block btn-lg"
               type="button"
@@ -181,7 +157,7 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
             </button>
           }
 
-          <!-- ٣ · الملخّص -->
+          <!-- الملخّص -->
           @if (step() === 'summary') {
             <div class="stat-grid">
               <div class="stat">
@@ -201,6 +177,18 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
                 <div class="label">متوسّط التسميع</div>
               </div>
             </div>
+
+            @if (overtimeCount() > 0) {
+              <div class="card" style="margin-top:10px">
+                <div class="section-title" style="margin:0 0 6px">زمن التسميع (٤ د/وجه)</div>
+                <span style="color:var(--danger);font-weight:700">
+                  {{ overtimeCount() }} تسميع تجاوز المعيار الزمنيّ
+                </span>
+                <div class="muted" style="margin-top:6px;font-size:.86rem">
+                  {{ overtimeNames().join('، ') }}
+                </div>
+              </div>
+            }
 
             <div class="card" style="margin-top:10px">
               <div class="section-title" style="margin:0 0 8px">تفصيل الحضور</div>
@@ -263,13 +251,13 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
             <a
               class="btn btn-block"
               style="margin-top:12px"
-              [routerLink]="['/circle', session()!.circleId, 'stats']"
+              [routerLink]="['/circle', s.circleId, 'stats']"
             >
               📊 إحصائيات الحلقة
             </a>
           }
 
-          <!-- السرد — سجلّ مراجعة الأجزاء المحفوظة لكلّ طالب -->
+          <!-- السرد -->
           @if (step() === 'serd') {
             <div class="section-title">سرد الأجزاء المحفوظة</div>
             @for (st of students(); track st.id) {
@@ -302,6 +290,22 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
   `,
   styles: [
     `
+      .edit-banner {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: var(--radius-xs);
+        background: var(--gold-tint2, #faf4e4);
+        color: var(--gold-deep);
+        font-weight: 700;
+        font-size: 0.86rem;
+      }
+      .std-card {
+        margin-bottom: 10px;
+      }
+      .rp-done {
+        margin-top: 8px;
+        font-size: 0.84rem;
+      }
       .bar {
         flex: 1;
         height: 10px;
@@ -319,32 +323,29 @@ type Step = 'attendance' | 'recitation' | 'summary' | 'serd';
     `,
   ],
 })
-export class SessionPage implements OnInit {
+export class SessionPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private notify = inject(NotifyService);
-  private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
-  readonly session = signal<Session | null>(null);
-  readonly notFound = signal(false);
+  /** الجلسة كإشارة حيّة — التعديلات (حالة/ملاحظة/إعادة فتح) تنعكس فورًا وعبر الأجهزة. */
+  readonly session = this.data.sessionLive(this.id, this.destroyRef);
   readonly step = signal<Step>(this.initialStep());
 
   private initialStep(): Step {
     const q = this.route.snapshot.queryParamMap.get('step');
-    return q === 'recitation' || q === 'summary' || q === 'serd' ? q : 'attendance';
+    return q === 'summary' || q === 'serd' ? q : 'attendance';
   }
-  readonly circleId = signal('');
+
+  readonly circleId = computed(() => this.session()?.circleId ?? '');
   note = '';
+  private noteInit = false;
 
   readonly attLabels = ATTENDANCE_LABELS;
   readonly attOrder = ATTENDANCE_ORDER;
-  readonly tasmiePass = TASMIE_PASS;
   readonly scoreOf = scoreOf;
-  verdict(score: number): string {
-    return passLabel(score, TASMIE_PASS);
-  }
   readonly statusLabels = SESSION_STATUS_LABELS;
   readonly surahName = surahName;
   readonly fmt12 = fmt12;
@@ -404,6 +405,19 @@ export class SessionPage implements OnInit {
     const n = this.recitedTotal();
     return n ? (this.passCount() / n) * 100 : 0;
   });
+
+  /** تسميعات تجاوزت المعيار الزمنيّ ٤ د/وجه (لها durationSec مسجَّلة). */
+  private readonly overtimeRecs = computed(() =>
+    (this.recitations() ?? []).filter(
+      (r) => r.durationSec != null && r.durationSec > (Number(r.pages) || 0) * 240,
+    ),
+  );
+  readonly overtimeCount = computed(() => this.overtimeRecs().length);
+  readonly overtimeNames = computed(() => {
+    const names = new Map((this.students() ?? []).map((s) => [s.id, s.name]));
+    return this.overtimeRecs().map((r) => names.get(r.studentId) ?? '—');
+  });
+
   readonly absentNames = computed(() => {
     const map = new Map((this.attendance() ?? []).map((a) => [a.studentId, a.status]));
     return (this.students() ?? []).filter((s) => map.get(s.id) === 'absent').map((s) => s.name);
@@ -414,41 +428,44 @@ export class SessionPage implements OnInit {
   });
 
   constructor() {
-    const timer = setInterval(() => {
-      this.now.set(Date.now());
-      // فتح تلقائيّ عند دخول النافذة الزمنية دون إعادة تحميل
+    // تهيئة نصّ الملاحظة مرّة واحدة عند وصول الجلسة (دون الكتابة فوق ما يكتبه المعلّم)
+    effect(() => {
+      const s = this.session();
+      if (s && !this.noteInit) {
+        this.note = s.note ?? '';
+        this.noteInit = true;
+      }
+    });
+
+    // زيارة حصّة مجدولة داخل نافذتها = بدؤها؛ ومتابعة الفتح تلقائيًّا عند حلول الموعد
+    effect(() => {
       const s = this.session();
       if (s?.status === 'scheduled' && !this.locked()) void this.tryOpen();
-    }, 20_000);
+    });
+
+    const timer = setInterval(() => this.now.set(Date.now()), 20_000);
     this.destroyRef.onDestroy(() => clearInterval(timer));
   }
 
-  async ngOnInit(): Promise<void> {
-    const s = await this.data.getSession(this.id);
-    if (!s) {
-      this.notFound.set(true);
-      return;
-    }
-    this.session.set(s);
-    this.circleId.set(s.circleId);
-    this.note = s.note ?? '';
-    // زيارة حصّة مجدولة داخل نافذتها = بدؤها؛ خارجها تبقى مقفلة
-    if (s.status === 'scheduled' && !this.locked()) await this.tryOpen();
-  }
-
+  private opening = false;
   private async tryOpen(): Promise<void> {
-    if (this.session()?.status !== 'scheduled') return;
+    if (this.opening || this.session()?.status !== 'scheduled') return;
+    this.opening = true;
     try {
       await this.data.setSessionStatus(this.id, 'open');
-      const cur = this.session();
-      if (cur) this.session.set({ ...cur, status: 'open' });
     } catch (e) {
       console.error(e);
+    } finally {
+      this.opening = false;
     }
   }
 
   statusOf(studentId: string): AttendanceStatus | null {
     return this.attendance()?.find((a) => a.studentId === studentId)?.status ?? null;
+  }
+  isPresent(studentId: string): boolean {
+    const st = this.statusOf(studentId);
+    return st === 'present' || st === 'late';
   }
   recOf(studentId: string) {
     return this.recitations()?.find((r) => r.studentId === studentId) ?? null;
@@ -509,18 +526,10 @@ export class SessionPage implements OnInit {
     );
   }
 
-  recite(studentId: string): void {
-    this.router.navigate(['/session', this.id, 'recite', studentId]);
-  }
-
   async setStatus(status: 'open' | 'closed'): Promise<void> {
-    const done = await this.notify.run(
-      () => this.data.setSessionStatus(this.id, status).then(() => true),
-      { success: status === 'closed' ? 'أُنهيت الجلسة' : 'أُعيد فتح الجلسة' },
-    );
-    if (!done) return;
-    const s = this.session();
-    if (s) this.session.set({ ...s, status });
+    await this.notify.run(() => this.data.setSessionStatus(this.id, status), {
+      success: status === 'closed' ? 'أُنهيت الجلسة' : 'أُعيد فتح الجلسة',
+    });
   }
 
   async saveNote(): Promise<void> {

@@ -275,8 +275,21 @@ export interface RecitationRecord {
   hifzErrors: number;
   /** عدد مرات التلقين / الفتح على الطالب */
   promptCount: number;
+  /**
+   * المدّة الفعليّة للتسميع بالثواني (من مؤقّت الجلسة).
+   * المعيار: ٤ دقائق لكلّ وجه → المتوقّع = pages × ٢٤٠ ثانية.
+   */
+  durationSec?: number;
   notes?: string;
   createdAt: number;
+}
+
+/** المعيار الزمنيّ للتسميع: ٤ دقائق (٢٤٠ ثانية) لكلّ وجه. */
+export const SECONDS_PER_PAGE = 240;
+
+/** الزمن المتوقّع للتسميع بالثواني وفق عدد الأوجه (٤ د/وجه). */
+export function expectedRecitationSec(pages: number): number {
+  return Math.round(Math.max(0, pages) * SECONDS_PER_PAGE);
 }
 
 /** التقييم اليومي */
