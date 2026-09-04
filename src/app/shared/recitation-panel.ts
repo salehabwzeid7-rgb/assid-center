@@ -60,9 +60,37 @@ function fmtClock(totalSec: number): string {
         </svg>
 
         <div class="rp-timer-side">
+          <!-- عدد الأوجه — كلّما زاد زاد زمن المؤقّت (٤ د/وجه) -->
+          <div class="rp-pages">
+            <span class="rp-pages-lbl">الأوجه</span>
+            <button
+              type="button"
+              class="rp-step"
+              (click)="bumpPages(-0.5)"
+              [disabled]="plannedPages() <= 0"
+              aria-label="إنقاص وجه"
+            >
+              −
+            </button>
+            <input
+              class="rp-pages-in"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.5"
+              [ngModel]="pages()"
+              (ngModelChange)="pages.set(clampPages($event))"
+              [ngModelOptions]="{ standalone: true }"
+              aria-label="عدد الأوجه"
+            />
+            <button type="button" class="rp-step" (click)="bumpPages(0.5)" aria-label="زيادة وجه">
+              +
+            </button>
+          </div>
+
           <p class="rp-expect" [class.over]="overtime()">
-            المتوقّع: {{ fmtClock(expectedSec()) }}
-            <span class="rp-perpage">({{ plannedPages() || 0 }} وجه × ٤ د)</span>
+            المتوقّع: <b>{{ fmtClock(expectedSec()) }}</b>
+            <span class="rp-perpage">= {{ plannedPages() || 0 }} وجه × ٤ د</span>
           </p>
           @if (elapsedSec() > 0) {
             <p class="rp-actual" [class.over]="overtime()">
@@ -140,19 +168,6 @@ function fmtClock(totalSec: number): string {
             [ngModelOptions]="{ standalone: true }"
           />
         </div>
-      </div>
-
-      <div class="rp-field">
-        <label>عدد الأوجه (يحدّد زمن المؤقّت)</label>
-        <input
-          type="number"
-          inputmode="decimal"
-          min="0"
-          step="0.5"
-          [ngModel]="pages()"
-          (ngModelChange)="pages.set(+$event || 0)"
-          [ngModelOptions]="{ standalone: true }"
-        />
       </div>
 
       <app-score-input
@@ -273,10 +288,48 @@ function fmtClock(totalSec: number): string {
       }
       .rp-timer-side {
         flex: 1;
-        min-width: 160px;
+        min-width: 170px;
         display: flex;
         flex-direction: column;
         gap: 6px;
+      }
+      .rp-pages {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .rp-pages-lbl {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--text-soft);
+        margin-inline-end: 2px;
+      }
+      .rp-step {
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+        border: 1px solid var(--green);
+        background: var(--surface);
+        color: var(--green);
+        border-radius: 9px;
+        font-size: 1.15rem;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .rp-step:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .rp-step:active:not(:disabled) {
+        background: var(--green-tint);
+      }
+      .rp-pages-in {
+        width: 58px;
+        flex-shrink: 0;
+        text-align: center;
+        font-weight: 800;
+        padding: 6px 4px;
       }
       .rp-expect,
       .rp-actual {
@@ -442,6 +495,15 @@ export class RecitationPanelComponent implements OnInit {
 
   maxAyah(n: number | string): number {
     return surah(Number(n))?.ayahs ?? 286;
+  }
+
+  /** يقرّب عدد الأوجه إلى أقرب نصف وجه ولا يسمح بالسالب. */
+  clampPages(v: number | string): number {
+    return Math.max(0, Math.round((Number(v) || 0) * 2) / 2);
+  }
+  /** ＋/－ نصف وجه — يزيد زمن المؤقّت المتوقّع بـ ٢ دقيقة لكلّ خطوة. */
+  bumpPages(delta: number): void {
+    this.pages.set(this.clampPages(this.pages() + delta));
   }
 
   start(): void {
