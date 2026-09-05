@@ -108,8 +108,10 @@ export class AuthService {
     this.teacher.set({ id: u.uid, ...fresh });
   }
 
-  /** تحديث اسم/جوال المعلّم */
-  async updateTeacher(patch: Partial<Pick<Teacher, 'name' | 'phone'>>): Promise<void> {
+  /** تحديث بيانات المعلّم (الاسم/الجوال/رسائل تقرير الجلسة) */
+  async updateTeacher(
+    patch: Partial<Pick<Teacher, 'name' | 'phone' | 'reportIntro' | 'reportOutro'>>,
+  ): Promise<void> {
     const u = this.user();
     const current = this.teacher();
     if (!u || !current) return;
@@ -118,6 +120,8 @@ export class AuthService {
       name: next.name,
       email: next.email,
       phone: next.phone ?? '',
+      reportIntro: next.reportIntro ?? '',
+      reportOutro: next.reportOutro ?? '',
       createdAt: next.createdAt,
     });
     if (patch.name && patch.name !== u.displayName) {

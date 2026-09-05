@@ -3,18 +3,25 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
+import { AuthService } from '../../core/auth.service';
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_ORDER,
+  DEFAULT_REPORT_INTRO,
+  DEFAULT_REPORT_OUTRO,
   SARD_PASS,
   SESSION_STATUS_LABELS,
   TASMIE_PASS,
+  circleLabel,
   scoreOf,
   studentCircleIds,
+  type AttendanceRecord,
   type AttendanceStatus,
   type SerdRecord,
+  type Student,
 } from '../../core/models';
-import { dmy } from '../../core/format';
+import { dmy, weekdayAr } from '../../core/format';
+import { fmt12, isValidHHMM, nowHHMM } from '../../core/time';
 import { completedJuz, surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { RecitationPanelComponent } from '../../shared/recitation-panel';
@@ -116,6 +123,24 @@ type Step = 'attendance' | 'summary' | 'serd';
                 </div>
 
                 @if (isPresent(st.id)) {
+                  <div class="times">
+                    <label>
+                      وقت الحضور
+                      <input
+                        type="time"
+                        [value]="arrivalOf(st.id)"
+                        (change)="setArrival(st.id, $event)"
+                      />
+                    </label>
+                    <label>
+                      وقت الانصراف
+                      <input
+                        type="time"
+                        [value]="departureOf(st.id)"
+                        (change)="setDeparture(st.id, $event)"
+                      />
+                    </label>
+                  </div>
                   <app-recitation-panel
                     [sessionId]="id"
                     [studentId]="st.id"
@@ -233,6 +258,38 @@ type Step = 'attendance' | 'summary' | 'serd';
               </div>
             </div>
 
+            <!-- تقرير الجلسة للأهالي + مشاركة واتساب -->
+            <div class="card report-card" style="margin-top:12px">
+              <div class="row-between" style="margin-bottom:8px">
+                <b>تقرير الجلسة للأهالي</b>
+                @if (reportEdited()) {
+                  <button class="chip" type="button" (click)="resetReport()">
+                    ↻ توليد تلقائيّ
+                  </button>
+                }
+              </div>
+              <p class="muted" style="margin:0 0 8px;font-size:.82rem">
+                يُبنى تلقائيًّا من الحضور والتسميع والدرجات. عدّل النصّ إن شئت ثم شارِكه في مجموعة
+                أولياء الأمور. (تُضبَط رسالتا الافتتاح والختام من «حساب المعلّم».)
+              </p>
+              <textarea
+                class="report-text"
+                dir="rtl"
+                rows="12"
+                [value]="displayReport()"
+                (input)="onReportInput($event)"
+              ></textarea>
+              <div class="report-actions">
+                <button class="btn btn-primary" type="button" (click)="shareWhatsApp()">
+                  📲 مشاركة عبر واتساب
+                </button>
+                <button class="btn btn-ghost" type="button" (click)="shareNative()">
+                  ↗ مشاركة
+                </button>
+                <button class="btn btn-ghost" type="button" (click)="copyReport()">📋 نسخ</button>
+              </div>
+            </div>
+
             <a
               class="btn btn-block"
               style="margin-top:12px"
@@ -305,6 +362,50 @@ type Step = 'attendance' | 'summary' | 'serd';
         border-radius: 6px;
         transition: width 0.3s;
       }
+      .times {
+        display: flex;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      .times label {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: var(--text-soft);
+      }
+      .times input {
+        padding: 7px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xs);
+        background: var(--surface);
+        color: var(--text);
+        font: inherit;
+      }
+      .report-card {
+        border: 1px solid var(--green);
+      }
+      .report-text {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xs);
+        background: var(--surface-2);
+        color: var(--text);
+        padding: 10px;
+        font: inherit;
+        line-height: 1.7;
+        resize: vertical;
+      }
+      .report-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .report-actions .btn {
+        flex: 1;
+      }
     `,
   ],
 })
@@ -312,6 +413,7 @@ export class SessionPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private notify = inject(NotifyService);
+  private auth = inject(AuthService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
@@ -335,6 +437,10 @@ export class SessionPage {
   readonly surahName = surahName;
 
   private readonly allStudents = this.data.allStudents(this.destroyRef);
+  private readonly allCircles = this.data.circles(this.destroyRef);
+  readonly circle = computed(
+    () => this.allCircles()?.find((c) => c.id === this.circleId()) ?? null,
+  );
   readonly students = computed(() => {
     const cid = this.circleId();
     if (!cid) return undefined;
@@ -394,6 +500,106 @@ export class SessionPage {
     return (this.students() ?? []).filter((s) => !done.has(s.id)).map((s) => s.name);
   });
 
+  // ---------- تقرير الجلسة للأهالي + مشاركة واتساب ----------
+
+  /** نصّ حرّره المعلّم يدويًّا؛ null = ما زال التقرير مُولَّدًا تلقائيًّا. */
+  private readonly reportOverride = signal<string | null>(null);
+  readonly reportEdited = computed(() => this.reportOverride() !== null);
+  readonly displayReport = computed(() => this.reportOverride() ?? this.reportText());
+
+  onReportInput(e: Event): void {
+    this.reportOverride.set((e.target as HTMLTextAreaElement).value);
+  }
+  resetReport(): void {
+    this.reportOverride.set(null);
+  }
+
+  /** سطر حضور طالب في التقرير: «حاضر (٤:٠٠ م – ٥:٠٠ م)» أو «غائب». */
+  private attendanceLine(a: AttendanceRecord | null): string {
+    if (!a) return 'لم يُسجَّل';
+    const label = ATTENDANCE_LABELS[a.status];
+    if (a.status === 'present' || a.status === 'late') {
+      const from = isValidHHMM(a.arrivalTime) ? fmt12(a.arrivalTime) : '';
+      const to = isValidHHMM(a.departureTime) ? fmt12(a.departureTime) : '';
+      const span = from && to ? ` (${from} – ${to})` : from ? ` (حضر ${from})` : '';
+      return label + span;
+    }
+    return label;
+  }
+
+  private studentBlock(index: number, st: Student): string {
+    const a = this.attOf(st.id);
+    const r = this.recOf(st.id);
+    const lines = [`${index}. ${st.name}`, `• الحضور: ${this.attendanceLine(a)}`];
+    const present = a?.status === 'present' || a?.status === 'late';
+    if (present) {
+      if (r) {
+        const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
+        lines.push(`• التسميع: ${r.pages} وجه — ${scoreOf(r)}٪ (${range})`);
+        if (r.hifzErrors || r.tajweedErrors) {
+          lines.push(`• الأخطاء: حفظ ${r.hifzErrors} · تجويد ${r.tajweedErrors}`);
+        }
+        if (r.notes?.trim()) lines.push(`• ملاحظة: ${r.notes.trim()}`);
+      } else {
+        lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
+      }
+    }
+    if (a?.note?.trim()) lines.push(`• ملاحظة الحضور: ${a.note.trim()}`);
+    return lines.join('\n');
+  }
+
+  /** التقرير الكامل: افتتاح المعلّم + الترويسة والتاريخ + قائمة الطلّاب + ختام المعلّم. */
+  readonly reportText = computed<string>(() => {
+    const s = this.session();
+    const students = this.students() ?? [];
+    if (!s) return '';
+    const t = this.auth.teacher();
+    const intro = (t?.reportIntro ?? '').trim() || DEFAULT_REPORT_INTRO;
+    const outro = (t?.reportOutro ?? '').trim() || DEFAULT_REPORT_OUTRO;
+    const header = `📋 ${circleLabel(this.circle())} — ${weekdayAr(s.date)} ${dmy(s.date)}`;
+    const totals = `الحضور: ${this.presentTotal()}/${students.length} · التسميع: ${this.recitedTotal()}/${students.length}`;
+    const rule = '━━━━━━━━━━━━';
+    const blocks = students.map((st, i) => this.studentBlock(i + 1, st));
+    return [intro, '', header, totals, rule, '', blocks.join('\n\n'), '', rule, outro].join('\n');
+  });
+
+  /**
+   * يفتح واتساب مباشرةً والنصّ مُعبّأ — على الجوال يفتح تطبيق واتساب فيختار
+   * المعلّم مجموعة أولياء الأمور، وعلى سطح المكتب يفتح واتساب ويب. رابط
+   * `wa.me` هو واجهة المشاركة الرسميّة لواتساب.
+   */
+  shareWhatsApp(): void {
+    const text = this.displayReport();
+    if (!text.trim()) return;
+    window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+  }
+
+  /** واجهة المشاركة الأصليّة للنظام (تُتيح اختيار أيّ تطبيق) — عند توفّرها. */
+  async shareNative(): Promise<void> {
+    const text = this.displayReport();
+    if (!text.trim()) return;
+    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
+    if (typeof nav.share !== 'function') {
+      this.shareWhatsApp();
+      return;
+    }
+    try {
+      await nav.share({ title: 'تقرير الحلقة', text });
+    } catch (e) {
+      if ((e as DOMException)?.name !== 'AbortError') console.error(e);
+    }
+  }
+
+  async copyReport(): Promise<void> {
+    const text = this.displayReport();
+    try {
+      await navigator.clipboard.writeText(text);
+      this.notify.success('نُسخ التقرير — الصقه في مجموعة أولياء الأمور');
+    } catch {
+      this.notify.error('تعذّر النسخ — انسخ النصّ يدويًّا');
+    }
+  }
+
   constructor() {
     // تهيئة نصّ الملاحظة مرّة واحدة عند وصول الجلسة (دون الكتابة فوق ما يكتبه المعلّم)
     effect(() => {
@@ -435,6 +641,23 @@ export class SessionPage {
   recOf(studentId: string) {
     return this.recitations()?.find((r) => r.studentId === studentId) ?? null;
   }
+  private attOf(studentId: string): AttendanceRecord | null {
+    return this.attendance()?.find((a) => a.studentId === studentId) ?? null;
+  }
+  arrivalOf(studentId: string): string {
+    return this.attOf(studentId)?.arrivalTime ?? '';
+  }
+  departureOf(studentId: string): string {
+    return this.attOf(studentId)?.departureTime ?? '';
+  }
+  setArrival(studentId: string, e: Event): void {
+    const v = (e.target as HTMLInputElement).value;
+    void this.data.setAttendanceTime(this.id, studentId, { arrivalTime: v });
+  }
+  setDeparture(studentId: string, e: Event): void {
+    const v = (e.target as HTMLInputElement).value;
+    void this.data.setAttendanceTime(this.id, studentId, { departureTime: v });
+  }
   /** ملخّص السرد لطالب: الأجزاء المكتملة، وكم منها سُرِد، وكم بانتظار السرد. */
   serdOf(st: { id: string; memorizedSurahs?: number[] }): {
     completed: number;
@@ -463,6 +686,12 @@ export class SessionPage {
   async setAttendance(studentId: string, status: AttendanceStatus): Promise<void> {
     const s = this.session();
     if (!s) return;
+    // عند تعليم الطالب حاضرًا/متأخّرًا لأوّل مرّة (ولا وقت حضور مسجَّل) نملأ وقت
+    // الحضور بالوقت الحاليّ تلقائيًّا — يبقى قابلًا للتعديل يدويًّا.
+    const autoArrival =
+      (status === 'present' || status === 'late') && !this.attOf(studentId)?.arrivalTime
+        ? nowHHMM()
+        : undefined;
     try {
       await this.data.upsertSessionAttendance({
         sessionId: this.id,
@@ -470,6 +699,7 @@ export class SessionPage {
         circleId: s.circleId,
         date: s.date,
         status,
+        arrivalTime: autoArrival,
       });
     } catch (e) {
       console.error(e);
@@ -498,6 +728,15 @@ export class SessionPage {
   }
 
   async setStatus(status: 'open' | 'closed'): Promise<void> {
+    // عند إنهاء الجلسة نملأ وقت انصراف كلّ حاضر/متأخّر لم يُسجَّل له انصراف بعد.
+    if (status === 'closed') {
+      const t = nowHHMM();
+      await Promise.all(
+        (this.attendance() ?? [])
+          .filter((a) => (a.status === 'present' || a.status === 'late') && !a.departureTime)
+          .map((a) => this.data.setAttendanceTime(this.id, a.studentId, { departureTime: t })),
+      );
+    }
     await this.notify.run(() => this.data.setSessionStatus(this.id, status), {
       success: status === 'closed' ? 'أُنهيت الجلسة' : 'أُعيد فتح الجلسة',
     });

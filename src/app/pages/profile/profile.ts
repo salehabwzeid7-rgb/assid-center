@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import { ResetService } from '../../core/reset.service';
 import { UpdateService } from '../../core/update.service';
+import { DEFAULT_REPORT_INTRO, DEFAULT_REPORT_OUTRO } from '../../core/models';
 import { THEME_LABELS, THEME_ORDER, THEME_SWATCHES, ThemeService } from '../../core/theme.service';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -64,6 +65,42 @@ import { PageHeaderComponent } from '../../shared/page-header';
           (click)="save()"
         >
           حفظ البيانات
+        </button>
+      </div>
+
+      <div class="section-title">رسالة تقرير الجلسة</div>
+      <div class="card">
+        <p class="muted" style="margin-top:0;font-size:.86rem">
+          نصّ الافتتاح والختام اللذان يُلحَقان بتقرير كلّ جلسة قبل مشاركته مع أولياء الأمور. يُضاف
+          تاريخ الجلسة تلقائيًّا بينهما.
+        </p>
+        <div class="field">
+          <label for="rIntro">رسالة الافتتاح</label>
+          <textarea
+            id="rIntro"
+            name="rIntro"
+            rows="3"
+            [(ngModel)]="reportIntro"
+            [placeholder]="defaultIntro"
+          ></textarea>
+        </div>
+        <div class="field">
+          <label for="rOutro">رسالة الختام</label>
+          <textarea
+            id="rOutro"
+            name="rOutro"
+            rows="3"
+            [(ngModel)]="reportOutro"
+            [placeholder]="defaultOutro"
+          ></textarea>
+        </div>
+        <button
+          class="btn btn-primary btn-block"
+          type="button"
+          [disabled]="notify.syncing()"
+          (click)="saveReportMessages()"
+        >
+          حفظ رسائل التقرير
         </button>
       </div>
 
@@ -206,11 +243,26 @@ export class ProfilePage {
 
   name = this.auth.teacher()?.name ?? '';
   phone = this.auth.teacher()?.phone ?? '';
+  reportIntro = this.auth.teacher()?.reportIntro ?? '';
+  reportOutro = this.auth.teacher()?.reportOutro ?? '';
+  readonly defaultIntro = DEFAULT_REPORT_INTRO;
+  readonly defaultOutro = DEFAULT_REPORT_OUTRO;
 
   async save(): Promise<void> {
     await this.notify.run(
       () => this.auth.updateTeacher({ name: this.name.trim(), phone: this.phone.trim() }),
       { loading: 'جارٍ حفظ البيانات…', success: 'تم حفظ بيانات المعلّم', error: 'تعذّر الحفظ' },
+    );
+  }
+
+  async saveReportMessages(): Promise<void> {
+    await this.notify.run(
+      () =>
+        this.auth.updateTeacher({
+          reportIntro: this.reportIntro.trim(),
+          reportOutro: this.reportOutro.trim(),
+        }),
+      { loading: 'جارٍ الحفظ…', success: 'حُفظت رسائل التقرير', error: 'تعذّر الحفظ' },
     );
   }
 

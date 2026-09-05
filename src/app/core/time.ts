@@ -42,6 +42,11 @@ export function to12(hhmm: string): Clock12 {
   };
 }
 
+/** الوقت الحاليّ «HH:MM» بتوقيت الجهاز المحلّيّ (٢٤ ساعة). */
+export function nowHHMM(now: Date = new Date()): string {
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
 /** «18:30» → «6:30 م» */
 export function fmt12(hhmm: string | null | undefined): string {
   if (!isValidHHMM(hhmm)) return '';

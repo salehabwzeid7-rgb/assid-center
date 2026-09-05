@@ -142,8 +142,19 @@ export interface Teacher {
   name: string;
   email: string;
   phone?: string;
+  /** ترويسة رسالة تقرير الجلسة للأهالي — يفرغها المعلّم من الإعدادات (وإلّا `DEFAULT_REPORT_INTRO`) */
+  reportIntro?: string;
+  /** خاتمة رسالة تقرير الجلسة للأهالي (وإلّا `DEFAULT_REPORT_OUTRO`) */
+  reportOutro?: string;
   createdAt: number;
 }
+
+/** ترويسة افتراضيّة لتقرير الجلسة (تُستبدل من إعدادات المعلّم). */
+export const DEFAULT_REPORT_INTRO =
+  'السلام عليكم ورحمة الله وبركاته\nحيّاكم الله أولياء الأمور، هذا تقرير حلقة اليوم:';
+/** خاتمة افتراضيّة لتقرير الجلسة (تُستبدل من إعدادات المعلّم). */
+export const DEFAULT_REPORT_OUTRO =
+  'بارك الله في أبنائكم وأعانهم على حفظ كتابه، وجزاكم الله خيرًا على حسن المتابعة.';
 
 /** الحلقة */
 export interface Circle {
@@ -246,6 +257,10 @@ export interface AttendanceRecord {
   /** تاريخ الجلسة بصيغة YYYY-MM-DD */
   date: string;
   status: AttendanceStatus;
+  /** وقت الحضور «HH:MM» — يُملأ تلقائيًّا عند تعليم الطالب حاضرًا/متأخّرًا، وقابل للتعديل */
+  arrivalTime?: string;
+  /** وقت الانصراف «HH:MM» — يُملأ تلقائيًّا عند إنهاء الجلسة، وقابل للتعديل */
+  departureTime?: string;
   note?: string;
   createdAt: number;
 }

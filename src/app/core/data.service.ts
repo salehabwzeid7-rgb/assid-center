@@ -253,9 +253,24 @@ export class DataService {
     circleId: string;
     date: string;
     status: AttendanceRecord['status'];
+    /** «HH:MM» — تُدمَج ولا تمحو الحقول الأخرى */
+    arrivalTime?: string;
+    departureTime?: string;
   }): Promise<void> {
     const id = `${input.sessionId}_${input.studentId}`;
-    await setDoc(this.ref(COL.attendance, id), { ...input, createdAt: Date.now() });
+    await setDoc(this.ref(COL.attendance, id), clean({ ...input, createdAt: Date.now() }), {
+      merge: true,
+    });
+  }
+
+  /** تعديل وقت الحضور/الانصراف لطالب في جلسة (دمج — لا يمسّ الحالة). */
+  async setAttendanceTime(
+    sessionId: string,
+    studentId: string,
+    patch: { arrivalTime?: string; departureTime?: string },
+  ): Promise<void> {
+    const id = `${sessionId}_${studentId}`;
+    await setDoc(this.ref(COL.attendance, id), clean(patch), { merge: true });
   }
 
   /** تسميع الطالب ضمن جلسة — سجل واحد لكل طالب في الجلسة (قابل للتعديل) */
