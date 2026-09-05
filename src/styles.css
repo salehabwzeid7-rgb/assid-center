@@ -642,24 +642,46 @@ textarea {
   border: 2px solid var(--gold);
 }
 
-/* شارة الشعار في شاشة الدخول */
-.auth-badge {
-  display: block;
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
+/* شارة الشعار في شاشة الدخول.
+   ملفّ الشعار الأصليّ (almaher-logo.jpg، 1408×768) لقطة تسويقيّة للشارة على
+   لوح خلفيّة فاتح تشغل فيه الشارة نفسها الجزء المركزيّ فقط (تقريبًا مربّع)
+   وسط هامش فارغ واسع. عرضها بكامل الإطار عبر object-fit:contain يُبرز ذلك
+   الهامش كمربّع رماديّ ظاهر لا يتناسب مع خلفيّة الصفحة — فبدل ذلك نُكبّر
+   الصورة بنسبتها الطبيعيّة (بلا أيّ تمديد أو تشويه) ونموضعها داخل إطار
+   مقصوص بحجم الشارة تحديدًا، فيظهر المربّع الأخضر وحده. لم يُعدَّل ملفّ
+   الصورة نفسه إطلاقًا — هذا تأطير عرض (CSS) فقط. */
+.auth-badge-frame {
+  display: block; /* بلا هذا تُهمَل width/height/overflow — العنصر <span> عنصر سطريّ افتراضيًّا */
+  width: 200px;
+  height: 202px;
   margin: 0 auto 14px;
-  padding: 8px;
-  border-radius: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  border-radius: 26px;
   box-shadow: var(--shadow-lg);
+}
+.auth-badge {
+  /* موضع/مقاس ماديّان (لا منطقيّان) عمدًا — القصّ هندسيّ على بكسلات الصورة
+     نفسها ولا علاقة له باتّجاه النصّ، فيبقى صحيحًا بصرف النظر عن dir. */
+  position: absolute;
+  top: -32px;
+  left: -144px;
+  width: 488px;
+  max-width: none;
+  height: 266px;
 }
 
 @media (max-width: 360px) {
+  .auth-badge-frame {
+    width: 160px;
+    height: 162px;
+    border-radius: 22px;
+  }
   .auth-badge {
-    width: 84px;
-    height: 84px;
+    top: -25px;
+    left: -115px;
+    width: 390px;
+    height: 213px;
   }
 }
 

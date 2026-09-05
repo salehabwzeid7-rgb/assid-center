@@ -11,7 +11,15 @@ type Mode = 'login' | 'register';
   template: `
     <div class="auth-wrap">
       <div class="auth-logo">
-        <img class="auth-badge" src="logo.svg" alt="شعار الماهر" width="96" height="96" />
+        <span class="auth-badge-frame">
+          <img
+            class="auth-badge"
+            src="almaher-logo.jpg"
+            alt="شعار الماهر"
+            width="488"
+            height="266"
+          />
+        </span>
         <h1>الماهر لتحفيظ القرآن الكريم</h1>
         <p>واجهة المعلّم</p>
       </div>
