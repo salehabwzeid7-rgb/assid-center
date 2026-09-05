@@ -19,7 +19,6 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { SessionLockedError, sessionWindow } from './time';
 import { completedJuz } from './quran-data';
 import {
   COL,
@@ -45,16 +44,6 @@ export function today(): string {
 export function toDateStr(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
-
-/** يرمي SessionLockedError إذا كانت الحصّة خارج نافذتها الزمنية. */
-function assertWithinWindow(s: {
-  date: string;
-  fromTime?: string | null;
-  toTime?: string | null;
-}): void {
-  const w = sessionWindow(s);
-  if (w.state === 'before' || w.state === 'after') throw new SessionLockedError(w.state, w);
 }
 
 /** تواريخ الأيام المتكرّرة القادمة (من اليوم حتى +horizonDays) الموافقة لأيام الأسبوع المختارة */
@@ -214,49 +203,6 @@ export class DataService {
   async getSession(id: string): Promise<Session | null> {
     const s = await getDoc(this.ref(COL.sessions, id));
     return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;
-  }
-
-  /**
-   * يفتح جلسة الحلقة لتاريخ محدّد ويُعيد معرّفها.
-   * يُعيد الموجودة (المجدولة/المنتهية → تُفتح)، وإلا ينشئ واحدة بمعرّف ثابت.
-   */
-  async openSession(
-    circleId: string,
-    date: string,
-    bounds?: { fromTime?: string; toTime?: string },
-  ): Promise<string> {
-    const id = `${circleId}_${date}`;
-    const ref = this.ref(COL.sessions, id);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const s = snap.data() as Session;
-      if (s.status !== 'open') {
-        assertWithinWindow(s);
-        await updateDoc(ref, { status: 'open' });
-      }
-      return id;
-    }
-    // توافقيّة: قد توجد جلسة قديمة بمعرّف عشوائيّ لنفس اليوم
-    const legacy = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
-    const old = legacy.docs.find((d) => (d.data() as Session).date === date);
-    if (old) {
-      const s = old.data() as Session;
-      if (s.status !== 'open') {
-        assertWithinWindow(s);
-        await updateDoc(old.ref, { status: 'open' });
-      }
-      return old.id;
-    }
-    assertWithinWindow({ date, fromTime: bounds?.fromTime, toTime: bounds?.toTime });
-    await setDoc(ref, {
-      circleId,
-      date,
-      fromTime: bounds?.fromTime ?? '',
-      toTime: bounds?.toTime ?? '',
-      status: 'open' as SessionStatus,
-      createdAt: Date.now(),
-    });
-    return id;
   }
 
   async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
@@ -516,12 +462,11 @@ export class DataService {
    * إنشاء حصّة يدويّة لتاريخ مخصّص لهذه الحلقة — ماضٍ أو مستقبليّ، بلا أيّ حدّ
    * زمنيّ (سنوات إلى الخلف أو إلى الأمام)، ولإتاحة تعويض حصّة فائتة أو تحضير
    * حصّة قادمة قبل أن يبلغها الأفق التلقائيّ (٣٠ يومًا). تُنشأ «مفتوحة» مباشرةً
-   * (بخلاف `openSession` المُقيَّد بنافذة توقيت الحلقة) فتُتاح للتسجيل فورًا
-   * أيًّا كان تاريخها. مُعرّف الحصّة ثابت «{circleId}_{date}» كبقيّة الحصص.
-   *
-   * إن وُجدت حصّة أصلًا لنفس التاريخ (مثلًا حصّة مجدولة تلقائيًّا فاتت نافذتها
-   * فصارت مقفلة بلا رجعة، أو حصّة قادمة لم يحن موعدها بعد) تُفتح قسرًا الآن
-   * بدل رفض الطلب — فتُزال القفلة الزمنيّة تمامًا لا يُنشأ تكرار.
+   * فتُتاح للتسجيل فورًا أيًّا كان تاريخها. مُعرّف الحصّة ثابت «{circleId}_{date}»
+   * كبقيّة الحصص — فإن وُجدت حصّة أصلًا لنفس التاريخ (بمعرّفها الثابت أو بمعرّف
+   * عشوائيّ قديم من قبل اعتماد هذا التوافيق) تُفتح إن كانت لا تزال «مجدولة»
+   * بدل إنشاء تكرار (لا حاجة فعليًّا بعد إزالة قفل النافذة الزمنيّة بالكامل من
+   * واجهة الجلسة، إذ تفتح أيّ حصّة «مجدولة» نفسها تلقائيًّا فور زيارتها).
    */
   async addManualSession(
     circleId: string,
@@ -535,6 +480,15 @@ export class DataService {
       const s = snap.data() as Session;
       if (s.status === 'scheduled') await updateDoc(ref, { status: 'open' as SessionStatus });
       return id;
+    }
+    // توافقيّة: قد توجد جلسة قديمة بمعرّف عشوائيّ لنفس التاريخ (قبل اعتماد
+    // المعرّف الثابت) — نعيد استخدامها بدل إنشاء تكرار.
+    const legacy = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
+    const old = legacy.docs.find((d) => (d.data() as Session).date === date);
+    if (old) {
+      const s = old.data() as Session;
+      if (s.status === 'scheduled') await updateDoc(old.ref, { status: 'open' as SessionStatus });
+      return old.id;
     }
     await setDoc(ref, {
       circleId,

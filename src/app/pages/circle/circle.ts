@@ -4,7 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { dmy, weekdayAr } from '../../core/format';
-import { fmt12, fmtRange, sessionWindow, untilLabel } from '../../core/time';
+import { fmt12, fmtRange } from '../../core/time';
 import {
   SESSION_STATUS_LABELS,
   WEEKDAY_LABELS,
@@ -83,26 +83,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
               >
                 بدء حصّة اليوم ›
               </button>
-            }
-            @case ('before') {
-              <div class="locked">
-                <span class="lock-ico">🔒</span>
-                <div>
-                  <b>تُفتح الساعة {{ fmt12(ts.fromTime) }}</b>
-                  <span class="muted">{{ untilOpen() }}</span>
-                </div>
-              </div>
-              <button class="btn btn-block btn-lg" type="button" disabled>غير متاحة الآن</button>
-            }
-            @case ('after') {
-              <div class="locked">
-                <span class="lock-ico">⛔</span>
-                <div>
-                  <b>انتهى وقت حصّة اليوم</b>
-                  <span class="muted">لبدء حصّة خارج موعدها، عدّل توقيت الحلقة من التعديل.</span>
-                </div>
-              </div>
-              <button class="btn btn-block btn-lg" type="button" disabled>مُقفلة</button>
             }
           }
         } @else {
@@ -242,23 +222,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
       .edit-link:active {
         background: var(--green-tint);
       }
-      .locked {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 12px;
-        margin-bottom: 10px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-xs);
-        background: var(--surface-2);
-      }
-      .locked > div {
-        display: flex;
-        flex-direction: column;
-      }
-      .lock-ico {
-        font-size: 1.3rem;
-      }
       .tiles {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -314,9 +277,6 @@ export class CirclePage {
   readonly fmt12 = fmt12;
   readonly fmtRange = fmtRange;
 
-  /** لحظة حيّة تتحدّث كل ٣٠ ثانية لفتح/إقفال الزرّ تلقائيًّا */
-  private readonly now = signal(Date.now());
-
   readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   readonly sessions = this.data.sessionsByCircle(this.id, this.destroyRef);
   private readonly attendance = this.data.circleAttendance(this.id, this.destroyRef);
@@ -331,25 +291,16 @@ export class CirclePage {
     return sid ? this.countPresent(sid) : 0;
   });
 
-  private readonly todayWindow = computed(() => {
-    const ts = this.todaySession();
-    return ts ? sessionWindow(ts, new Date(this.now())) : null;
-  });
-
-  /** الحالة المعروضة في بطاقة «حصّة اليوم» */
-  readonly cardState = computed<'open' | 'closed' | 'ready' | 'before' | 'after'>(() => {
+  /**
+   * الحالة المعروضة في بطاقة «حصّة اليوم» — بلا أيّ قيد زمنيّ: حصّة اليوم
+   * تُتاح للبدء فور وجودها، أيًّا كان وقتها الفعليّ الآن.
+   */
+  readonly cardState = computed<'open' | 'closed' | 'ready'>(() => {
     const ts = this.todaySession();
     if (!ts) return 'ready';
     if (ts.status === 'open') return 'open';
     if (ts.status === 'closed') return 'closed';
-    const w = this.todayWindow();
-    if (!w || w.state === 'unscheduled' || w.state === 'now') return 'ready';
-    return w.state; // 'before' | 'after'
-  });
-
-  readonly untilOpen = computed(() => {
-    const w = this.todayWindow();
-    return w?.opensAt ? untilLabel(w.opensAt, new Date(this.now())) : '';
+    return 'ready';
   });
 
   readonly upcoming = computed<Session[]>(() =>
@@ -360,11 +311,6 @@ export class CirclePage {
   readonly past = computed<Session[]>(() =>
     (this.sessions() ?? []).filter((s) => s.date < this.todayIso),
   );
-
-  constructor() {
-    const timer = setInterval(() => this.now.set(Date.now()), 30_000);
-    this.destroyRef.onDestroy(() => clearInterval(timer));
-  }
 
   rangeLabel(c: Circle): string {
     return fmtRange(c.fromTime, c.toTime) || (c.time ? fmt12(c.time) : '');

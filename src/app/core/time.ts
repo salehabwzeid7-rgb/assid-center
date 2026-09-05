@@ -96,18 +96,3 @@ export function untilLabel(target: Date, now: Date = new Date()): string {
   if (mins && !days) parts.push(word(mins, 'دقيقة', 'دقيقتين', 'دقائق', 'دقيقة'));
   return 'بعد ' + parts.join(' و');
 }
-
-/** خطأ يُرمى عند محاولة فتح حصّة خارج نافذتها الزمنية. */
-export class SessionLockedError extends Error {
-  constructor(
-    readonly reason: 'before' | 'after',
-    readonly window: SessionWindow,
-  ) {
-    super(
-      reason === 'before'
-        ? 'لم يحن موعد هذه الحصّة بعد.'
-        : 'انتهى وقت هذه الحصّة — عدّل توقيت الحلقة من الإعدادات لبدء حصّة جديدة.',
-    );
-    this.name = 'SessionLockedError';
-  }
-}

@@ -15,7 +15,6 @@ import {
   type SerdRecord,
 } from '../../core/models';
 import { dmy } from '../../core/format';
-import { fmt12, sessionWindow, untilLabel } from '../../core/time';
 import { completedJuz, surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { RecitationPanelComponent } from '../../shared/recitation-panel';
@@ -31,22 +30,6 @@ type Step = 'attendance' | 'summary' | 'serd';
     <div class="page">
       @if (session() === null) {
         <div class="empty"><span class="icon">⚠️</span> لم يتم العثور على الجلسة.</div>
-      } @else if (locked(); as lk) {
-        <div class="empty">
-          <span class="icon">{{ lk.reason === 'before' ? '🔒' : '⛔' }}</span>
-          @if (lk.reason === 'before') {
-            <p style="font-weight:700;margin:6px 0">لم يحن موعد هذه الحصّة بعد.</p>
-            <p class="muted">
-              تُفتح تلقائيًّا الساعة {{ fmt12(session()!.fromTime) }} · {{ untilOpen() }}
-            </p>
-          } @else {
-            <p style="font-weight:700;margin:6px 0">انتهى وقت هذه الحصّة.</p>
-            <p class="muted">لبدء حصّة خارج موعدها، عدّل توقيت الحلقة من إعداداتها.</p>
-          }
-          <a class="btn btn-ghost" style="margin-top:12px" [routerLink]="['/circle', circleId()]">
-            رجوع إلى الحلقة
-          </a>
-        </div>
       } @else if (session(); as s) {
         <div class="card row-between">
           <span>
@@ -350,24 +333,6 @@ export class SessionPage {
   readonly scoreOf = scoreOf;
   readonly statusLabels = SESSION_STATUS_LABELS;
   readonly surahName = surahName;
-  readonly fmt12 = fmt12;
-
-  /** لحظة حيّة لإعادة تقييم قفل الوقت */
-  private readonly now = signal(Date.now());
-
-  /** حصّة مجدولة خارج نافذتها → معروضة كمقفلة بدل فتحها */
-  readonly locked = computed<{ reason: 'before' | 'after' } | null>(() => {
-    const s = this.session();
-    if (!s || s.status !== 'scheduled') return null;
-    const w = sessionWindow(s, new Date(this.now()));
-    return w.state === 'before' || w.state === 'after' ? { reason: w.state } : null;
-  });
-  readonly untilOpen = computed(() => {
-    const s = this.session();
-    if (!s) return '';
-    const w = sessionWindow(s, new Date(this.now()));
-    return w.opensAt ? untilLabel(w.opensAt, new Date(this.now())) : '';
-  });
 
   private readonly allStudents = this.data.allStudents(this.destroyRef);
   readonly students = computed(() => {
@@ -439,14 +404,12 @@ export class SessionPage {
       }
     });
 
-    // زيارة حصّة مجدولة داخل نافذتها = بدؤها؛ ومتابعة الفتح تلقائيًّا عند حلول الموعد
+    // أيّ حصّة «مجدولة» تُفتح فورًا بمجرّد زيارتها — بلا أيّ قيد زمنيّ (حاليّة
+    // كانت أو مستقبليّة)، فتتاح فورًا لتسجيل الحضور والتسميع والدرجات.
     effect(() => {
       const s = this.session();
-      if (s?.status === 'scheduled' && !this.locked()) void this.tryOpen();
+      if (s?.status === 'scheduled') void this.tryOpen();
     });
-
-    const timer = setInterval(() => this.now.set(Date.now()), 20_000);
-    this.destroyRef.onDestroy(() => clearInterval(timer));
   }
 
   private opening = false;
