@@ -1,6 +1,8 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
 import { dmy, weekdayAr } from '../../core/format';
 import { fmt12, fmtRange, sessionWindow, untilLabel } from '../../core/time';
 import {
@@ -15,7 +17,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
   selector: 'app-circle',
-  imports: [RouterLink, PageHeaderComponent],
+  imports: [FormsModule, RouterLink, PageHeaderComponent],
   template: `
     <app-page-header [title]="circle()?.name || 'الحلقة'">
       <button
@@ -130,6 +132,15 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </a>
       </div>
 
+      <button
+        class="btn btn-ghost btn-block"
+        style="margin-top:10px"
+        type="button"
+        (click)="openAddSession()"
+      >
+        ＋ إضافة حصّة بتاريخ مخصّص (فائتة أو قادمة)
+      </button>
+
       @if (upcoming().length) {
         <div class="section-title">الحصص القادمة</div>
         @for (s of upcoming(); track s.id) {
@@ -171,6 +182,31 @@ import { PageHeaderComponent } from '../../shared/page-header';
         }
       }
     </div>
+
+    <!-- نافذة إضافة حصّة بتاريخ مخصّص -->
+    @if (addingSession()) {
+      <div class="modal-backdrop" (click)="addingSession.set(false)">
+        <form class="modal" (click)="$event.stopPropagation()" (ngSubmit)="createManualSession()">
+          <h3>إضافة حصّة بتاريخ مخصّص</h3>
+          <p class="muted" style="margin:0 0 10px">
+            لتسجيل حضور وتسميع حصّة فائتة (حتى من سنوات سابقة) أو تحضير حصّة قادمة قبل موعدها
+            التلقائيّ — بلا أيّ قيد على التاريخ. تُفتح الحصّة فورًا وتصبح جاهزة للتسجيل.
+          </p>
+          <div class="field">
+            <label for="ms-date">تاريخ الحصّة</label>
+            <input id="ms-date" name="ms-date" type="date" [(ngModel)]="newSessionDate" required />
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" type="button" (click)="addingSession.set(false)">
+              إلغاء
+            </button>
+            <button class="btn btn-primary" type="submit" [disabled]="creatingSession()">
+              {{ creatingSession() ? 'جارٍ الإنشاء…' : 'إنشاء الحصّة' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    }
   `,
   styles: [
     `
@@ -259,6 +295,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class CirclePage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
 
@@ -352,5 +389,34 @@ export class CirclePage {
   }
   go(sessionId: string): void {
     void this.router.navigate(['/session', sessionId]);
+  }
+
+  /** نافذة إضافة حصّة بتاريخ مخصّص — أيّ سنة ماضية أو قادمة، بلا قيود. */
+  readonly addingSession = signal(false);
+  readonly creatingSession = signal(false);
+  newSessionDate = this.todayIso;
+
+  openAddSession(): void {
+    this.newSessionDate = this.todayIso;
+    this.addingSession.set(true);
+  }
+
+  async createManualSession(): Promise<void> {
+    const c = this.circle();
+    if (!c || !this.newSessionDate) return;
+    this.creatingSession.set(true);
+    const sessionId = await this.notify.run(
+      () =>
+        this.data.addManualSession(c.id, this.newSessionDate, {
+          fromTime: c.fromTime,
+          toTime: c.toTime,
+        }),
+      { success: 'أُنشئت الحصّة', error: 'تعذّر إنشاء الحصّة' },
+    );
+    this.creatingSession.set(false);
+    if (sessionId) {
+      this.addingSession.set(false);
+      void this.router.navigate(['/session', sessionId]);
+    }
   }
 }

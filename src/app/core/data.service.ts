@@ -512,6 +512,41 @@ export class DataService {
     ]);
   }
 
+  /**
+   * إنشاء حصّة يدويّة لتاريخ مخصّص لهذه الحلقة — ماضٍ أو مستقبليّ، بلا أيّ حدّ
+   * زمنيّ (سنوات إلى الخلف أو إلى الأمام)، ولإتاحة تعويض حصّة فائتة أو تحضير
+   * حصّة قادمة قبل أن يبلغها الأفق التلقائيّ (٣٠ يومًا). تُنشأ «مفتوحة» مباشرةً
+   * (بخلاف `openSession` المُقيَّد بنافذة توقيت الحلقة) فتُتاح للتسجيل فورًا
+   * أيًّا كان تاريخها. مُعرّف الحصّة ثابت «{circleId}_{date}» كبقيّة الحصص.
+   *
+   * إن وُجدت حصّة أصلًا لنفس التاريخ (مثلًا حصّة مجدولة تلقائيًّا فاتت نافذتها
+   * فصارت مقفلة بلا رجعة، أو حصّة قادمة لم يحن موعدها بعد) تُفتح قسرًا الآن
+   * بدل رفض الطلب — فتُزال القفلة الزمنيّة تمامًا لا يُنشأ تكرار.
+   */
+  async addManualSession(
+    circleId: string,
+    date: string,
+    bounds?: { fromTime?: string; toTime?: string },
+  ): Promise<string> {
+    const id = `${circleId}_${date}`;
+    const ref = this.ref(COL.sessions, id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const s = snap.data() as Session;
+      if (s.status === 'scheduled') await updateDoc(ref, { status: 'open' as SessionStatus });
+      return id;
+    }
+    await setDoc(ref, {
+      circleId,
+      date,
+      fromTime: bounds?.fromTime ?? '',
+      toTime: bounds?.toTime ?? '',
+      status: 'open' as SessionStatus,
+      createdAt: Date.now(),
+    });
+    return id;
+  }
+
   async addStudent(input: NewStudent): Promise<string> {
     const created = await addDoc(this.col(COL.students), {
       ...clean(input),
