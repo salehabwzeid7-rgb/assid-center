@@ -1,13 +1,15 @@
 /* ==========================================================================
    تحليل حالة الاختبار لطالب — يُستخدم في لوحة «السرد والاختبار» وصفحة اختبار الطالب.
 
-   كلّ جزء مكتمل الحفظ يفتح اختبارًا مستقلًّا خاصًّا به (بلا انتظار أيّ أجزاء
-   أخرى) — هذا شرط الفتح الفرديّ. إضافةً إلى ذلك: بعد اختبار ٣ أجزاء متتالية
-   (كتلة) كلٍّ على حدة، يُفتح اختبار مجمّع لتلك الكتلة (مطابق لآليّة السرد
-   المجمّع تمامًا)، وهو تتويج اختياريّ لا يحلّ محلّ اختبار الأجزاء الفرديّة.
+   التسلسل الدقيق: حفظ الجزء ← سرده ← اجتياز نسبة النجاح في سرده ← عندئذٍ
+   فقط يُفتح اختباره الفرديّ (اختبار جزء مكتمل الحفظ لم يُسرَد وينجح فيه بعدُ
+   يبقى مقفلًا). وبعد اجتياز سرد ٣ أجزاء متتالية كلٍّ على حدة يُفتح السرد
+   المجمّع لتلك الكتلة (في core/sard.ts)؛ وبعد اجتياز ذلك السرد المجمّع نفسه
+   يُفتح اختبارها المجمّع — لا قبل ذلك، وبصرف النظر عن عدد الاختبارات
+   الفرديّة المُنجَزة لأجزائها.
    ========================================================================== */
 
-import { scoreOf, type ExamRecord, type Student } from './models';
+import { SARD_PASS, scoreOf, type ExamRecord, type SerdRecord, type Student } from './models';
 import { JUZ_SURAHS, completedJuz, juzOfBlock } from './quran-data';
 
 /** تصنيف الطالب في لوحة الاختبار (الطلاب بلا أجزاء مكتملة = 'none' فلا يظهرون). */
@@ -24,9 +26,13 @@ export interface ExamAnalysis {
   completedJuz: number[];
   /** أجزاء مكتملة الحفظ اختُبر كلٌّ منها مرّة على الأقلّ (اختبار فرديّ) */
   examinedJuz: number[];
-  /** أجزاء مكتملة الحفظ لم تُختبر بعد فرديًّا — كلّ جزء يُفتح بمجرّد اكتمال حفظه */
+  /** أجزاء اجتازت نسبة نجاح السرد — الشرط الوحيد لفتح اختبارها الفرديّ */
+  sardPassedJuz: number[];
+  /** أجزاء مكتملة الحفظ لم تجتز السرد بعد — اختبارها يبقى مقفلًا */
+  awaitingSardJuz: number[];
+  /** أجزاء اجتازت السرد ولم تُختبر بعد فرديًّا — اختبارها مفتوح الآن */
   pendingJuz: number[];
-  /** كتل (٣ أجزاء) جاهزة للاختبار المجمّع (اختُبر كلّ جزء منها فرديًّا ولمّا يُختبَر مجمَّعًا) */
+  /** كتل (٣ أجزاء) جاهزة للاختبار المجمّع (اجتاز السرد المجمّع لتلك الكتلة نفسه) */
   readyBlocks: number[];
   /** كتل أُنجز اختبارها المجمّع */
   doneBlocks: number[];
@@ -51,7 +57,11 @@ export interface ExamAnalysis {
 
 const JUZ_PAGES = 20;
 
-export function analyzeExam(student: Student, allExams: readonly ExamRecord[]): ExamAnalysis {
+export function analyzeExam(
+  student: Student,
+  allExams: readonly ExamRecord[],
+  allSerds: readonly SerdRecord[],
+): ExamAnalysis {
   const mem = student.memorizedSurahs ?? [];
   const memSet = new Set(mem);
   const completed = completedJuz(mem);
@@ -72,10 +82,39 @@ export function analyzeExam(student: Student, allExams: readonly ExamRecord[]): 
 
   const examinedSet = new Set(juzExams.map((e) => e.juz));
   const examinedJuz = completed.filter((j) => examinedSet.has(j));
-  const pendingJuz = completed.filter((j) => !examinedSet.has(j));
 
-  // الاختبار المجمّع: يظهر فقط بعد اكتمال حفظ الكتلة كاملةً واختبار كلّ جزء
-  // منها فرديًّا على حِدة — تمامًا كشرط السرد المجمّع.
+  // فتح اختبار الجزء الفرديّ مشروط باجتياز نسبة النجاح في سرده — وليس مجرّد
+  // اكتمال حفظه. محاولة سرد مسجَّلة دون بلوغ العتبة لا تفتح الاختبار.
+  const mySerds = allSerds.filter((s) => s.studentId === student.id);
+  const sardJuzRecords = mySerds.filter((s) => s.scope === 'juz');
+  const sardBlockRecords = mySerds.filter((s) => s.scope === 'block');
+  const sardAttemptsByJuz = new Map<number, SerdRecord[]>();
+  for (const s of sardJuzRecords) {
+    const arr = sardAttemptsByJuz.get(s.juz);
+    if (arr) arr.push(s);
+    else sardAttemptsByJuz.set(s.juz, [s]);
+  }
+  const sardPassedSet = new Set<number>();
+  for (const [juz, list] of sardAttemptsByJuz) {
+    if (list.some((r) => scoreOf(r) >= SARD_PASS)) sardPassedSet.add(juz);
+  }
+  const sardPassedJuz = completed.filter((j) => sardPassedSet.has(j));
+  const awaitingSardJuz = completed.filter((j) => !sardPassedSet.has(j));
+  const pendingJuz = sardPassedJuz.filter((j) => !examinedSet.has(j));
+
+  // الاختبار المجمّع: يُفتح فقط بعد اجتياز السرد المجمّع لتلك الكتلة نفسه —
+  // بصرف النظر عن عدد الاختبارات الفرديّة المُنجَزة لأجزائها.
+  const sardBlockPassedSet = new Set<number>();
+  const sardBlockAttempts = new Map<number, SerdRecord[]>();
+  for (const s of sardBlockRecords) {
+    const arr = sardBlockAttempts.get(s.juz);
+    if (arr) arr.push(s);
+    else sardBlockAttempts.set(s.juz, [s]);
+  }
+  for (const [block, list] of sardBlockAttempts) {
+    if (list.some((r) => scoreOf(r) >= SARD_PASS)) sardBlockPassedSet.add(block);
+  }
+
   const doneBlockSet = new Set(blockExams.map((e) => e.juz));
   const readyBlocks: number[] = [];
   const doneBlocks: number[] = [];
@@ -83,7 +122,7 @@ export function analyzeExam(student: Student, allExams: readonly ExamRecord[]): 
     const bj = juzOfBlock(b);
     if (!bj.every((j) => completedSet.has(j))) continue;
     if (doneBlockSet.has(b)) doneBlocks.push(b);
-    else if (bj.every((j) => examinedSet.has(j))) readyBlocks.push(b);
+    else if (sardBlockPassedSet.has(b)) readyBlocks.push(b);
   }
 
   const nearJuz: { juz: number; have: number; total: number }[] = [];
@@ -123,6 +162,8 @@ export function analyzeExam(student: Student, allExams: readonly ExamRecord[]): 
   return {
     completedJuz: completed,
     examinedJuz,
+    sardPassedJuz,
+    awaitingSardJuz,
     pendingJuz,
     readyBlocks,
     doneBlocks,

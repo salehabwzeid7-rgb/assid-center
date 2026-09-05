@@ -298,7 +298,7 @@ export class SardDashboardPage {
           student,
           cs,
           a: analyzeSard(student, serds),
-          e: analyzeExam(student, exams),
+          e: analyzeExam(student, exams, serds),
         };
       })
       .filter(({ cs }) => cs.length === 0 || cs.some((c) => isHifzCircle(c)))

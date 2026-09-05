@@ -6,11 +6,13 @@ import { NotifyService } from '../../core/notify.service';
 import {
   ATTENDANCE_LABELS,
   ATTENDANCE_ORDER,
+  SARD_PASS,
   SESSION_STATUS_LABELS,
   TASMIE_PASS,
   scoreOf,
   studentCircleIds,
   type AttendanceStatus,
+  type SerdRecord,
 } from '../../core/models';
 import { dmy } from '../../core/format';
 import { fmt12, sessionWindow, untilLabel } from '../../core/time';
@@ -477,11 +479,17 @@ export class SessionPage {
     pending: number;
   } {
     const done = completedJuz(st.memorizedSurahs ?? []);
-    const revisedSet = new Set(
-      (this.allSerds() ?? [])
-        .filter((r) => r.studentId === st.id && r.scope === 'juz')
-        .map((r) => r.juz),
-    );
+    const byJuz = new Map<number, SerdRecord[]>();
+    for (const r of this.allSerds() ?? []) {
+      if (r.studentId !== st.id || r.scope !== 'juz') continue;
+      const arr = byJuz.get(r.juz);
+      if (arr) arr.push(r);
+      else byJuz.set(r.juz, [r]);
+    }
+    const revisedSet = new Set<number>();
+    for (const [juz, list] of byJuz) {
+      if (list.some((r) => scoreOf(r) >= SARD_PASS)) revisedSet.add(juz);
+    }
     const revised = done.filter((j) => revisedSet.has(j)).length;
     return { completed: done.length, revised, pending: done.length - revised };
   }

@@ -2,7 +2,7 @@
    تحليل حالة السرد لطالب — يُستخدم في لوحة «السرد» وصفحة سرد الطالب.
    ========================================================================== */
 
-import { scoreOf, type SerdRecord, type Student } from './models';
+import { SARD_PASS, scoreOf, type SerdRecord, type Student } from './models';
 import { JUZ_SURAHS, completedJuz, juzOfBlock } from './quran-data';
 
 /** تصنيف الطالب في لوحة السرد (الطلاب بلا أجزاء مكتملة = 'none' فلا يظهرون). */
@@ -53,7 +53,18 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
   const juzSerds = mine.filter((s) => s.scope === 'juz');
   const blockSerds = mine.filter((s) => s.scope === 'block');
 
-  const revisedSet = new Set(juzSerds.map((s) => s.juz));
+  // «مسرود» = اجتاز نسبة النجاح فعليًّا في محاولة واحدة على الأقلّ — محاولة
+  // مسجَّلة دون بلوغ العتبة لا تُحسَب سردًا مكتملًا (يبقى الجزء «مطلوبًا»).
+  const juzAttemptsByNumber = new Map<number, typeof juzSerds>();
+  for (const s of juzSerds) {
+    const arr = juzAttemptsByNumber.get(s.juz);
+    if (arr) arr.push(s);
+    else juzAttemptsByNumber.set(s.juz, [s]);
+  }
+  const revisedSet = new Set<number>();
+  for (const [juz, list] of juzAttemptsByNumber) {
+    if (list.some((r) => scoreOf(r) >= SARD_PASS)) revisedSet.add(juz);
+  }
   const revisedJuz = completed.filter((j) => revisedSet.has(j));
   const unrevisedJuz = completed.filter((j) => !revisedSet.has(j));
 

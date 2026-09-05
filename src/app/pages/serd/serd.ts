@@ -21,6 +21,8 @@ interface JuzRow {
   juz: number;
   cycles: number;
   lastScore: number | null;
+  /** اجتاز نسبة النجاح في محاولة واحدة على الأقلّ (وليس مجرّد محاولة مسجَّلة) */
+  passed: boolean;
 }
 interface BlockRow {
   block: number;
@@ -111,11 +113,17 @@ interface Recording {
             @for (r of unrevised(); track r.juz) {
               <div class="card need">
                 <div class="row-between">
-                  <span
-                    ><b>الجزء {{ r.juz }}</b> · مكتمل الحفظ ولم يُسرد</span
-                  >
+                  <span>
+                    <b>الجزء {{ r.juz }}</b> ·
+                    @if (r.cycles === 0) {
+                      مكتمل الحفظ ولم يُسرد
+                    } @else {
+                      سُرِد {{ r.cycles }} {{ r.cycles === 1 ? 'مرّة' : 'مرّات' }} ولم يحقّق نسبة
+                      النجاح بعد ({{ r.lastScore }}٪)
+                    }
+                  </span>
                   <button class="btn btn-primary" type="button" (click)="openJuz(r.juz)">
-                    ＋ سرد
+                    {{ r.cycles === 0 ? '＋ سرد' : '＋ إعادة السرد' }}
                   </button>
                 </div>
               </div>
@@ -349,22 +357,32 @@ export class SerdPage {
   readonly juzRows = computed<JuzRow[]>(() =>
     this.completed().map((juz) => {
       const list = this.juzSerds().get(juz) ?? [];
-      return { juz, cycles: list.length, lastScore: list[0] ? scoreOf(list[0]) : null };
+      return {
+        juz,
+        cycles: list.length,
+        lastScore: list[0] ? scoreOf(list[0]) : null,
+        passed: list.some((r) => scoreOf(r) >= SARD_PASS),
+      };
     }),
   );
-  readonly unrevised = computed(() => this.juzRows().filter((r) => r.cycles === 0));
-  readonly revisedRows = computed(() => this.juzRows().filter((r) => r.cycles > 0));
+  readonly unrevised = computed(() => this.juzRows().filter((r) => !r.passed));
+  readonly revisedRows = computed(() => this.juzRows().filter((r) => r.passed));
   readonly revisedCount = computed(() => this.revisedRows().length);
 
   readonly blockRows = computed<BlockRow[]>(() => {
     const done = new Set(this.completed());
+    const passedSet = new Set(
+      this.juzRows()
+        .filter((r) => r.passed)
+        .map((r) => r.juz),
+    );
     const out: BlockRow[] = [];
     for (let b = 1; b <= 10; b++) {
       const juz = juzOfBlock(b);
       // شرط الظهور: حفظ الأجزاء الثلاثة كاملةً
       if (!juz.every((j) => done.has(j))) continue;
-      // شرط الفتح: سرد كلّ جزء منها منفردًا مرّةً على الأقلّ
-      const revisedCount = juz.filter((j) => (this.juzSerds().get(j)?.length ?? 0) >= 1).length;
+      // شرط الفتح: اجتياز سرد كلّ جزء منها منفردًا (وليس مجرّد محاولة)
+      const revisedCount = juz.filter((j) => passedSet.has(j)).length;
       const eachRevised = revisedCount === 3;
       const bs = this.blockSerdMap().get(b) ?? [];
       out.push({

@@ -3,9 +3,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import {
   ATTENDANCE_LABELS,
+  SARD_PASS,
   circleTypeLabel,
+  scoreOf,
   studentCircleIds,
   type Circle,
+  type SerdRecord,
 } from '../../core/models';
 import { dmy } from '../../core/format';
 import { JUZ_SURAHS, completedJuz } from '../../core/quran-data';
@@ -121,7 +124,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
           }
           @if (pendingExamJuz().length) {
             <a class="serd-alert exam-alert" [routerLink]="['/student', s.id, 'exam']">
-              📝 أكمل الطالب حفظ {{ pendingExamJuz().length }} جزءًا ولم يُسجَّل اختبارها — سجّل
+              📝 اجتاز الطالب سرد {{ pendingExamJuz().length }} جزءًا ولم يُسجَّل اختبارها — سجّل
               الاختبار ›
             </a>
           }
@@ -347,21 +350,34 @@ export class StudentPage {
   });
   readonly fullJuz = computed(() => this.juzCells().filter((c) => c.state === 'full').length);
 
-  /** أرقام الأجزاء المكتملة حفظًا التي سُرِد كلٌّ منها مرّة واحدة على الأقلّ. */
-  private readonly revisedJuzSet = computed(
-    () => new Set((this.serds() ?? []).filter((r) => r.scope === 'juz').map((r) => r.juz)),
-  );
+  /**
+   * أرقام الأجزاء المكتملة حفظًا التي اجتازت نسبة نجاح السرد فعليًّا — محاولة
+   * مسجَّلة دون بلوغ العتبة لا تُحسَب سردًا مكتملًا (يبقى الجزء «غير مسرود»).
+   */
+  private readonly revisedJuzSet = computed<Set<number>>(() => {
+    const byJuz = new Map<number, SerdRecord[]>();
+    for (const r of this.serds() ?? []) {
+      if (r.scope !== 'juz') continue;
+      const arr = byJuz.get(r.juz);
+      if (arr) arr.push(r);
+      else byJuz.set(r.juz, [r]);
+    }
+    const passed = new Set<number>();
+    for (const [juz, list] of byJuz) {
+      if (list.some((r) => scoreOf(r) >= SARD_PASS)) passed.add(juz);
+    }
+    return passed;
+  });
   readonly revisedJuzCount = computed(
     () =>
       completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => this.revisedJuzSet().has(j))
         .length,
   );
-  /** أجزاء مكتملة الحفظ ولم تُسرد بعد — مصدر تنبيه السرد. */
+  /** أجزاء مكتملة الحفظ ولم تجتز السرد بعد — مصدر تنبيه السرد. */
   readonly unrevisedJuz = computed(() =>
     completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => !this.revisedJuzSet().has(j)),
   );
 
-  /** أرقام الأجزاء المكتملة حفظًا التي اختُبر كلٌّ منها مرّة واحدة على الأقلّ. */
   /**
    * أرقام الأجزاء المكتملة حفظًا التي اختُبرت فرديًّا مرّة واحدة على الأقلّ.
    * يُستثنى سجلّ الاختبار المجمّع (scope='block') — حقل juz فيه رقم الكتلة
@@ -377,10 +393,13 @@ export class StudentPage {
         this.examinedJuzSet().has(j),
       ).length,
   );
-  /** أجزاء مكتملة الحفظ ولم تُختبر بعد — مصدر تنبيه الاختبار (كلّ جزء مستقلّ). */
+  /**
+   * أجزاء اجتازت السرد ولم تُختبر بعد — مصدر تنبيه الاختبار (كلّ جزء مستقلّ).
+   * اختبار جزء مكتمل الحفظ لم يجتز سرده بعدُ يبقى مقفلًا فلا يظهر هنا.
+   */
   readonly pendingExamJuz = computed(() =>
     completedJuz(this.student()?.memorizedSurahs ?? []).filter(
-      (j) => !this.examinedJuzSet().has(j),
+      (j) => this.revisedJuzSet().has(j) && !this.examinedJuzSet().has(j),
     ),
   );
 

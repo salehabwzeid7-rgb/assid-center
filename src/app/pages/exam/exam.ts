@@ -5,12 +5,14 @@ import { DataService, today } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import {
   EXAM_PASS,
+  SARD_PASS,
   isHifzCircle,
   passLabel,
   scoreOf,
   studentCircleIds,
   type ExamRecord,
   type ExamScope,
+  type SerdRecord,
   type Student,
 } from '../../core/models';
 import { completedJuz, juzOfBlock } from '../../core/quran-data';
@@ -28,6 +30,8 @@ interface BlockRow {
   juz: number[];
   /** عدد أجزاء الكتلة الثلاثة المُختبَرة فرديًّا (٠..٣) */
   examinedCount: number;
+  /** هل اجتاز السرد المجمّع لهذه الكتلة نفسها — شرط فتح اختبارها المجمّع */
+  sardBlockPassed: boolean;
   ready: boolean;
   done: boolean;
   attempts: number;
@@ -44,9 +48,10 @@ interface Recording {
 /**
  * صفحة الاختبار — سجلّ اختبار الأجزاء المحفوظة وتقييماتها.
  *
- *  · اختبار فرديّ: يفتح فور اكتمال حفظ الجزء، بلا انتظار أيّ جزء آخر.
- *  · اختبار مجمّع: يفتح لكلّ كتلة ٣ أجزاء متتالية بعد اختبار كلّ جزء منها
- *    فرديًّا على حِدة — مطابق تمامًا لآليّة السرد المجمّع.
+ *  · اختبار فرديّ: يبقى مقفلًا حتى يجتاز الطالب نسبة نجاح سرد الجزء (وليس
+ *    بمجرّد اكتمال حفظه) — الحفظ ← السرد ← اجتياز السرد ← فتح الاختبار.
+ *  · اختبار مجمّع: يبقى مقفلًا حتى يجتاز الطالب السرد المجمّع لتلك الكتلة
+ *    نفسها (بصرف النظر عن عدد الاختبارات الفرديّة المُنجَزة لأجزائها).
  *  وضع الإعداد (?setup=1) للطلاب المسجَّلين بأجزاء محفوظة مسبقًا.
  */
 @Component({
@@ -118,12 +123,31 @@ interface Recording {
               <div class="card need">
                 <div class="row-between">
                   <span
-                    ><b>الجزء {{ r.juz }}</b> · مكتمل الحفظ ولم يُختبر</span
+                    ><b>الجزء {{ r.juz }}</b> · اجتاز السرد ولم يُختبر</span
                   >
                   <button class="btn btn-primary" type="button" (click)="openJuz(r.juz)">
                     ＋ اختبار
                   </button>
                 </div>
+              </div>
+            }
+          }
+
+          <!-- مقفل: أجزاء مكتملة الحفظ لم تجتز السرد بعد -->
+          @if (awaitingSard().length) {
+            <div class="section-title">🔒 أجزاء تنتظر اجتياز السرد أوّلًا</div>
+            @for (juz of awaitingSard(); track juz) {
+              <div class="card locked">
+                <div class="row-between">
+                  <span
+                    ><b>الجزء {{ juz }}</b> · مكتمل الحفظ ولم يجتز السرد بعد</span
+                  >
+                  <span class="lock-pill">🔒 مقفل</span>
+                </div>
+                <p class="muted" style="margin:6px 0 0">
+                  يُفتح اختبار هذا الجزء فور اجتياز نسبة النجاح ({{ sardPass }}٪) في سرده من صفحة
+                  السرد.
+                </p>
               </div>
             }
           }
@@ -161,12 +185,13 @@ interface Recording {
                 </div>
                 @if (b.ready) {
                   <p class="muted" style="margin:6px 0 0">
-                    اختُبر كلّ جزء من أجزاء الكتلة فرديًّا — الاختبار المجمّع مطلوب الآن.
+                    اجتاز السرد المجمّع لهذه الكتلة — الاختبار المجمّع مطلوب الآن.
                   </p>
                 } @else if (!b.done) {
                   <p class="muted" style="margin:6px 0 0">
-                    {{ b.examinedCount }}/3 أجزاء اختُبرت — يُفتح الاختبار المجمّع بعد اختبار
-                    الأجزاء الثلاثة كلٌّ على حدة.
+                    {{ b.examinedCount }}/3 أجزاء اختُبرت فرديًّا — يُفتح الاختبار المجمّع بعد
+                    اجتياز السرد المجمّع لهذه الكتلة نفسها من صفحة السرد (وليس عدد الاختبارات
+                    الفرديّة).
                   </p>
                 }
               </div>
@@ -328,8 +353,11 @@ export class ExamPage {
 
   private readonly allCircles = this.data.circles(this.destroyRef);
   readonly exams = this.data.examsByStudent(this.id, this.destroyRef);
+  /** إشارة حيّة بسجلّات السرد — الاختبار الفرديّ لا يُفتح إلّا بعد اجتياز سرد الجزء. */
+  private readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
   readonly dmy = dmy;
   readonly examPass = EXAM_PASS;
+  readonly sardPass = SARD_PASS;
   readonly scoreOf = scoreOf;
 
   readonly score = signal(EXAM_PASS);
@@ -341,6 +369,41 @@ export class ExamPage {
   notes = '';
 
   readonly completed = computed(() => completedJuz(this.student()?.memorizedSurahs ?? []));
+
+  /** أجزاء اجتازت نسبة نجاح السرد الفرديّ — وحدها هذه يُفتح اختبارها. */
+  private readonly sardPassedJuzSet = computed<Set<number>>(() => {
+    const byJuz = new Map<number, SerdRecord[]>();
+    for (const s of this.serds() ?? []) {
+      if (s.scope !== 'juz') continue;
+      const arr = byJuz.get(s.juz);
+      if (arr) arr.push(s);
+      else byJuz.set(s.juz, [s]);
+    }
+    const passed = new Set<number>();
+    for (const [juz, list] of byJuz) {
+      if (list.some((r) => scoreOf(r) >= SARD_PASS)) passed.add(juz);
+    }
+    return passed;
+  });
+  /** كتل اجتازت السرد المجمّع لها نفسها — وحدها هذه يُفتح اختبارها المجمّع. */
+  private readonly sardPassedBlockSet = computed<Set<number>>(() => {
+    const byBlock = new Map<number, SerdRecord[]>();
+    for (const s of this.serds() ?? []) {
+      if (s.scope !== 'block') continue;
+      const arr = byBlock.get(s.juz);
+      if (arr) arr.push(s);
+      else byBlock.set(s.juz, [s]);
+    }
+    const passed = new Set<number>();
+    for (const [block, list] of byBlock) {
+      if (list.some((r) => scoreOf(r) >= SARD_PASS)) passed.add(block);
+    }
+    return passed;
+  });
+  /** أجزاء مكتملة الحفظ لم تجتز السرد بعد — اختبارها الفرديّ يبقى مقفلًا. */
+  readonly awaitingSard = computed(() =>
+    this.completed().filter((j) => !this.sardPassedJuzSet().has(j)),
+  );
 
   private groupByScope(scope: ExamScope): Map<number, ExamRecord[]> {
     const map = new Map<number, ExamRecord[]>();
@@ -363,7 +426,10 @@ export class ExamPage {
       return { juz, attempts: list.length, lastScore: list[0] ? scoreOf(list[0]) : null };
     }),
   );
-  readonly pending = computed(() => this.juzRows().filter((r) => r.attempts === 0));
+  // مطلوب الآن = اجتاز سرد الجزء ولم يُختبر فرديًّا بعد (لا يكفي اكتمال الحفظ وحده).
+  readonly pending = computed(() =>
+    this.juzRows().filter((r) => r.attempts === 0 && this.sardPassedJuzSet().has(r.juz)),
+  );
   readonly examinedRows = computed(() => this.juzRows().filter((r) => r.attempts > 0));
 
   readonly blockRows = computed<BlockRow[]>(() => {
@@ -373,15 +439,16 @@ export class ExamPage {
       const juz = juzOfBlock(b);
       // شرط الظهور: حفظ الأجزاء الثلاثة كاملةً
       if (!juz.every((j) => done.has(j))) continue;
-      // شرط الفتح: اختبار كلّ جزء منها فرديًّا مرّةً على الأقلّ
       const examinedCount = juz.filter((j) => (this.juzExams().get(j)?.length ?? 0) >= 1).length;
-      const eachExamined = examinedCount === 3;
+      // شرط الفتح: اجتياز السرد المجمّع لهذه الكتلة نفسها — لا عدد الاختبارات الفرديّة.
+      const sardBlockPassed = this.sardPassedBlockSet().has(b);
       const be = this.blockExamMap().get(b) ?? [];
       out.push({
         block: b,
         juz,
         examinedCount,
-        ready: eachExamined && be.length === 0,
+        sardBlockPassed,
+        ready: sardBlockPassed && be.length === 0,
         done: be.length > 0,
         attempts: be.length,
         lastScore: be[0] ? scoreOf(be[0]) : null,
