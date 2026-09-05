@@ -27,6 +27,15 @@
       rel="stylesheet"
     />
     <style>
+      /* خلفيّة الصفحة نفسها بلون العلامة (لا الأبيض الافتراضيّ) — طبقة حماية
+         أخيرة لو ظهرت للحظة مساحة خارج #app-splash قبل اكتمال تنسيقاته أو
+         أثناء ارتداد التمرير (overscroll)؛ صفحات التطبيق الفعليّة تُغطّيها
+         بخلفيّتها الخاصّة فور تحميل styles.css. */
+      html,
+      body {
+        background: #0f6b3f;
+      }
+
       /* شاشة بدء ويب — تغطّي الفراغ الأبيض بين اختفاء شاشة بدء أندرويد
          الأصليّة واكتمال إقلاع Angular وتحديد الوجهة (دخول/رئيسيّة). مضمَّنة
          هنا (لا في styles.css) لتُرسَم فور تحليل HTML دون انتظار أيّ حزمة. */
@@ -56,10 +65,9 @@
         overflow: hidden;
         position: relative;
         border-radius: 32px;
-        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
         animation:
-          app-splash-in 0.5s ease-out both,
-          app-splash-pulse 2.2s ease-in-out 0.5s infinite;
+          app-splash-in 0.68s cubic-bezier(0.34, 1.56, 0.64, 1) both,
+          app-splash-pulse 2.6s ease-in-out 0.68s infinite;
       }
       #app-splash .app-splash-badge img {
         position: absolute;
@@ -94,20 +102,26 @@
       @keyframes app-splash-in {
         from {
           opacity: 0;
-          transform: scale(0.88);
+          transform: scale(0.8);
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
         to {
           opacity: 1;
           transform: scale(1);
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
         }
       }
+      /* نبضة تنفّس هادئة: تكبير طفيف مصحوب بتوهّج ظلّ متزامن — بلا اهتزاز أو
+         مبالغة، أقرب لأسلوب شاشات البدء في التطبيقات الاحترافيّة. */
       @keyframes app-splash-pulse {
         0%,
         100% {
           transform: scale(1);
+          box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
         }
         50% {
-          transform: scale(1.045);
+          transform: scale(1.035);
+          box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
         }
       }
       @keyframes app-splash-fade {
@@ -129,17 +143,32 @@
     <script>
       // إخفاء شاشة البدء — يُستدعى من App بعد استقرار التوجيه (دخول/رئيسيّة)،
       // ومع صمّام أمان زمنيّ حتى لا تعلق الشاشة لو تعثّر إقلاع التطبيق.
-      window.__hideSplash = function () {
+      //
+      // ننتظر أيضًا اكتمال تحميل خطوط Cairo/Tajawal (بحدّ أقصى قصير) قبل بدء
+      // التلاشي — فلا يظهر النصّ بخطّ احتياطيّ للحظة ثمّ يقفز عند اكتمال
+      // الخطّ الحقيقيّ خلف الشاشة المتلاشية (وميض إعادة رسم مزعج).
+      var splashHidden = false;
+      function doHideSplash() {
+        if (splashHidden) return;
+        splashHidden = true;
         var el = document.getElementById('app-splash');
         if (!el) return;
         el.classList.add('hide');
         setTimeout(function () {
           el.remove();
         }, 550);
+      }
+      window.__hideSplash = function () {
+        var fontsReady =
+          window.document.fonts && window.document.fonts.ready
+            ? window.document.fonts.ready
+            : Promise.resolve();
+        var timeout = new Promise(function (resolve) {
+          setTimeout(resolve, 1200);
+        });
+        Promise.race([fontsReady, timeout]).then(doHideSplash);
       };
-      setTimeout(function () {
-        window.__hideSplash();
-      }, 6000);
+      setTimeout(doHideSplash, 6000);
     </script>
   </head>
   <body>

@@ -12,6 +12,15 @@
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
+        <!--
+          خلفيّة النافذة الفعليّة بعد انتهاء شاشة البدء ولحين رسم WebView أوّل
+          إطار له. الخاصّية المؤثّرة فعلًا على خلفيّة النافذة هي
+          android:windowBackground، لا android:background (لا تأثير حقيقيّ لها
+          هنا) — كانت الخلفيّة الفعليّة تتساقط إلى الأبيض الافتراضيّ من
+          Theme.AppCompat.DayNight.NoActionBar للحظة قبل ظهور WebView، فيظهر
+          وميض أبيض بين شاشة البدء الأصليّة وشاشة البدء داخل الويب.
+        -->
+        <item name="android:windowBackground">#0F6B3F</item>
         <item name="android:background">@null</item>
     </style>
 
