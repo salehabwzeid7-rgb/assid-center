@@ -10,9 +10,10 @@ import {
   scoreOf,
   studentCircleIds,
   type ExamRecord,
+  type ExamScope,
   type Student,
 } from '../../core/models';
-import { completedJuz } from '../../core/quran-data';
+import { completedJuz, juzOfBlock } from '../../core/quran-data';
 import { dmy } from '../../core/format';
 import { ScoreInputComponent } from '../../shared/score-input';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -22,8 +23,20 @@ interface JuzRow {
   attempts: number;
   lastScore: number | null;
 }
+interface BlockRow {
+  block: number;
+  juz: number[];
+  /** عدد أجزاء الكتلة الثلاثة المُختبَرة فرديًّا (٠..٣) */
+  examinedCount: number;
+  ready: boolean;
+  done: boolean;
+  attempts: number;
+  lastScore: number | null;
+}
 interface Recording {
+  scope: ExamScope;
   juz: number;
+  juzList?: number[];
   attempt: number;
   title: string;
 }
@@ -31,9 +44,10 @@ interface Recording {
 /**
  * صفحة الاختبار — سجلّ اختبار الأجزاء المحفوظة وتقييماتها.
  *
- * على النقيض من السرد: لا كتل مجمّعة إطلاقًا. كلّ جزء مكتمل الحفظ يفتح اختبارًا
- * مستقلًّا خاصًّا به. تنبيه لكلّ جزء لم يُختبر بعد، ومحاولات متعدّدة لكلّ جزء.
- * وضع الإعداد (?setup=1) للطلاب المسجَّلين بأجزاء محفوظة مسبقًا.
+ *  · اختبار فرديّ: يفتح فور اكتمال حفظ الجزء، بلا انتظار أيّ جزء آخر.
+ *  · اختبار مجمّع: يفتح لكلّ كتلة ٣ أجزاء متتالية بعد اختبار كلّ جزء منها
+ *    فرديًّا على حِدة — مطابق تمامًا لآليّة السرد المجمّع.
+ *  وضع الإعداد (?setup=1) للطلاب المسجَّلين بأجزاء محفوظة مسبقًا.
  */
 @Component({
   selector: 'app-exam',
@@ -64,6 +78,10 @@ interface Recording {
             <div class="stat">
               <div class="num">{{ examinedRows().length }}/{{ completed().length }}</div>
               <div class="label">أجزاء اختُبرت</div>
+            </div>
+            <div class="stat">
+              <div class="num">{{ masteredBlocks() }}</div>
+              <div class="label">كتل مُتقنة (٣ أجزاء)</div>
             </div>
             <div class="stat">
               <div class="num">{{ exams()?.length ?? 0 }}</div>
@@ -110,6 +128,51 @@ interface Recording {
             }
           }
 
+          <!-- الاختبار المجمّع لكلّ ٣ أجزاء -->
+          @if (blockRows().length) {
+            <div class="section-title">الاختبار المجمّع — كلّ ٣ أجزاء متتالية</div>
+            @for (b of blockRows(); track b.block) {
+              <div class="card" [class.milestone]="b.ready" [class.locked]="!b.ready && !b.done">
+                <div class="row-between">
+                  <span>
+                    الأجزاء {{ b.juz[0] }} · {{ b.juz[1] }} · {{ b.juz[2] }}
+                    @if (b.done) {
+                      <span
+                        class="badge"
+                        [class.b-present]="b.lastScore! >= examPass"
+                        [class.b-absent]="b.lastScore! < examPass"
+                        style="margin-inline-start:6px"
+                      >
+                        {{ b.lastScore }}٪ · {{ pass(b.lastScore!) }} · {{ b.attempts }} محاولة
+                      </span>
+                    }
+                  </span>
+                  @if (b.ready) {
+                    <button class="btn btn-primary" type="button" (click)="openBlock(b.block)">
+                      ＋ اختبار مجمّع
+                    </button>
+                  } @else if (b.done) {
+                    <button class="btn btn-ghost" type="button" (click)="openBlock(b.block)">
+                      محاولة أخرى
+                    </button>
+                  } @else {
+                    <span class="lock-pill">🔒 مقفل</span>
+                  }
+                </div>
+                @if (b.ready) {
+                  <p class="muted" style="margin:6px 0 0">
+                    اختُبر كلّ جزء من أجزاء الكتلة فرديًّا — الاختبار المجمّع مطلوب الآن.
+                  </p>
+                } @else if (!b.done) {
+                  <p class="muted" style="margin:6px 0 0">
+                    {{ b.examinedCount }}/3 أجزاء اختُبرت — يُفتح الاختبار المجمّع بعد اختبار
+                    الأجزاء الثلاثة كلٌّ على حدة.
+                  </p>
+                }
+              </div>
+            }
+          }
+
           <!-- الأجزاء المُختبَرة -->
           @if (examinedRows().length) {
             <div class="section-title">الأجزاء المُختبَرة</div>
@@ -144,7 +207,7 @@ interface Recording {
             @for (rec of exams(); track rec.id) {
               <div class="card">
                 <div class="row-between">
-                  <b>اختبار الجزء {{ rec.juz }}</b>
+                  <b>{{ scopeText(rec) }}</b>
                   <span
                     class="badge"
                     [class.b-present]="scoreOf(rec) >= examPass"
@@ -224,6 +287,19 @@ interface Recording {
       .card.need {
         border-inline-start: 4px solid var(--warn, #a07030);
       }
+      .card.milestone {
+        border: 1px solid var(--gold);
+        background: var(--gold-tint);
+      }
+      .card.locked {
+        opacity: 0.7;
+      }
+      .lock-pill {
+        flex-shrink: 0;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-soft);
+      }
       .card.batch {
         background: var(--surface-2);
       }
@@ -266,16 +342,20 @@ export class ExamPage {
 
   readonly completed = computed(() => completedJuz(this.student()?.memorizedSurahs ?? []));
 
-  /** سجلّات اختبار كلّ جزء — الأحدث أوّلًا (المصدر مرتَّب تنازليًّا). */
-  private readonly juzExams = computed(() => {
+  private groupByScope(scope: ExamScope): Map<number, ExamRecord[]> {
     const map = new Map<number, ExamRecord[]>();
     for (const e of this.exams() ?? []) {
+      if ((e.scope ?? 'juz') !== scope) continue;
       const arr = map.get(e.juz);
       if (arr) arr.push(e);
       else map.set(e.juz, [e]);
     }
     return map;
-  });
+  }
+  /** سجلّات اختبار كلّ جزء (فرديّ) — الأحدث أوّلًا (المصدر مرتَّب تنازليًّا). */
+  private readonly juzExams = computed(() => this.groupByScope('juz'));
+  /** سجلّات الاختبار المجمّع لكلّ كتلة (المفتاح = رقم الكتلة). */
+  private readonly blockExamMap = computed(() => this.groupByScope('block'));
 
   readonly juzRows = computed<JuzRow[]>(() =>
     this.completed().map((juz) => {
@@ -285,6 +365,31 @@ export class ExamPage {
   );
   readonly pending = computed(() => this.juzRows().filter((r) => r.attempts === 0));
   readonly examinedRows = computed(() => this.juzRows().filter((r) => r.attempts > 0));
+
+  readonly blockRows = computed<BlockRow[]>(() => {
+    const done = new Set(this.completed());
+    const out: BlockRow[] = [];
+    for (let b = 1; b <= 10; b++) {
+      const juz = juzOfBlock(b);
+      // شرط الظهور: حفظ الأجزاء الثلاثة كاملةً
+      if (!juz.every((j) => done.has(j))) continue;
+      // شرط الفتح: اختبار كلّ جزء منها فرديًّا مرّةً على الأقلّ
+      const examinedCount = juz.filter((j) => (this.juzExams().get(j)?.length ?? 0) >= 1).length;
+      const eachExamined = examinedCount === 3;
+      const be = this.blockExamMap().get(b) ?? [];
+      out.push({
+        block: b,
+        juz,
+        examinedCount,
+        ready: eachExamined && be.length === 0,
+        done: be.length > 0,
+        attempts: be.length,
+        lastScore: be[0] ? scoreOf(be[0]) : null,
+      });
+    }
+    return out;
+  });
+  readonly masteredBlocks = computed(() => this.blockRows().filter((b) => b.done).length);
 
   readonly avgScore = computed<number | null>(() => {
     const vals = (this.exams() ?? []).map((e) => scoreOf(e));
@@ -299,10 +404,28 @@ export class ExamPage {
     return hifz ?? ids[0] ?? '';
   }
 
+  scopeText(r: ExamRecord): string {
+    return r.scope === 'block' && r.juzList?.length
+      ? `اختبار مجمّع — الأجزاء ${r.juzList.join(' · ')}`
+      : `اختبار الجزء ${r.juz}`;
+  }
+
   openJuz(juz: number): void {
     const attempt = (this.juzExams().get(juz)?.length ?? 0) + 1;
     this.reset();
-    this.recording.set({ juz, attempt, title: `اختبار الجزء ${juz}` });
+    this.recording.set({ scope: 'juz', juz, attempt, title: `اختبار الجزء ${juz}` });
+  }
+  openBlock(block: number): void {
+    const juz = juzOfBlock(block);
+    const attempt = (this.blockExamMap().get(block)?.length ?? 0) + 1;
+    this.reset();
+    this.recording.set({
+      scope: 'block',
+      juz: block,
+      juzList: juz,
+      attempt,
+      title: `اختبار مجمّع — الأجزاء ${juz.join(' · ')}`,
+    });
   }
   private reset(): void {
     this.score.set(EXAM_PASS);
@@ -327,7 +450,9 @@ export class ExamPage {
           .addExam({
             studentId: s.id,
             circleId: this.hifzCircleId(s),
+            scope: rec.scope,
             juz: rec.juz,
+            juzList: rec.juzList,
             score: this.score(),
             attempt: rec.attempt,
             date: this.date,
@@ -353,6 +478,7 @@ export class ExamPage {
             this.data.addExam({
               studentId: s.id,
               circleId: this.hifzCircleId(s),
+              scope: 'juz',
               juz: r.juz,
               score: this.batchScore(),
               attempt: 1,

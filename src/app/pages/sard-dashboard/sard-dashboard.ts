@@ -100,6 +100,10 @@ interface Row {
                 <div class="label">مجموع الأجزاء المُختبَرة</div>
               </div>
               <div class="stat">
+                <div class="num">{{ totalExamBlocks() }}</div>
+                <div class="label">كتل اختبار مُتقنة</div>
+              </div>
+              <div class="stat">
                 <div class="num">{{ totalPendingExams() }}</div>
                 <div class="label">أجزاء تنتظر الاختبار</div>
               </div>
@@ -336,6 +340,9 @@ export class SardDashboardPage {
   );
   readonly totalExaminedJuz = computed(() =>
     this.hifzRows().reduce((t, r) => t + r.e.examinedJuz.length, 0),
+  );
+  readonly totalExamBlocks = computed(() =>
+    this.hifzRows().reduce((t, r) => t + r.e.doneBlocks.length, 0),
   );
   readonly totalPendingExams = computed(() =>
     this.hifzRows().reduce((t, r) => t + r.e.pendingCount, 0),

@@ -362,7 +362,15 @@ export class StudentPage {
   );
 
   /** أرقام الأجزاء المكتملة حفظًا التي اختُبر كلٌّ منها مرّة واحدة على الأقلّ. */
-  private readonly examinedJuzSet = computed(() => new Set((this.exams() ?? []).map((e) => e.juz)));
+  /**
+   * أرقام الأجزاء المكتملة حفظًا التي اختُبرت فرديًّا مرّة واحدة على الأقلّ.
+   * يُستثنى سجلّ الاختبار المجمّع (scope='block') — حقل juz فيه رقم الكتلة
+   * (١..١٠) لا رقم جزء حقيقيّ، فإدراجه هنا بلا تمييز يُفسد هذا العدّ.
+   */
+  private readonly examinedJuzSet = computed(
+    () =>
+      new Set((this.exams() ?? []).filter((e) => (e.scope ?? 'juz') === 'juz').map((e) => e.juz)),
+  );
   readonly examinedJuzCount = computed(
     () =>
       completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) =>
