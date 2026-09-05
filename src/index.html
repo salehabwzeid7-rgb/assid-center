@@ -26,8 +26,129 @@
       href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&family=Amiri+Quran&display=swap"
       rel="stylesheet"
     />
+    <style>
+      /* شاشة بدء ويب — تغطّي الفراغ الأبيض بين اختفاء شاشة بدء أندرويد
+         الأصليّة واكتمال إقلاع Angular وتحديد الوجهة (دخول/رئيسيّة). مضمَّنة
+         هنا (لا في styles.css) لتُرسَم فور تحليل HTML دون انتظار أيّ حزمة. */
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #0f6b3f; /* نفس لون شاشة بدء أندرويد — انتقال بلا قفزة لونيّة */
+        transition:
+          opacity 0.5s ease,
+          visibility 0.5s ease;
+      }
+      #app-splash.hide {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      #app-splash .app-splash-badge {
+        display: block;
+        width: 240px;
+        height: 243px;
+        overflow: hidden;
+        position: relative;
+        border-radius: 32px;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+        animation:
+          app-splash-in 0.5s ease-out both,
+          app-splash-pulse 2.2s ease-in-out 0.5s infinite;
+      }
+      #app-splash .app-splash-badge img {
+        position: absolute;
+        top: -68px;
+        left: -228px;
+        width: 697px;
+        max-width: none;
+        height: 380px;
+      }
+      #app-splash .app-splash-name {
+        font-family: 'Cairo', 'Tajawal', sans-serif;
+        color: #fff;
+        font-weight: 800;
+        font-size: 1.1rem;
+        letter-spacing: 0.01em;
+        opacity: 0;
+        animation: app-splash-fade 0.6s ease-out 0.25s forwards;
+      }
+      @media (max-width: 340px) {
+        #app-splash .app-splash-badge {
+          width: 190px;
+          height: 192px;
+          border-radius: 26px;
+        }
+        #app-splash .app-splash-badge img {
+          top: -54px;
+          left: -181px;
+          width: 552px;
+          height: 301px;
+        }
+      }
+      @keyframes app-splash-in {
+        from {
+          opacity: 0;
+          transform: scale(0.88);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+      @keyframes app-splash-pulse {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.045);
+        }
+      }
+      @keyframes app-splash-fade {
+        from {
+          opacity: 0;
+          transform: translateY(4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-splash .app-splash-badge {
+          animation: app-splash-fade 0.3s ease-out both;
+        }
+      }
+    </style>
+    <script>
+      // إخفاء شاشة البدء — يُستدعى من App بعد استقرار التوجيه (دخول/رئيسيّة)،
+      // ومع صمّام أمان زمنيّ حتى لا تعلق الشاشة لو تعثّر إقلاع التطبيق.
+      window.__hideSplash = function () {
+        var el = document.getElementById('app-splash');
+        if (!el) return;
+        el.classList.add('hide');
+        setTimeout(function () {
+          el.remove();
+        }, 550);
+      };
+      setTimeout(function () {
+        window.__hideSplash();
+      }, 6000);
+    </script>
   </head>
   <body>
+    <div id="app-splash" aria-hidden="true">
+      <span class="app-splash-badge">
+        <img src="almaher-logo.jpg" alt="" />
+      </span>
+      <span class="app-splash-name">الماهر</span>
+    </div>
     <app-root></app-root>
   </body>
 </html>
