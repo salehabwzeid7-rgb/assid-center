@@ -92,20 +92,20 @@ jobs:
           VER=$(node -p "require('./package.json').version")
           SRC=$(ls $APK_PATH/*.apk | head -n1)
           mkdir -p out
-          cp "$SRC" "out/AssidCenter-Teacher-v${VER}.apk"
+          cp "$SRC" "out/AlMaher-Teacher-v${VER}.apk"
           echo "VER=$VER" >> "$GITHUB_ENV"
 
       - name: رفع كأثر بناء
         uses: actions/upload-artifact@v4
         with:
-          name: AssidCenter-Teacher-v${{ env.VER }}
+          name: AlMaher-Teacher-v${{ env.VER }}
           path: out/*.apk
 
       - name: نشر إصدار GitHub (عند وجود وسم)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: مركز أسيد v${{ env.VER }}
+          name: الماهر v${{ env.VER }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: out/*.apk

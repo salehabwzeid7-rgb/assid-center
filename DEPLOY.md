@@ -1,4 +1,4 @@
-# النشر والتحديث التلقائيّ — «مركز أسيد»
+# النشر والتحديث التلقائيّ — «الماهر»
 
 هذا الملف يشرح سير العمل لإصدار نسخة APK جديدة تلقائيًّا عبر GitHub.
 
@@ -39,7 +39,7 @@ npm run release -- major --push      # 1.2.0 → 2.0.0
 3. **مزامنة Capacitor** مع مجلّد `android`.
 4. **commit + وسم** `vX.Y.Z` ثمّ **دفع** الفرع والوسم.
 5. دفع الوسم يُشغّل workflow **«إصدار APK»** على GitHub → يبني `assembleDebug` ويرفع
-   `AssidCenter-Teacher-vX.Y.Z.apk` إلى صفحة **Releases** (أرشيف).
+   `AlMaher-Teacher-vX.Y.Z.apk` إلى صفحة **Releases** (أرشيف).
 6. محليًّا: يبني `scripts/publish-ota.mjs` **حزمة تحديث مباشر (OTA)** وينشرها على Firebase Hosting
    → تصل الأجهزة المُثبَّتة تلقائيًّا عند فتح التطبيق.
 7. محليًّا: يبني `scripts/publish-apk.mjs` نسخة APK وينشرها على **Firebase Hosting** →

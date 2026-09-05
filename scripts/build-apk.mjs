@@ -113,7 +113,7 @@ if (!apk) {
 const distDir = join(root, 'apk');
 mkdirSync(distDir, { recursive: true });
 const stamp = new Date().toISOString().slice(0, 10);
-const target = join(distDir, `AssidCenter-Teacher-${mode}-${stamp}.apk`);
+const target = join(distDir, `AlMaher-Teacher-${mode}-${stamp}.apk`);
 copyFileSync(join(outDir, apk), target);
 
 console.log('---------------------------------------------');

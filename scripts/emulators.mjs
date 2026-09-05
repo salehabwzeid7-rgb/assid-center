@@ -1,5 +1,5 @@
 /**
- * تشغيل Firebase Emulator Suite (مصادقة + Firestore) لمركز أسيد.
+ * تشغيل Firebase Emulator Suite (مصادقة + Firestore) لالماهر.
  *
  *   node scripts/emulators.mjs
  *

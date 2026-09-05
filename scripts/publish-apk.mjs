@@ -8,7 +8,7 @@
  *   1. npm run apk:<mode>  → يبني APK محليًّا (يحتاج JDK 21 + Android SDK) وينسخه إلى apk/
  *   2. نسخ أحدث ناتج إلى public-apk/app.bin
  *      (بامتداد .bin لأنّ خطّة Spark تمنع رفع ملفّات .apk — الترويسات في firebase.json
- *       تجعل المتصفّح يحفظه AssidCenter-Teacher.apk ويثبّته أندرويد بشكل صحيح.)
+ *       تجعل المتصفّح يحفظه AlMaher-Teacher.apk ويثبّته أندرويد بشكل صحيح.)
  *   3. firebase deploy --only hosting
  */
 import { readdirSync, copyFileSync, statSync } from 'node:fs';

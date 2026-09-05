@@ -1,5 +1,5 @@
 /**
- * إصدار نسخة جديدة من «مركز أسيد» ودفعها إلى GitHub.
+ * إصدار نسخة جديدة من «الماهر» ودفعها إلى GitHub.
  *
  *   node scripts/release.mjs [patch|minor|major|X.Y.Z] [--push] [--no-verify]
  *

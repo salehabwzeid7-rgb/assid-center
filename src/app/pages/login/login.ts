@@ -11,8 +11,8 @@ type Mode = 'login' | 'register';
   template: `
     <div class="auth-wrap">
       <div class="auth-logo">
-        <img class="auth-badge" src="logo.svg" alt="شعار مركز أسيد" width="96" height="96" />
-        <h1>مركز أسيد لتحفيظ القرآن الكريم</h1>
+        <img class="auth-badge" src="logo.svg" alt="شعار الماهر" width="96" height="96" />
+        <h1>الماهر لتحفيظ القرآن الكريم</h1>
         <p>واجهة المعلّم</p>
       </div>
 
@@ -141,7 +141,7 @@ type Mode = 'login' | 'register';
       </form>
 
       <p class="hint" style="text-align:center;margin-top:16px">
-        مركز أسيد لتحفيظ القرآن الكريم — واجهة المعلّم
+        الماهر لتحفيظ القرآن الكريم — واجهة المعلّم
       </p>
     </div>
   `,

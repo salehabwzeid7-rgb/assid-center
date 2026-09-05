@@ -1,5 +1,5 @@
 /* ==========================================================================
-   تهيئة Firebase — مركز أسيد
+   تهيئة Firebase — الماهر
    المصادقة (Auth) + Firestore سحابي مع تخزين محلي دائم ومزامنة تلقائية.
 
    • الإعداد الحقيقي في:  src/environments/firebase.config.ts  (يُملأ مرة واحدة)
@@ -55,7 +55,7 @@ function makeDb(): Firestore {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     });
   } catch (e) {
-    console.warn('[مركز أسيد] تعذّر تفعيل التخزين المحلي الدائم — العمل بذاكرة الجلسة فقط', e);
+    console.warn('[الماهر] تعذّر تفعيل التخزين المحلي الدائم — العمل بذاكرة الجلسة فقط', e);
     return initializeFirestore(firebaseApp, { ...base, localCache: memoryLocalCache() });
   }
 }
@@ -69,11 +69,9 @@ if (environment.useEmulator) {
     environment.emulator.firestoreHost,
     environment.emulator.firestorePort,
   );
-  console.info('%c[مركز أسيد] متصل بمحاكي Firebase المحلي', 'color:#0d6b3f;font-weight:bold');
+  console.info('%c[الماهر] متصل بمحاكي Firebase المحلي', 'color:#0d6b3f;font-weight:bold');
 } else if (!isFirebaseConfigured) {
-  console.warn(
-    '[مركز أسيد] لم تُملأ إعدادات Firebase بعد — عدّل src/environments/firebase.config.ts',
-  );
+  console.warn('[الماهر] لم تُملأ إعدادات Firebase بعد — عدّل src/environments/firebase.config.ts');
 }
 
 /** هل التطبيق جاهز للعمل (محاكٍ أو إعداد سحابي مكتمل)؟ */

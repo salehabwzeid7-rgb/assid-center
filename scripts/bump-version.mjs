@@ -1,5 +1,5 @@
 /**
- * رفع رقم إصدار تطبيق «مركز أسيد» في مكان واحد:
+ * رفع رقم إصدار تطبيق «الماهر» في مكان واحد:
  *   • package.json            → version
  *   • android/app/build.gradle → versionName (نفس الرقم) + versionCode (+1)
  *

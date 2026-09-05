@@ -105,7 +105,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </button>
       </div>
 
-      <p class="hint" style="text-align:center">مركز أسيد لتحفيظ القرآن الكريم — واجهة المعلّم</p>
+      <p class="hint" style="text-align:center">الماهر لتحفيظ القرآن الكريم — واجهة المعلّم</p>
     </div>
   `,
   styles: [

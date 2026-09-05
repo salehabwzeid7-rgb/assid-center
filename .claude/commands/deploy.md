@@ -1,5 +1,5 @@
 ---
-description: إصدار نسخة جديدة من «مركز أسيد» — رفع الرقم، بناء، وسم، ودفع لتشغيل بناء APK على GitHub
+description: إصدار نسخة جديدة من «الماهر» — رفع الرقم، بناء، وسم، ودفع لتشغيل بناء APK على GitHub
 argument-hint: "[patch|minor|major|X.Y.Z]  (افتراضيّ patch)"
 allowed-tools: Bash(npm run *), Bash(node scripts/*), Bash(git *), Bash(npx cap *), Read, Edit
 ---
@@ -19,7 +19,7 @@ allowed-tools: Bash(npm run *), Bash(node scripts/*), Bash(git *), Bash(npx cap 
      ويُرفَع تلقائيًّا إلى صفحة Releases.
 3. المستودع مربوط بالفعل: `origin` = https://github.com/salehabwzeid7-rgb/assid-center (عام).
 4. بعد الدفع: راقِب `.github/workflows/release.yml` حتى ينتهي، ثمّ أعطِ المستخدم
-   الرابط المباشر: `https://github.com/salehabwzeid7-rgb/assid-center/releases/download/vX.Y.Z/AssidCenter-Teacher-vX.Y.Z.apk`
+   الرابط المباشر: `https://github.com/salehabwzeid7-rgb/assid-center/releases/download/vX.Y.Z/AlMaher-Teacher-vX.Y.Z.apk`
    (ورابط أحدث نسخة الثابت `…/releases/latest`).
 
 ملاحظات:
