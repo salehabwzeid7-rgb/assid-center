@@ -16,8 +16,8 @@ type Mode = 'login' | 'register';
             class="auth-badge"
             src="almaher-logo.jpg"
             alt="شعار الماهر"
-            width="488"
-            height="266"
+            width="581"
+            height="317"
           />
         </span>
         <h1>الماهر لتحفيظ القرآن الكريم</h1>
