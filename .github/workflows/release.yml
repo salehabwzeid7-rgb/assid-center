@@ -39,6 +39,17 @@ jobs:
       - name: تثبيت الاعتماديّات
         run: npm ci
 
+      - name: تجهيز google-services.json (لدخول Google الأصليّ على أندرويد)
+        run: |
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+            echo "google-services.json مُجهَّز من السرّ."
+          elif [ -f android/app/google-services.json ]; then
+            echo "google-services.json موجود في المستودع."
+          else
+            echo "::warning::لا يوجد google-services.json — سيُبنى APK لكن دخول Google لن يعمل على أندرويد."
+          fi
+
       - name: بناء الويب + مزامنة Capacitor
         run: |
           npm run build:prod

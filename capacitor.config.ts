@@ -1,3 +1,4 @@
+/// <reference types="@capacitor-firebase/authentication" />
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
@@ -14,6 +15,11 @@ const config: CapacitorConfig = {
       autoUpdate: false,
       resetWhenUpdate: true,
       appReadyTimeout: 15000,
+    },
+    // دخول Google الأصليّ على أندرويد — الويب يستخدم signInWithPopup مباشرةً.
+    FirebaseAuthentication: {
+      skipNativeAuth: false,
+      providers: ['google.com'],
     },
   },
 };

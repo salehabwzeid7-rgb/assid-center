@@ -1,9 +1,11 @@
 import { Injectable, signal, computed } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
   GoogleAuthProvider,
   signOut,
@@ -95,10 +97,28 @@ export class AuthService {
 
   /**
    * دخول عبر حساب Google — بديل لاسم المستخدم/كلمة المرور.
+   *   • على أندرويد (Capacitor): تسجيل الدخول الأصليّ عبر
+   *     `FirebaseAuthentication.signInWithGoogle()` ثمّ جسر البيان إلى SDK
+   *     الويب بـ `signInWithCredential` حتى تعرف بقيّة الواجهة أنّه مسجَّل.
+   *   • على الويب: `signInWithPopup`، ومع تعذّر النافذة يُلجَأ لإعادة التوجيه.
    * أوّل دخول ينشئ ملفّ معلّم جديدًا بمساحة عمل معزولة (عبر loadOrCreateTeacher).
-   * لا يمسّ حالة أيّ حساب آخر. يجرّب النافذة، وعند تعذّرها يلجأ لإعادة التوجيه.
+   * لا يمسّ حالة أيّ حساب آخر.
    */
   async loginWithGoogle(): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      const result = await FirebaseAuthentication.signInWithGoogle();
+      const idToken = result.credential?.idToken;
+      const accessToken = result.credential?.accessToken;
+      if (!idToken) {
+        throw { code: 'auth/no-google-credential' };
+      }
+      const cred = GoogleAuthProvider.credential(idToken, accessToken);
+      const userCred = await signInWithCredential(auth, cred);
+      await this.loadOrCreateTeacher(userCred.user);
+      return;
+    }
+
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     try {
@@ -124,6 +144,15 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
+    // على أندرويد نُنهي الجلسة الأصليّة للإضافة أيضًا (بمحاولة صامتة) قبل جلسة الويب.
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        await FirebaseAuthentication.signOut();
+      } catch {
+        /* لا بأس — المهمّ إنهاء جلسة SDK الويب أدناه */
+      }
+    }
     await signOut(auth);
     this.teacher.set(null);
   }

@@ -302,7 +302,11 @@ export class LoginPage {
     this.loading.set(true);
     try {
       await this.auth.loginWithGoogle();
-      // مسار النافذة: نصل هنا بعد نجاح الدخول. مسار إعادة التوجيه: الصفحة تُعاد تحميلها.
+      // نافذة الويب / الدخول الأصليّ على أندرويد: ننتظر ترسيخ حالة الدخول ثمّ ننتقل.
+      // مسار إعادة التوجيه: الصفحة تُعاد تحميلها فلا يصل التنفيذ إلى هنا.
+      for (let i = 0; i < 25 && !this.auth.isLoggedIn(); i++) {
+        await new Promise((r) => setTimeout(r, 120));
+      }
       if (this.auth.isLoggedIn()) await this.router.navigateByUrl('/');
     } catch (e: unknown) {
       this.error.set(mapAuthError(e));
@@ -336,6 +340,19 @@ export class LoginPage {
 
 function mapAuthError(e: unknown): string {
   const code = (e as { code?: string })?.code ?? '';
+  const msg = String((e as { message?: string })?.message ?? '').toLowerCase();
+
+  // أخطاء إضافة Capacitor للمصادقة على أندرويد تأتي أحيانًا كرسالة نصّيّة بلا code.
+  if (/cancel|canceled|cancelled|abort|12501|dismiss/.test(msg + code)) {
+    return 'أُلغي دخول Google';
+  }
+  if (/10:|developer_error|sha-?1|sha256|api key|configuration|google-services/.test(msg)) {
+    return 'إعداد دخول Google غير مكتمل على هذا الجهاز — تحقّق من google-services.json وبصمات SHA';
+  }
+  if (/network|timeout|unreachable/.test(msg) && !code) {
+    return 'تعذّر الاتصال بالخادم، تحقّق من الإنترنت';
+  }
+
   switch (code) {
     case 'auth/invalid-email':
       return 'صيغة اسم المستخدم/البريد غير مقبولة';
@@ -354,6 +371,7 @@ function mapAuthError(e: unknown): string {
     case 'auth/network-request-failed':
       return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت أو المحاكي';
     case 'auth/popup-closed-by-user':
+    case 'auth/popup-blocked':
     case 'auth/cancelled-popup-request':
       return 'أُلغي دخول Google';
     case 'auth/account-exists-with-different-credential':
@@ -362,6 +380,8 @@ function mapAuthError(e: unknown): string {
       return 'دخول Google غير مُفعَّل لهذا النطاق بعد';
     case 'auth/operation-not-allowed':
       return 'دخول Google غير مُفعَّل — فعّله من Firebase Console ← Authentication ← Sign-in method';
+    case 'auth/no-google-credential':
+      return 'تعذّر الحصول على بيانات Google، حاول مرّة أخرى';
     default:
       return 'تعذّر إتمام العملية، حاول مرة أخرى';
   }
