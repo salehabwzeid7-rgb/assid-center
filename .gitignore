@@ -66,6 +66,8 @@ Thumbs.db
 *.pem
 key.properties
 android/app/google-services.json
+.release-keystore-password.txt
+.release-keystore-base64.txt
 .env
 .env.*
 *.local.json
