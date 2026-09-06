@@ -360,6 +360,8 @@ function mapAuthError(e: unknown): string {
       return 'هذا البريد مسجَّل بطريقة دخول أخرى — استخدم اسم المستخدم وكلمة المرور';
     case 'auth/unauthorized-domain':
       return 'دخول Google غير مُفعَّل لهذا النطاق بعد';
+    case 'auth/operation-not-allowed':
+      return 'دخول Google غير مُفعَّل — فعّله من Firebase Console ← Authentication ← Sign-in method';
     default:
       return 'تعذّر إتمام العملية، حاول مرة أخرى';
   }
