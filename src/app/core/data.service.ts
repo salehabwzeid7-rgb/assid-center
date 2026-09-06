@@ -1,4 +1,4 @@
-import { Injectable, computed, signal, type Signal, type DestroyRef } from '@angular/core';
+import { Injectable, computed, inject, signal, type Signal, type DestroyRef } from '@angular/core';
 import {
   collection,
   doc,
@@ -19,6 +19,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { AuthService } from './auth.service';
 import { completedJuz } from './quran-data';
 import {
   COL,
@@ -75,6 +76,30 @@ type NewExam = Omit<ExamRecord, 'id' | 'createdAt'>;
 
 @Injectable({ providedIn: 'root' })
 export class DataService {
+  private auth = inject(AuthService);
+
+  /**
+   * مساحة العمل الحاليّة:
+   *   • null  → حساب قديم (مساحة مشتركة): يرى المستندات القديمة بلا `ownerId` فقط.
+   *   • uid   → حساب معزول: يرى ويكتب المستندات المملوكة له (`ownerId === uid`) فقط.
+   * تُقرأ لحظيًّا من ملفّ المعلّم، فلا حاجة لإعادة تحميل عند تبدّل الحساب.
+   */
+  private scopeUid(): string | null {
+    return this.auth.tenantId();
+  }
+
+  /** يُبقي من الصفوف ما يخصّ مساحة العمل الحاليّة (عزل الحسابات — عميلٌ جانبيّ). */
+  private inScope<T extends { ownerId?: string }>(rows: T[]): T[] {
+    const uid = this.scopeUid();
+    return rows.filter((r) => (uid ? r.ownerId === uid : !r.ownerId));
+  }
+
+  /** يَسِم مستندًا جديدًا بمالكه في الحسابات المعزولة (لا شيء في المساحة المشتركة). */
+  private owned<T extends Record<string, unknown>>(obj: T): T {
+    const uid = this.scopeUid();
+    return uid ? ({ ...obj, ownerId: uid } as T) : obj;
+  }
+
   /** مجموعة مشتركة على مستوى الجذر */
   private col(name: string): CollectionReference<DocumentData> {
     return collection(db, name);
@@ -115,7 +140,7 @@ export class DataService {
   //  اشتراكات لحظية — استعلامات بحقل مساواة واحد فقط (بلا فهارس مركّبة)
   // ======================================================================
 
-  private live<T extends { id: string }>(
+  private live<T extends { id: string; ownerId?: string }>(
     q: Query<DocumentData>,
     destroyRef?: DestroyRef,
     sortBy?: (a: T, b: T) => number,
@@ -124,7 +149,9 @@ export class DataService {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as T);
+        const rows = this.inScope(
+          snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as T),
+        );
         out.set(sortBy ? rows.sort(sortBy) : rows);
       },
       (err) => {
@@ -200,9 +227,18 @@ export class DataService {
     });
   }
 
+  /** قراءة مستند واحد بمعرّفه مع فرض العزل (يُعيد null إن كان خارج مساحة العمل). */
+  private async getOne<T extends { id: string; ownerId?: string }>(
+    coll: string,
+    id: string,
+  ): Promise<T | null> {
+    const s = await getDoc(this.ref(coll, id));
+    if (!s.exists()) return null;
+    return this.inScope([{ id: s.id, ...(s.data() as object) } as T])[0] ?? null;
+  }
+
   async getSession(id: string): Promise<Session | null> {
-    const s = await getDoc(this.ref(COL.sessions, id));
-    return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Session) : null;
+    return this.getOne<Session>(COL.sessions, id);
   }
 
   async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
@@ -258,9 +294,11 @@ export class DataService {
     departureTime?: string;
   }): Promise<void> {
     const id = `${input.sessionId}_${input.studentId}`;
-    await setDoc(this.ref(COL.attendance, id), clean({ ...input, createdAt: Date.now() }), {
-      merge: true,
-    });
+    await setDoc(
+      this.ref(COL.attendance, id),
+      this.owned(clean({ ...input, createdAt: Date.now() })),
+      { merge: true },
+    );
   }
 
   /** تعديل وقت الحضور/الانصراف لطالب في جلسة (دمج — لا يمسّ الحالة). */
@@ -270,7 +308,7 @@ export class DataService {
     patch: { arrivalTime?: string; departureTime?: string },
   ): Promise<void> {
     const id = `${sessionId}_${studentId}`;
-    await setDoc(this.ref(COL.attendance, id), clean(patch), { merge: true });
+    await setDoc(this.ref(COL.attendance, id), this.owned(clean(patch)), { merge: true });
   }
 
   /** تسميع الطالب ضمن جلسة — سجل واحد لكل طالب في الجلسة (قابل للتعديل) */
@@ -280,15 +318,17 @@ export class DataService {
     input: NewRecitation,
   ): Promise<void> {
     const id = `${sessionId}_${studentId}`;
-    await setDoc(this.ref(COL.recitations, id), { ...clean(input), createdAt: Date.now() });
+    await setDoc(
+      this.ref(COL.recitations, id),
+      this.owned({ ...clean(input), createdAt: Date.now() }),
+    );
   }
 
   async getSessionRecitation(
     sessionId: string,
     studentId: string,
   ): Promise<RecitationRecord | null> {
-    const s = await getDoc(this.ref(COL.recitations, `${sessionId}_${studentId}`));
-    return s.exists() ? ({ id: s.id, ...(s.data() as object) } as RecitationRecord) : null;
+    return this.getOne<RecitationRecord>(COL.recitations, `${sessionId}_${studentId}`);
   }
 
   // ---------- سجلات الطالب (للملف الشخصي) ----------
@@ -358,13 +398,11 @@ export class DataService {
   // ---------- قراءات لمرة واحدة ----------
 
   async getCircle(id: string): Promise<Circle | null> {
-    const s = await getDoc(this.ref(COL.circles, id));
-    return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Circle) : null;
+    return this.getOne<Circle>(COL.circles, id);
   }
 
   async getStudent(id: string): Promise<Student | null> {
-    const s = await getDoc(this.ref(COL.students, id));
-    return s.exists() ? ({ id: s.id, ...(s.data() as object) } as Student) : null;
+    return this.getOne<Student>(COL.students, id);
   }
 
   // ---------- كتابة ----------
@@ -372,15 +410,17 @@ export class DataService {
   async addCircle(input: NewCircle): Promise<string> {
     const created = await addDoc(
       this.col(COL.circles),
-      clean({
-        name: input.name.trim(),
-        type: input.type,
-        tajweedLevel: input.tajweedLevel,
-        weekdays: [...input.weekdays].sort((a, b) => a - b),
-        fromTime: input.fromTime,
-        toTime: input.toTime,
-        createdAt: Date.now(),
-      }),
+      this.owned(
+        clean({
+          name: input.name.trim(),
+          type: input.type,
+          tajweedLevel: input.tajweedLevel,
+          weekdays: [...input.weekdays].sort((a, b) => a - b),
+          fromTime: input.fromTime,
+          toTime: input.toTime,
+          createdAt: Date.now(),
+        }),
+      ),
     );
     return created.id;
   }
@@ -461,14 +501,17 @@ export class DataService {
       ...stale.map((d) => deleteDoc(d.ref)),
       ...retime.map((d) => updateDoc(d.ref, { fromTime: from, toTime: to })),
       ...missing.map((date) =>
-        setDoc(this.ref(COL.sessions, `${circle.id}_${date}`), {
-          circleId: circle.id,
-          date,
-          fromTime: from,
-          toTime: to,
-          status: 'scheduled' as SessionStatus,
-          createdAt: Date.now(),
-        }),
+        setDoc(
+          this.ref(COL.sessions, `${circle.id}_${date}`),
+          this.owned({
+            circleId: circle.id,
+            date,
+            fromTime: from,
+            toTime: to,
+            status: 'scheduled' as SessionStatus,
+            createdAt: Date.now(),
+          }),
+        ),
       ),
     ]);
   }
@@ -505,23 +548,29 @@ export class DataService {
       if (s.status === 'scheduled') await updateDoc(old.ref, { status: 'open' as SessionStatus });
       return old.id;
     }
-    await setDoc(ref, {
-      circleId,
-      date,
-      fromTime: bounds?.fromTime ?? '',
-      toTime: bounds?.toTime ?? '',
-      status: 'open' as SessionStatus,
-      createdAt: Date.now(),
-    });
+    await setDoc(
+      ref,
+      this.owned({
+        circleId,
+        date,
+        fromTime: bounds?.fromTime ?? '',
+        toTime: bounds?.toTime ?? '',
+        status: 'open' as SessionStatus,
+        createdAt: Date.now(),
+      }),
+    );
     return id;
   }
 
   async addStudent(input: NewStudent): Promise<string> {
-    const created = await addDoc(this.col(COL.students), {
-      ...clean(input),
-      name: input.name.trim(),
-      createdAt: Date.now(),
-    });
+    const created = await addDoc(
+      this.col(COL.students),
+      this.owned({
+        ...clean(input),
+        name: input.name.trim(),
+        createdAt: Date.now(),
+      }),
+    );
     return created.id;
   }
 
@@ -591,7 +640,10 @@ export class DataService {
   }
 
   async addSerd(input: NewSerd): Promise<string> {
-    const created = await addDoc(this.col(COL.serd), { ...clean(input), createdAt: Date.now() });
+    const created = await addDoc(
+      this.col(COL.serd),
+      this.owned({ ...clean(input), createdAt: Date.now() }),
+    );
     return created.id;
   }
 
@@ -616,7 +668,10 @@ export class DataService {
   }
 
   async addExam(input: NewExam): Promise<string> {
-    const created = await addDoc(this.col(COL.exams), { ...clean(input), createdAt: Date.now() });
+    const created = await addDoc(
+      this.col(COL.exams),
+      this.owned({ ...clean(input), createdAt: Date.now() }),
+    );
     return created.id;
   }
 
@@ -625,18 +680,18 @@ export class DataService {
   }
 
   async addRecitation(input: NewRecitation): Promise<string> {
-    const created = await addDoc(this.col(COL.recitations), {
-      ...clean(input),
-      createdAt: Date.now(),
-    });
+    const created = await addDoc(
+      this.col(COL.recitations),
+      this.owned({ ...clean(input), createdAt: Date.now() }),
+    );
     return created.id;
   }
 
   async addEvaluation(input: NewEvaluation): Promise<string> {
-    const created = await addDoc(this.col(COL.evaluations), {
-      ...clean(input),
-      createdAt: Date.now(),
-    });
+    const created = await addDoc(
+      this.col(COL.evaluations),
+      this.owned({ ...clean(input), createdAt: Date.now() }),
+    );
     return created.id;
   }
 
@@ -651,19 +706,24 @@ export class DataService {
   // ---------- حذف شامل (مرحلة الاختبار فقط) ----------
 
   /**
-   * يحذف كلّ مستندات مجموعات البيانات من Firestore (الحلقات، الطلاب، الجلسات،
+   * يحذف مستندات مجموعات البيانات من Firestore (الحلقات، الطلاب، الجلسات،
    * الحضور، التسميع، التقييم، السرد، الاختبار). لا يمسّ مجموعة teachers ولا
    * حسابات المصادقة. يعمل على دفعات ≤ ٤٠٠ مستند.
+   *
+   * العزل: الحساب المعزول يحذف مستنداته وحدها (`ownerId === uid`)، فلا يمسّ
+   * بيانات المساحة المشتركة ولا أيّ حساب آخر. الحساب القديم يحذف الكلّ كما كان.
    * يُرجع إجماليّ عدد المستندات المحذوفة.
    */
   async wipeAllData(): Promise<number> {
     let deleted = 0;
+    const uid = this.scopeUid();
     for (const name of Object.values(COL)) {
       // نكرّر لأنّ getDocs قد يعيد صفحةً واحدة كبيرة؛ الحذف على دفعات
       // ثمّ إعادة الجلب حتى تفرغ المجموعة تمامًا.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const snap = await getDocs(query(this.col(name)));
+        const q = uid ? query(this.col(name), where('ownerId', '==', uid)) : query(this.col(name));
+        const snap = await getDocs(q);
         if (snap.empty) break;
         for (let i = 0; i < snap.docs.length; i += 400) {
           const batch = writeBatch(db);

@@ -8,7 +8,15 @@
    ========================================================================== */
 
 import { initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth';
+import {
+  initializeAuth,
+  connectAuthEmulator,
+  browserPopupRedirectResolver,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  inMemoryPersistence,
+  type Auth,
+} from 'firebase/auth';
 import {
   initializeFirestore,
   connectFirestoreEmulator,
@@ -39,7 +47,18 @@ const appConfig = environment.useEmulator
 
 export const firebaseApp: FirebaseApp = initializeApp(appConfig);
 
-export const auth: Auth = getAuth(firebaseApp);
+/**
+ * المصادقة مع بقاء الجلسة عبر إعادة تشغيل التطبيق:
+ *   • `indexedDBLocalPersistence` أوّلًا (الأكثر ثباتًا داخل WebView على أندرويد)،
+ *   • ثمّ `browserLocalPersistence` (localStorage) احتياطًا،
+ *   • ثمّ الذاكرة فقط عند حجب التخزين تمامًا.
+ * فلا يُطلَب تسجيل الدخول مجدّدًا إلّا بعد ضغط «تسجيل الخروج» صراحةً.
+ * `browserPopupRedirectResolver` مطلوب لدعم دخول Google (نافذة/إعادة توجيه).
+ */
+export const auth: Auth = initializeAuth(firebaseApp, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence, inMemoryPersistence],
+  popupRedirectResolver: browserPopupRedirectResolver,
+});
 
 /**
  * تخزين محلي دائم (IndexedDB) متعدّد التبويبات → عمل كامل دون اتصال ومزامنة

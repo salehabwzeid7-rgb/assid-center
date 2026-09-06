@@ -2,6 +2,10 @@ import { Injectable, signal, computed } from '@angular/core';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -30,7 +34,15 @@ export class AuthService {
     () => this.teacher()?.name || this.user()?.displayName || this.user()?.email || 'المعلّم',
   );
 
+  /** مساحة العمل المعزولة لهذا الحساب (uid) — null للحسابات القديمة (مساحة مشتركة). */
+  readonly tenantId = computed(() => this.teacher()?.tenantId ?? null);
+  /** هل هذا الحساب في مساحة معزولة خاصّة به؟ */
+  readonly isTenant = computed(() => !!this.teacher()?.tenantId);
+
   constructor() {
+    // التقاط نتيجة دخول Google عبر إعادة التوجيه (المسار الاحتياطيّ للنافذة) — غير حاجب.
+    getRedirectResult(auth).catch((e) => console.warn('getRedirectResult:', e));
+
     onAuthStateChanged(auth, async (u) => {
       this.user.set(u);
       if (u) {
@@ -65,7 +77,7 @@ export class AuthService {
     await this.loadOrCreateTeacher(cred.user);
   }
 
-  /** إنشاء حساب معلّم جديد من الصفر */
+  /** إنشاء حساب معلّم جديد من الصفر — يحصل على مساحة عمل معزولة خاصّة به. */
   async register(name: string, identifier: string, password: string): Promise<void> {
     const email = this.identifierToEmail(identifier);
     const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -74,10 +86,36 @@ export class AuthService {
       name: name.trim(),
       email: cred.user.email ?? email,
       phone: '',
+      tenantId: cred.user.uid,
       createdAt: Date.now(),
     };
     await setDoc(doc(db, TEACHERS, cred.user.uid), fresh);
     this.teacher.set({ id: cred.user.uid, ...fresh });
+  }
+
+  /**
+   * دخول عبر حساب Google — بديل لاسم المستخدم/كلمة المرور.
+   * أوّل دخول ينشئ ملفّ معلّم جديدًا بمساحة عمل معزولة (عبر loadOrCreateTeacher).
+   * لا يمسّ حالة أيّ حساب آخر. يجرّب النافذة، وعند تعذّرها يلجأ لإعادة التوجيه.
+   */
+  async loginWithGoogle(): Promise<void> {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      const cred = await signInWithPopup(auth, provider);
+      await this.loadOrCreateTeacher(cred.user);
+    } catch (e: unknown) {
+      const code = (e as { code?: string }).code ?? '';
+      if (
+        code === 'auth/popup-blocked' ||
+        code === 'auth/cancelled-popup-request' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+      ) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+      throw e;
+    }
   }
 
   /** إرسال رابط إعادة تعيين كلمة المرور */
@@ -90,7 +128,11 @@ export class AuthService {
     this.teacher.set(null);
   }
 
-  /** يقرأ ملف المعلّم، وينشئه تلقائيًا إن لم يكن موجودًا */
+  /**
+   * يقرأ ملف المعلّم، وينشئه تلقائيًا إن لم يكن موجودًا.
+   * الملفّ الموجود يُحمَّل كما هو (حساب قديم يبقى في المساحة المشتركة بلا مساس).
+   * الملفّ المُنشَأ حديثًا (أوّل دخول Google مثلًا) يحصل على مساحة معزولة.
+   */
   private async loadOrCreateTeacher(u: User): Promise<void> {
     const ref = doc(db, TEACHERS, u.uid);
     const snap = await getDoc(ref);
@@ -102,13 +144,14 @@ export class AuthService {
       name: u.displayName || (u.email ? u.email.split('@')[0] : 'معلّم جديد'),
       email: u.email ?? '',
       phone: u.phoneNumber ?? '',
+      tenantId: u.uid,
       createdAt: Date.now(),
     };
     await setDoc(ref, fresh);
     this.teacher.set({ id: u.uid, ...fresh });
   }
 
-  /** تحديث بيانات المعلّم (الاسم/الجوال/رسائل تقرير الجلسة) */
+  /** تحديث بيانات المعلّم (الاسم/الجوال/رسائل تقرير الجلسة) — يحفظ `tenantId` كما هو. */
   async updateTeacher(
     patch: Partial<Pick<Teacher, 'name' | 'phone' | 'reportIntro' | 'reportOutro'>>,
   ): Promise<void> {
@@ -116,14 +159,16 @@ export class AuthService {
     const current = this.teacher();
     if (!u || !current) return;
     const next: Teacher = { ...current, ...patch };
-    await setDoc(doc(db, TEACHERS, u.uid), {
+    const doc_: Record<string, unknown> = {
       name: next.name,
       email: next.email,
       phone: next.phone ?? '',
       reportIntro: next.reportIntro ?? '',
       reportOutro: next.reportOutro ?? '',
       createdAt: next.createdAt,
-    });
+    };
+    if (next.tenantId) doc_['tenantId'] = next.tenantId;
+    await setDoc(doc(db, TEACHERS, u.uid), doc_);
     if (patch.name && patch.name !== u.displayName) {
       await updateProfile(u, { displayName: patch.name });
     }

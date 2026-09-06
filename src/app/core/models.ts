@@ -136,12 +136,31 @@ export function scoreOf(rec: { score?: number; grade?: string } | null | undefin
   return rec.grade && rec.grade in LEGACY_GRADE_SCORE ? LEGACY_GRADE_SCORE[rec.grade] : 0;
 }
 
+/* ==========================================================================
+   عزل الحسابات (تعدّد المستأجرين) — يبدأ من v1.15.0:
+     • الحسابات القديمة: ملفّ المعلّم بلا `tenantId` → «مساحة مشتركة» ترى كلّ
+       المستندات القديمة (بلا `ownerId`) كما كانت تمامًا — بلا أيّ تغيير.
+     • الحسابات الجديدة (تسجيل جديد أو Google): ملفّ المعلّم يحمل `tenantId`
+       = مُعرّف المستخدم، وكلّ مستنداتها تُوسَم بـ `ownerId` = نفس المُعرّف،
+       فترى مساحتها وحدها فقط. لا تُلمَس بيانات الحسابات القديمة إطلاقًا.
+   ========================================================================== */
+
+/** مالك المستند في نظام العزل — غائب على كلّ المستندات القديمة (مساحة مشتركة). */
+export interface Owned {
+  ownerId?: string;
+}
+
 /** المعلّم */
 export interface Teacher {
   id: string;
   name: string;
   email: string;
   phone?: string;
+  /**
+   * مساحة عمل معزولة لهذا الحساب — يساوي `uid`. يُضبَط للحسابات المُنشأة من
+   * v1.15.0 فأحدث فقط؛ غيابه يعني حسابًا قديمًا في المساحة المشتركة.
+   */
+  tenantId?: string;
   /** ترويسة رسالة تقرير الجلسة للأهالي — يفرغها المعلّم من الإعدادات (وإلّا `DEFAULT_REPORT_INTRO`) */
   reportIntro?: string;
   /** خاتمة رسالة تقرير الجلسة للأهالي (وإلّا `DEFAULT_REPORT_OUTRO`) */
@@ -157,7 +176,7 @@ export const DEFAULT_REPORT_OUTRO =
   'بارك الله في أبنائكم وأعانهم على حفظ كتابه، وجزاكم الله خيرًا على حسن المتابعة.';
 
 /** الحلقة */
-export interface Circle {
+export interface Circle extends Owned {
   id: string;
   name: string;
   /** نوع الحلقة (مطلوب للحلقات الجديدة) */
@@ -203,7 +222,7 @@ export function isHifzCircle(c: Pick<Circle, 'type'> | null | undefined): boolea
 }
 
 /** الطالب */
-export interface Student {
+export interface Student extends Owned {
   id: string;
   name: string;
   /** الحلقات المُسجَّل فيها الطالب (قد تكون تحفيظًا وتجويدًا معًا). */
@@ -232,7 +251,7 @@ export function studentCircleIds(
 }
 
 /** جلسة الحلقة (حصّة) */
-export interface Session {
+export interface Session extends Owned {
   id: string;
   circleId: string;
   /** التاريخ بصيغة YYYY-MM-DD */
@@ -249,7 +268,7 @@ export interface Session {
 }
 
 /** سجل الحضور (ضمن جلسة) */
-export interface AttendanceRecord {
+export interface AttendanceRecord extends Owned {
   id: string;
   sessionId: string;
   studentId: string;
@@ -266,7 +285,7 @@ export interface AttendanceRecord {
 }
 
 /** سجل التسميع (مقدار الحفظ وما سُمِع) */
-export interface RecitationRecord {
+export interface RecitationRecord extends Owned {
   id: string;
   studentId: string;
   circleId: string;
@@ -308,7 +327,7 @@ export function expectedRecitationSec(pages: number): number {
 }
 
 /** التقييم اليومي */
-export interface EvaluationRecord {
+export interface EvaluationRecord extends Owned {
   id: string;
   studentId: string;
   circleId: string;
@@ -338,7 +357,7 @@ export const SERD_SCOPE_LABELS: Record<SerdScope, string> = {
  * سجلّ السرد — مراجعة/تسميع جزء محفوظ كاملًا أو كتلة ثلاثة أجزاء متتالية،
  * مع تقييم مستقلّ ورقم دورة المراجعة.
  */
-export interface SerdRecord {
+export interface SerdRecord extends Owned {
   id: string;
   studentId: string;
   circleId: string;
@@ -375,7 +394,7 @@ export const EXAM_SCOPE_LABELS: Record<ExamScope, string> = {
  * ولا يُفتح الاختبار المجمّع لكتلة إلّا بعد اختبار أجزائها الثلاثة فرديًّا —
  * يُحسَب هذا كلّه في `analyzeExam()` (core/exam.ts)، لا يُخزَّن كحقل مباشر.
  */
-export interface ExamRecord {
+export interface ExamRecord extends Owned {
   id: string;
   studentId: string;
   circleId: string;
