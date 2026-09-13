@@ -3,7 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
-import { ResetService } from '../../core/reset.service';
 import { UpdateService } from '../../core/update.service';
 import { DEFAULT_REPORT_INTRO, DEFAULT_REPORT_OUTRO } from '../../core/models';
 import { THEME_LABELS, THEME_ORDER, THEME_SWATCHES, ThemeService } from '../../core/theme.service';
@@ -125,23 +124,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </button>
       </div>
 
-      <!-- منطقة الخطر — حذف شامل (مرحلة الاختبار) -->
-      <div class="section-title">منطقة الخطر</div>
-      <div class="card danger-zone">
-        <p class="muted" style="margin-top:0;font-size:.86rem">
-          حذف كلّ بيانات التطبيق نهائيًّا: الحلقات، الطلاب، الجلسات، التسميع، السرد — من هذا الجهاز
-          ومن Firebase. مخصّص لمسح البيانات التجريبيّة. لا يمكن التراجع.
-        </p>
-        <button
-          class="btn btn-danger btn-block"
-          type="button"
-          [disabled]="wiping()"
-          (click)="deleteAllData()"
-        >
-          {{ wiping() ? 'جارٍ الحذف…' : '🗑️ حذف الجميع' }}
-        </button>
-      </div>
-
       <p class="hint" style="text-align:center">الماهر لتحفيظ القرآن الكريم — واجهة المعلّم</p>
     </div>
   `,
@@ -211,9 +193,6 @@ import { PageHeaderComponent } from '../../shared/page-header';
         color: var(--green);
         font-weight: 800;
       }
-      .danger-zone {
-        border: 1px solid var(--danger);
-      }
     `,
   ],
 })
@@ -221,14 +200,12 @@ export class ProfilePage {
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
   readonly notify = inject(NotifyService);
-  private reset = inject(ResetService);
   private update = inject(UpdateService);
   private router = inject(Router);
 
   readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;
   readonly swatches = THEME_SWATCHES;
-  readonly wiping = signal(false);
   readonly checkingUpdate = signal(false);
 
   /** تحقّق يدويّ من وجود تحديث مباشر (OTA). */
@@ -271,39 +248,5 @@ export class ProfilePage {
       return;
     await this.auth.logout();
     await this.router.navigateByUrl('/login');
-  }
-
-  /** حذف شامل — بتأكيدين متتاليين قبل التنفيذ. */
-  async deleteAllData(): Promise<void> {
-    const step1 = await this.notify.confirm('حذف جميع البيانات؟', {
-      message:
-        'سيُحذف نهائيًّا كلّ شيء: الحلقات، الطلاب، الجلسات، سجلّات التسميع والتقييم والسرد — ' +
-        'من هذا الجهاز ومن Firebase معًا. لا يمكن التراجع عن هذه الخطوة.',
-      confirmText: 'متابعة',
-      danger: true,
-    });
-    if (!step1) return;
-
-    const step2 = await this.notify.confirm('تأكيد نهائيّ — لا رجعة', {
-      message:
-        'هذه آخر فرصة لإلغاء العمليّة. عند الضغط على «احذف الجميع» ستُمحى كلّ البيانات فورًا ' +
-        'ويُسجَّل خروجك، ولن تُستعاد. تابِع فقط إن كنت متأكّدًا تمامًا.',
-      confirmText: 'احذف الجميع',
-      danger: true,
-    });
-    if (!step2) return;
-
-    this.wiping.set(true);
-    const count = await this.notify.run(() => this.reset.wipeEverything(), {
-      loading: 'جارٍ حذف جميع البيانات…',
-      success: 'حُذفت جميع البيانات',
-      error: 'تعذّر إكمال الحذف — أُعيدي المحاولة',
-    });
-    this.wiping.set(false);
-
-    if (count !== undefined) {
-      // إعادة تحميل كاملة بعد إنهاء اتّصال Firestore
-      window.location.href = window.location.origin + '/login';
-    }
   }
 }

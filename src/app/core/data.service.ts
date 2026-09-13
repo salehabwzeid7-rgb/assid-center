@@ -702,40 +702,6 @@ export class DataService {
   async deleteEvaluation(id: string): Promise<void> {
     await deleteDoc(this.ref(COL.evaluations, id));
   }
-
-  // ---------- حذف شامل (مرحلة الاختبار فقط) ----------
-
-  /**
-   * يحذف مستندات مجموعات البيانات من Firestore (الحلقات، الطلاب، الجلسات،
-   * الحضور، التسميع، التقييم، السرد، الاختبار). لا يمسّ مجموعة teachers ولا
-   * حسابات المصادقة. يعمل على دفعات ≤ ٤٠٠ مستند.
-   *
-   * العزل: الحساب المعزول يحذف مستنداته وحدها (`ownerId === uid`)، فلا يمسّ
-   * بيانات المساحة المشتركة ولا أيّ حساب آخر. الحساب القديم يحذف الكلّ كما كان.
-   * يُرجع إجماليّ عدد المستندات المحذوفة.
-   */
-  async wipeAllData(): Promise<number> {
-    let deleted = 0;
-    const uid = this.scopeUid();
-    for (const name of Object.values(COL)) {
-      // نكرّر لأنّ getDocs قد يعيد صفحةً واحدة كبيرة؛ الحذف على دفعات
-      // ثمّ إعادة الجلب حتى تفرغ المجموعة تمامًا.
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const q = uid ? query(this.col(name), where('ownerId', '==', uid)) : query(this.col(name));
-        const snap = await getDocs(q);
-        if (snap.empty) break;
-        for (let i = 0; i < snap.docs.length; i += 400) {
-          const batch = writeBatch(db);
-          const chunk = snap.docs.slice(i, i + 400);
-          chunk.forEach((d) => batch.delete(d.ref));
-          await batch.commit();
-          deleted += chunk.length;
-        }
-      }
-    }
-    return deleted;
-  }
 }
 
 /** يحذف الحقول ذات القيمة undefined (Firestore لا يقبلها) */
