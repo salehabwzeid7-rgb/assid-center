@@ -13,6 +13,7 @@ import {
   SESSION_STATUS_LABELS,
   TASMIE_PASS,
   circleLabel,
+  isActualRecitation,
   scoreOf,
   studentCircleIds,
   type AttendanceRecord,
@@ -134,15 +135,25 @@ type Step = 'attendance' | 'summary' | 'serd';
 
                 @if (isPresent(st.id)) {
                   @if (recOf(st.id); as r) {
-                    <button
-                      type="button"
-                      class="muted rp-done rp-done-btn"
-                      (click)="openStudentModal(st.id)"
-                    >
-                      سُجّل: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
-                      {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
-                      {{ scoreOf(r) }}٪ — تعديل ›
-                    </button>
+                    @if (r.notRecited) {
+                      <button
+                        type="button"
+                        class="muted rp-done rp-done-btn rp-not-recited"
+                        (click)="openStudentModal(st.id)"
+                      >
+                        ⭕ لم يسمّع — تعديل ›
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="muted rp-done rp-done-btn"
+                        (click)="openStudentModal(st.id)"
+                      >
+                        سُجّل: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
+                        {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
+                        {{ scoreOf(r) }}٪ — تعديل ›
+                      </button>
+                    }
                   } @else {
                     <button
                       class="btn btn-primary btn-block"
@@ -154,11 +165,15 @@ type Step = 'attendance' | 'summary' | 'serd';
                     </button>
                   }
                 } @else if (recOf(st.id); as r) {
-                  <div class="muted rp-done">
-                    سُجّل تسميع سابق: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
-                    {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
-                    {{ scoreOf(r) }}٪
-                  </div>
+                  @if (r.notRecited) {
+                    <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
+                  } @else {
+                    <div class="muted rp-done">
+                      سُجّل تسميع سابق: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
+                      {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
+                      {{ scoreOf(r) }}٪
+                    </div>
+                  }
                 }
               </div>
             }
@@ -434,6 +449,12 @@ type Step = 'attendance' | 'summary' | 'serd';
         color: var(--text-soft);
         font: inherit;
       }
+      .rp-not-recited {
+        background: var(--gold-tint2, #faf4e4);
+        border-color: var(--gold-deep, #a07030);
+        color: var(--gold-deep, #a07030);
+        font-weight: 700;
+      }
       .student-modal {
         max-width: 440px;
         max-height: 88vh;
@@ -556,6 +577,10 @@ export class SessionPage {
   });
   readonly attendance = this.data.sessionAttendance(this.id, this.destroyRef);
   readonly recitations = this.data.sessionRecitations(this.id, this.destroyRef);
+  /** تسميعات فعليّة فقط — تستثني سجلّات «لم يسمّع» من كلّ حسابات المتوسّط والصفحات والنجاح. */
+  private readonly actualRecitations = computed(() =>
+    (this.recitations() ?? []).filter(isActualRecitation),
+  );
   private readonly allSerds = this.data.allSerds(this.destroyRef);
 
   /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
@@ -576,22 +601,22 @@ export class SessionPage {
     () =>
       this.attendance()?.filter((a) => a.status === 'present' || a.status === 'late').length ?? 0,
   );
-  readonly recitedTotal = computed(() => this.recitations()?.length ?? 0);
+  readonly recitedTotal = computed(() => this.actualRecitations().length);
   readonly presentRate = computed(() => {
     const n = this.students()?.length ?? 0;
     return n ? Math.round((this.presentTotal() / n) * 100) : 0;
   });
   readonly totalPages = computed(() => {
-    const sum = (this.recitations() ?? []).reduce((t, r) => t + (Number(r.pages) || 0), 0);
+    const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
   });
   readonly avgScore = computed<number | null>(() => {
-    const list = this.recitations() ?? [];
+    const list = this.actualRecitations();
     if (!list.length) return null;
     return Math.round(list.reduce((t, r) => t + scoreOf(r), 0) / list.length);
   });
   readonly passCount = computed(
-    () => (this.recitations() ?? []).filter((r) => scoreOf(r) >= TASMIE_PASS).length,
+    () => this.actualRecitations().filter((r) => scoreOf(r) >= TASMIE_PASS).length,
   );
   readonly failCount = computed(() => this.recitedTotal() - this.passCount());
   readonly passPct = computed(() => {
@@ -601,7 +626,7 @@ export class SessionPage {
 
   /** تسميعات تجاوزت المعيار الزمنيّ ٤ د/وجه (لها durationSec مسجَّلة). */
   private readonly overtimeRecs = computed(() =>
-    (this.recitations() ?? []).filter(
+    this.actualRecitations().filter(
       (r) => r.durationSec != null && r.durationSec > (Number(r.pages) || 0) * 240,
     ),
   );
@@ -615,8 +640,9 @@ export class SessionPage {
     const map = new Map((this.attendance() ?? []).map((a) => [a.studentId, a.status]));
     return (this.students() ?? []).filter((s) => map.get(s.id) === 'absent').map((s) => s.name);
   });
+  /** لم يُسجَّل لهم تسميع فعليّ بعد — إمّا بلا سجلّ إطلاقًا أو مُعلَّمون صراحةً «لم يسمّع». */
   readonly notRecitedNames = computed(() => {
-    const done = new Set((this.recitations() ?? []).map((r) => r.studentId));
+    const done = new Set(this.actualRecitations().map((r) => r.studentId));
     return (this.students() ?? []).filter((s) => !done.has(s.id)).map((s) => s.name);
   });
 
@@ -653,13 +679,16 @@ export class SessionPage {
     const lines = [`${index}. ${st.name}`, `• الحضور: ${this.attendanceLine(a)}`];
     const present = a?.status === 'present' || a?.status === 'late';
     if (present) {
-      if (r) {
+      if (r && isActualRecitation(r)) {
         const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
         lines.push(`• التسميع: ${r.pages} وجه — ${scoreOf(r)}٪ (${range})`);
         if (r.hifzErrors || r.tajweedErrors) {
           lines.push(`• الأخطاء: حفظ ${r.hifzErrors} · تجويد ${r.tajweedErrors}`);
         }
         if (r.notes?.trim()) lines.push(`• ملاحظة: ${r.notes.trim()}`);
+      } else if (r?.notRecited) {
+        const reason = r.notes?.trim();
+        lines.push(`• التسميع: لم يسمّع${reason ? ' — ' + reason : ''}`);
       } else {
         lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
       }

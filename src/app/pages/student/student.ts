@@ -5,6 +5,7 @@ import {
   ATTENDANCE_LABELS,
   SARD_PASS,
   circleTypeLabel,
+  isActualRecitation,
   scoreOf,
   studentCircleIds,
   type Circle,
@@ -403,9 +404,13 @@ export class StudentPage {
     ),
   );
 
-  readonly recitationsCount = computed(() => this.recitations()?.length ?? 0);
+  /** تسميعات فعليّة فقط — تستثني سجلّات «لم يسمّع». */
+  private readonly actualRecitations = computed(() =>
+    (this.recitations() ?? []).filter(isActualRecitation),
+  );
+  readonly recitationsCount = computed(() => this.actualRecitations().length);
   readonly totalPages = computed(() => {
-    const sum = (this.recitations() ?? []).reduce((t, r) => t + (Number(r.pages) || 0), 0);
+    const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
   });
   readonly sessionsCount = computed(() => this.attendance()?.length ?? 0);

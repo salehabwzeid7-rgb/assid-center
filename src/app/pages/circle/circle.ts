@@ -10,6 +10,7 @@ import {
   WEEKDAY_LABELS,
   WEEKDAY_ORDER,
   circleTypeLabel,
+  isActualRecitation,
   type Circle,
   type Session,
 } from '../../core/models';
@@ -323,7 +324,10 @@ export class CirclePage {
     );
   }
   countRecite(sessionId: string): number {
-    return this.recitations()?.filter((r) => r.sessionId === sessionId).length ?? 0;
+    return (
+      this.recitations()?.filter((r) => r.sessionId === sessionId && isActualRecitation(r))
+        .length ?? 0
+    );
   }
   dayNum(date: string): string {
     return date.slice(8, 10);

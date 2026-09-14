@@ -1,7 +1,7 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { TASMIE_PASS, scoreOf, type Circle } from '../../core/models';
+import { TASMIE_PASS, isActualRecitation, scoreOf, type Circle } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -108,6 +108,10 @@ export class CircleStatsPage implements OnInit {
   private readonly sessions = this.data.sessionsByCircle(this.id, this.destroyRef);
   private readonly attendance = this.data.circleAttendance(this.id, this.destroyRef);
   private readonly recitations = this.data.circleRecitations(this.id, this.destroyRef);
+  /** تسميعات فعليّة فقط — تستثني سجلّات «لم يسمّع» من كلّ الإحصائيّات. */
+  private readonly actualRecitations = computed(() =>
+    (this.recitations() ?? []).filter(isActualRecitation),
+  );
 
   readonly loading = computed(
     () =>
@@ -119,9 +123,9 @@ export class CircleStatsPage implements OnInit {
 
   readonly sessionCount = computed(() => this.sessions()?.length ?? 0);
   readonly studentCount = computed(() => this.students()?.filter((s) => s.active).length ?? 0);
-  readonly recitationCount = computed(() => this.recitations()?.length ?? 0);
+  readonly recitationCount = computed(() => this.actualRecitations().length);
   readonly totalPages = computed(() => {
-    const sum = (this.recitations() ?? []).reduce((t, r) => t + (Number(r.pages) || 0), 0);
+    const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
   });
   readonly attendanceRate = computed(() => {
@@ -131,12 +135,12 @@ export class CircleStatsPage implements OnInit {
     return Math.round((ok / list.length) * 100);
   });
   readonly avgScore = computed<number | null>(() => {
-    const list = this.recitations() ?? [];
+    const list = this.actualRecitations();
     if (!list.length) return null;
     return Math.round(list.reduce((t, r) => t + scoreOf(r), 0) / list.length);
   });
   readonly passCount = computed(
-    () => (this.recitations() ?? []).filter((r) => scoreOf(r) >= TASMIE_PASS).length,
+    () => this.actualRecitations().filter((r) => scoreOf(r) >= TASMIE_PASS).length,
   );
   readonly passPct = computed(() => {
     const n = this.recitationCount();
@@ -146,7 +150,7 @@ export class CircleStatsPage implements OnInit {
   readonly perStudent = computed(() => {
     const students = this.students() ?? [];
     const att = this.attendance() ?? [];
-    const rec = this.recitations() ?? [];
+    const rec = this.actualRecitations();
     return students
       .filter((s) => s.active)
       .map((s) => {

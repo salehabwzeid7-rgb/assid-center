@@ -313,8 +313,20 @@ export interface RecitationRecord extends Owned {
    * المعيار: ٤ دقائق لكلّ وجه → المتوقّع = pages × ٢٤٠ ثانية.
    */
   durationSec?: number;
+  /**
+   * الطالب حاضر لكنّه لم يسمّع في هذه الجلسة — حالة صريحة يسجّلها المعلّم
+   * (وليست مجرّد غياب بيانات). عند `true` تبقى بقيّة حقول المقطع/الدرجة
+   * صفريّة بلا معنى فعليّ؛ يجب استثناء هذا السجلّ من كلّ حسابات المتوسّط
+   * والصفحات ونسبة النجاح — راجع `isActualRecitation()` أدناه.
+   */
+  notRecited?: boolean;
   notes?: string;
   createdAt: number;
+}
+
+/** سجلّ تسميع فعليّ (وليس مجرّد علامة «لم يسمّع») — للاستخدام في كل حسابات المتوسّط/الصفحات/النجاح. */
+export function isActualRecitation(r: RecitationRecord): boolean {
+  return !r.notRecited;
 }
 
 /** المعيار الزمنيّ للتسميع: ٤ دقائق (٢٤٠ ثانية) لكلّ وجه. */
