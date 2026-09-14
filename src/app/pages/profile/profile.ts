@@ -103,6 +103,35 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </button>
       </div>
 
+      <div class="section-title">المزامنة</div>
+      <div class="card">
+        <p class="muted" style="margin-top:0;font-size:.86rem">
+          يحفظ التطبيق تغييراتك على جهازك فورًا ثمّ يُزامنها تلقائيًّا مع الخادم في الخلفية. إن كنت
+          قلقًا من وجود بيانات لم تصل الخادم بعد (بعد انقطاع اتصال مثلًا)، اضغط للتحقّق الآن، واترك
+          التطبيق مفتوحًا حتى تظهر النتيجة.
+        </p>
+        <button
+          class="btn btn-ghost btn-block"
+          type="button"
+          [disabled]="checkingSync()"
+          (click)="checkSync()"
+        >
+          {{ checkingSync() ? 'جارٍ التحقّق…' : 'التحقّق من اكتمال المزامنة الآن' }}
+        </button>
+        @if (syncResult(); as r) {
+          <p
+            style="margin:10px 0 0;font-weight:700;font-size:.9rem"
+            [style.color]="r === 'synced' ? 'var(--green)' : 'var(--danger)'"
+          >
+            {{
+              r === 'synced'
+                ? '✅ تمّت مزامنة كلّ بياناتك مع الخادم — لا توجد تغييرات معلّقة.'
+                : '⏳ ما زالت هناك تغييرات لم تُزامَن بعد. تأكّد من اتصال إنترنت قويّ، أبقِ التطبيق مفتوحًا، ثمّ أعد المحاولة.'
+            }}
+          </p>
+        }
+      </div>
+
       <div class="section-title">التحديثات</div>
       <div class="card">
         <p class="muted" style="margin-top:0;font-size:.86rem">
@@ -207,6 +236,8 @@ export class ProfilePage {
   readonly labels = THEME_LABELS;
   readonly swatches = THEME_SWATCHES;
   readonly checkingUpdate = signal(false);
+  readonly checkingSync = signal(false);
+  readonly syncResult = signal<'synced' | 'timeout' | null>(null);
 
   /** تحقّق يدويّ من وجود تحديث مباشر (OTA). */
   async checkUpdate(): Promise<void> {
@@ -215,6 +246,17 @@ export class ProfilePage {
       await this.update.check(false);
     } finally {
       this.checkingUpdate.set(false);
+    }
+  }
+
+  /** تحقّق يدويّ من اكتمال مزامنة التغييرات المحفوظة محلّيًّا مع الخادم. */
+  async checkSync(): Promise<void> {
+    this.checkingSync.set(true);
+    this.syncResult.set(null);
+    try {
+      this.syncResult.set(await this.notify.checkSync());
+    } finally {
+      this.checkingSync.set(false);
     }
   }
 

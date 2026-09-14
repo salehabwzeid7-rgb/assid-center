@@ -100,6 +100,20 @@ export class NotifyService {
     }
   }
 
+  /**
+   * يتحقّق يدويًّا من اكتمال مزامنة كلّ التغييرات المحفوظة محلّيًّا مع خادم
+   * Firestore (`waitForPendingWrites`) — مفيد بعد حادثة فقدان بيانات لتأكيد
+   * وصول أيّ تغييرات معلّقة على جهاز بعينه، خصوصًا بعد انقطاع اتصال. يُحدّ
+   * الانتظار بمهلة حتى لا يُعلَّق الزرّ للأبد إن كان الجهاز فعليًّا بلا اتصال.
+   */
+  async checkSync(timeoutMs = 15000): Promise<'synced' | 'timeout'> {
+    const timeout = new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), timeoutMs),
+    );
+    const synced = waitForPendingWrites(db).then(() => 'synced' as const);
+    return Promise.race([synced, timeout]);
+  }
+
   // ---------- تأكيد (بديل confirm) ----------
   confirm(
     title: string,
