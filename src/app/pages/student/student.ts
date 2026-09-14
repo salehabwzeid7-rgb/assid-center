@@ -141,6 +141,10 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="num">{{ recitationsCount() }}</div>
             <div class="label">جلسات تسميع</div>
           </div>
+          <div class="stat" [class.stat-warn]="notRecitedCount() > 0">
+            <div class="num">{{ notRecitedCount() }}</div>
+            <div class="label">لم يسمّع</div>
+          </div>
           <div class="stat">
             <div class="num">{{ totalPages() }}</div>
             <div class="label">مجموع الأوجه</div>
@@ -302,6 +306,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
         background: var(--green-tint);
         color: var(--green);
       }
+      .stat.stat-warn::after {
+        background: var(--gold-deep, #a07030);
+      }
+      .stat.stat-warn .num {
+        color: var(--gold-deep, #a07030);
+      }
     `,
   ],
 })
@@ -409,6 +419,10 @@ export class StudentPage {
     (this.recitations() ?? []).filter(isActualRecitation),
   );
   readonly recitationsCount = computed(() => this.actualRecitations().length);
+  /** عدد المرّات التي عُلِّم فيها الطالب بأنّه لم يسمّع رغم حضوره. */
+  readonly notRecitedCount = computed(
+    () => (this.recitations() ?? []).filter((r) => r.notRecited).length,
+  );
   readonly totalPages = computed(() => {
     const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
