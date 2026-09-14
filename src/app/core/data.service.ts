@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { AuthService } from './auth.service';
+import { NotifyService } from './notify.service';
 import { completedJuz } from './quran-data';
 import {
   COL,
@@ -77,6 +78,7 @@ type NewExam = Omit<ExamRecord, 'id' | 'createdAt'>;
 @Injectable({ providedIn: 'root' })
 export class DataService {
   private auth = inject(AuthService);
+  private notify = inject(NotifyService);
 
   /**
    * مساحة العمل الحاليّة:
@@ -155,8 +157,15 @@ export class DataService {
         out.set(sortBy ? rows.sort(sortBy) : rows);
       },
       (err) => {
+        // خطأ عابر في مستمع Firestore (انقطاع شبكة، تجديد رمز الدخول، إلخ) —
+        // لا شيء حُذف فعليًّا من قاعدة البيانات؛ الخطأ هنا في القناة اللحظيّة
+        // فقط. كنّا سابقًا نصفّر `out` إلى مصفوفة فارغة هنا، فتختفي كل
+        // البيانات المعروضة على الشاشة (حضور/تسميع/إلخ) وتبدو للمستخدم وكأنّها
+        // «مُسحت بالكامل»، رغم بقائها سليمة في Firestore. الإصلاح: نُبقي آخر
+        // قيمة معروفة كما هي (لا نمسحها) ونكتفي بتنبيه المستخدم ليُعيد تحميل
+        // الصفحة لإعادة الاشتراك.
         console.error('خطأ في مزامنة Firestore:', err);
-        out.set([]);
+        this.notify.error('تعذّرت مزامنة البيانات مؤقّتًا — بياناتك لم تُحذف، أعد تحميل الصفحة');
       },
     );
     destroyRef?.onDestroy(unsub);
