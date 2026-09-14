@@ -42,13 +42,13 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </div>
 
         <div class="card" style="margin-top:12px">
-          <div class="section-title" style="margin:0 0 8px">نتيجة التسميع (عتبة النجاح ٩٥٪)</div>
+          <div class="section-title" style="margin:0 0 8px">نتيجة التسميع (عتبة النجاح ٩٠٪)</div>
           @if (recitationCount() === 0) {
             <p class="muted" style="margin:0">لا توجد سجلات تسميع بعد.</p>
           } @else {
             <div style="display:flex;gap:16px;flex-wrap:wrap">
               <span
-                >ناجح (≥ ٩٥٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
+                >ناجح (≥ ٩٠٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
               >
               <span
                 >دون العتبة:

@@ -92,9 +92,8 @@ export const RECITATION_KIND_LABELS: Record<RecitationKind, string> = {
 
 /* ==========================================================================
    التقييم بالنسبة المئويّة (٠..١٠٠) — بلا تقديرات نصّيّة.
-   عتبة النجاح تختلف حسب السياق:
-     • السرد / التقييم اليوميّ:  ٩٠٪ فأعلى = ناجح
-     • التسميع داخل الجلسة:       ٩٥٪ فأعلى = ناجح
+   عتبة النجاح موحّدة ٩٠٪ فأعلى = ناجح، في كلّ سياق: السرد، التقييم اليوميّ،
+   اختبار الجزء، والتسميع داخل الجلسة.
    ========================================================================== */
 
 /** عتبة نجاح السرد والتقييم اليوميّ */
@@ -102,7 +101,7 @@ export const SARD_PASS = 90;
 /** عتبة نجاح اختبار الجزء (مماثلة للسرد) */
 export const EXAM_PASS = 90;
 /** عتبة نجاح التسميع داخل الجلسة */
-export const TASMIE_PASS = 95;
+export const TASMIE_PASS = 90;
 
 /** يحصر الدرجة ضمن ٠..١٠٠ ويقرّبها لعدد صحيح */
 export function clampScore(v: number | string | null | undefined): number {
@@ -110,9 +109,9 @@ export function clampScore(v: number | string | null | undefined): number {
   return Math.max(0, Math.min(100, n));
 }
 
-/** «ناجح» عند بلوغ العتبة، وإلا «راسب» */
-export function passLabel(score: number, threshold: number): 'ناجح' | 'راسب' {
-  return score >= threshold ? 'ناجح' : 'راسب';
+/** «ناجح» عند بلوغ العتبة، وإلا «إعادة» (يحتاج الطالب إعادة المقطع) */
+export function passLabel(score: number, threshold: number): 'ناجح' | 'إعادة' {
+  return score >= threshold ? 'ناجح' : 'إعادة';
 }
 
 /** فئة الشارة اللونيّة حسب النجاح/الرسوب */
@@ -299,7 +298,7 @@ export interface RecitationRecord extends Owned {
   toAyah: number;
   /** عدد الأوجه (الصفحات) المسمَّعة */
   pages: number;
-  /** درجة التسميع ٠..١٠٠ (عتبة النجاح ٩٥٪) */
+  /** درجة التسميع ٠..١٠٠ (عتبة النجاح ٩٠٪) */
   score: number;
   /** @deprecated تقدير نصّيّ قديم — للقراءة فقط */
   grade?: string;

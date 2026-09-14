@@ -2,8 +2,8 @@ import { Component, computed, input, model } from '@angular/core';
 import { clampScore, passLabel } from '../core/models';
 
 /**
- * مُدخِل الدرجة المئويّة (٠..١٠٠) — شريط تمرير + حقل رقميّ + مؤشّر نجاح/رسوب
- * فوريّ حسب العتبة الممرَّرة (٩٠ للسرد/التقييم، ٩٥ للتسميع).
+ * مُدخِل الدرجة المئويّة (٠..١٠٠) — شريط تمرير + حقل رقميّ + مؤشّر ناجح/إعادة
+ * فوريّ حسب العتبة الممرَّرة (٩٠٪ في كلّ السياقات: السرد، التقييم، التسميع).
  * لا يعتمد على ngModel لتفادي التعارض داخل عناصر <form>.
  */
 @Component({
@@ -33,7 +33,7 @@ import { clampScore, passLabel } from '../core/models';
           (input)="set($any($event.target).value)"
         />
         <span class="score-verdict" [class.pass]="pass()" [class.fail]="!pass()">
-          {{ pass() ? 'ناجح' : 'راسب' }}
+          {{ pass() ? 'ناجح' : 'إعادة' }}
         </span>
       </div>
       <div class="hint">عتبة النجاح {{ threshold() }}٪</div>

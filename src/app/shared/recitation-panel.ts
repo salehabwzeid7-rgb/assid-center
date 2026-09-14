@@ -1,4 +1,13 @@
-import { Component, DestroyRef, OnInit, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { DataService } from '../core/data.service';
@@ -11,7 +20,7 @@ import {
   type RecitationKind,
   type RecitationRecord,
 } from '../core/models';
-import { SURAHS, surah, surahsBetween } from '../core/quran-data';
+import { SURAHS, surah, surahName, surahsBetween } from '../core/quran-data';
 import { ScoreInputComponent } from './score-input';
 
 /** «دد:ثث» — أو «س:دد:ثث» إن تجاوزت الساعة. */
@@ -22,6 +31,13 @@ function fmtClock(totalSec: number): string {
   const r = s % 60;
   const p = (n: number) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${p(m)}:${p(r)}` : `${p(m)}:${p(r)}`;
+}
+
+/** الآية التالية مباشرةً بعد نهاية مقطع — تنتقل لبداية السورة التالية عند نهاية السورة. */
+function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: number } {
+  const maxAyah = surah(toSurah)?.ayahs ?? toAyah;
+  if (toAyah < maxAyah) return { surah: toSurah, ayah: toAyah + 1 };
+  return { surah: Math.min(114, toSurah + 1), ayah: 1 };
 }
 
 /**
@@ -127,6 +143,10 @@ function fmtClock(totalSec: number): string {
         </div>
       </div>
 
+      @if (smartHint(); as hint) {
+        <p class="rp-hint">💡 {{ hint }}</p>
+      }
+
       <div class="rp-row">
         <div class="rp-field">
           <label>من سورة</label>
@@ -177,26 +197,66 @@ function fmtClock(totalSec: number): string {
         (valueChange)="score.set($event)"
       />
 
-      <div class="rp-row">
-        <div class="rp-field">
-          <label>أخطاء الحفظ</label>
+      <div class="rp-field">
+        <label>أخطاء الحفظ</label>
+        <div class="err-tally">
+          <button
+            type="button"
+            class="rp-step"
+            (click)="bumpHifz(-1)"
+            [disabled]="m.hifzErrors <= 0"
+            aria-label="إنقاص خطأ حفظ"
+          >
+            −
+          </button>
           <input
+            class="err-count-in"
             type="number"
             inputmode="numeric"
             min="0"
             [(ngModel)]="m.hifzErrors"
             [ngModelOptions]="{ standalone: true }"
+            aria-label="عدد أخطاء الحفظ"
           />
+          <button
+            type="button"
+            class="rp-step err-tap"
+            (click)="bumpHifz(1)"
+            aria-label="تسجيل خطأ حفظ"
+          >
+            +1
+          </button>
         </div>
-        <div class="rp-field">
-          <label>أخطاء التجويد</label>
+      </div>
+      <div class="rp-field">
+        <label>أخطاء التجويد</label>
+        <div class="err-tally">
+          <button
+            type="button"
+            class="rp-step"
+            (click)="bumpTajweed(-1)"
+            [disabled]="m.tajweedErrors <= 0"
+            aria-label="إنقاص خطأ تجويد"
+          >
+            −
+          </button>
           <input
+            class="err-count-in"
             type="number"
             inputmode="numeric"
             min="0"
             [(ngModel)]="m.tajweedErrors"
             [ngModelOptions]="{ standalone: true }"
+            aria-label="عدد أخطاء التجويد"
           />
+          <button
+            type="button"
+            class="rp-step err-tap"
+            (click)="bumpTajweed(1)"
+            aria-label="تسجيل خطأ تجويد"
+          >
+            +1
+          </button>
         </div>
       </div>
 
@@ -345,6 +405,37 @@ function fmtClock(totalSec: number): string {
       .rp-perpage {
         font-weight: 500;
       }
+      .rp-hint {
+        margin: 0;
+        padding: 8px 10px;
+        border-radius: var(--radius-xs);
+        background: var(--gold-tint2, #faf4e4);
+        color: var(--gold-deep);
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.5;
+      }
+      .err-tally {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      /* خصوصيّة أعلى من ‎.rp-field input‎ العامّة (100% عرض) — نحتاج عرضًا ثابتًا هنا */
+      .err-tally .err-count-in {
+        width: 52px;
+        flex-shrink: 0;
+        text-align: center;
+        font-weight: 800;
+        padding: 6px 4px;
+      }
+      .err-tap {
+        flex: 1;
+        width: auto;
+        max-width: 120px;
+        background: var(--green-tint);
+        font-size: 0.9rem;
+        font-weight: 800;
+      }
       .rp-timer-btns {
         display: flex;
         gap: 8px;
@@ -428,6 +519,12 @@ export class RecitationPanelComponent implements OnInit {
   /** عدد الأوجه — إشارة مستقلّة لأنّ المؤقّت يتفاعل معها لحظيًّا. */
   readonly pages = signal(1);
 
+  // ---- الاقتراح الذكيّ لبداية المقطع (من آخر تسميع «حفظ جديد» للطالب) ----
+  /** ملاحظة توضيحيّة صغيرة تظهر عند تفعيل الاقتراح — null إن لم يُفعَّل. */
+  readonly smartHint = signal<string | null>(null);
+  private recitationHistorySig: ReturnType<DataService['studentRecitations']> | null = null;
+  private smartPrefillDone = false;
+
   // ---- المؤقّت ----
   readonly running = signal(false);
   readonly elapsedSec = signal(0);
@@ -453,6 +550,62 @@ export class RecitationPanelComponent implements OnInit {
     if (this.elapsedSec() === 0) return 'جاهز للبدء';
     return 'انتهى';
   });
+
+  constructor() {
+    // اقتراح ذكيّ لبداية المقطع — مرّة واحدة فقط، وفقط عند إدخال جديد (لا
+    // تعديل سجلّ موجود لهذه الجلسة)، وفقط إن كانت الحقول لا تزال بقيمها
+    // الافتراضيّة (لم يبدأ المعلّم الكتابة يدويًّا بعد).
+    effect(() => {
+      if (this.smartPrefillDone || this.existing()) {
+        this.smartPrefillDone = true;
+        return;
+      }
+      if (!this.recitationHistorySig) {
+        this.recitationHistorySig = this.data.studentRecitations(this.studentId(), this.destroyRef);
+      }
+      const history = this.recitationHistorySig();
+      if (history === undefined) return; // لم تصل البيانات بعد — يُعاد التشغيل تلقائيًّا عند وصولها
+      this.smartPrefillDone = true;
+      this.applySmartDefaults(history);
+    });
+  }
+
+  /**
+   * يقترح بداية المقطع التالي بناءً على آخر تسميع «حفظ جديد» مسجَّل للطالب:
+   *  · نجح (≥ عتبة النجاح) ← يبدأ المقطع التالي من الآية التي تلي مباشرةً.
+   *  · لم ينجح ← يُعاد ملء نفس المقطع (بحاجة إلى «إعادة»).
+   * لا يفعل شيئًا إن كان المعلّم قد عدّل حقول السورة/الآية يدويًّا بالفعل.
+   */
+  private applySmartDefaults(history: readonly RecitationRecord[]): void {
+    const untouched =
+      this.m.fromSurah === 78 &&
+      this.m.fromAyah === 1 &&
+      this.m.toSurah === 78 &&
+      this.m.toAyah === 40;
+    if (!untouched) return;
+    const last = history.find((r) => r.kind === 'new');
+    if (!last) return;
+
+    if (scoreOf(last) >= TASMIE_PASS) {
+      const next = nextAyahAfter(last.toSurah, last.toAyah);
+      this.m.fromSurah = next.surah;
+      this.m.fromAyah = next.ayah;
+      this.m.toSurah = next.surah;
+      this.m.toAyah = next.ayah;
+      this.smartHint.set(
+        `يتابع تلقائيًّا من حيث انتهى آخر تسميع ناجح — ${surahName(next.surah)} ${next.ayah}. عدّل «إلى» حسب المقطع المطلوب.`,
+      );
+    } else {
+      this.m.fromSurah = last.fromSurah;
+      this.m.fromAyah = last.fromAyah;
+      this.m.toSurah = last.toSurah;
+      this.m.toAyah = last.toAyah;
+      this.pages.set(last.pages);
+      this.smartHint.set(
+        `أُعيد نفس مقطع آخر تسميع (${surahName(last.fromSurah)} ${last.fromAyah} ← ${surahName(last.toSurah)} ${last.toAyah}) لأنّه لم يبلغ نسبة النجاح.`,
+      );
+    }
+  }
 
   ngOnInit(): void {
     const r = this.existing();
@@ -504,6 +657,15 @@ export class RecitationPanelComponent implements OnInit {
   /** ＋/－ نصف وجه — يزيد زمن المؤقّت المتوقّع بـ ٢ دقيقة لكلّ خطوة. */
   bumpPages(delta: number): void {
     this.pages.set(this.clampPages(this.pages() + delta));
+  }
+
+  /** تسجيل خطأ حفظ بلمسة واحدة (＋١) أو التراجع عنه (－١) — يبقى الحقل قابلًا للتعديل اليدويّ. */
+  bumpHifz(delta: number): void {
+    this.m.hifzErrors = Math.max(0, (Number(this.m.hifzErrors) || 0) + delta);
+  }
+  /** تسجيل خطأ تجويد بلمسة واحدة — نفس فكرة bumpHifz. */
+  bumpTajweed(delta: number): void {
+    this.m.tajweedErrors = Math.max(0, (Number(this.m.tajweedErrors) || 0) + delta);
   }
 
   start(): void {

@@ -105,7 +105,17 @@ type Step = 'attendance' | 'summary' | 'serd';
 
             @for (st of students(); track st.id) {
               <div class="card std-card">
-                <div class="primary" style="font-weight:700">{{ st.name }}</div>
+                <button
+                  type="button"
+                  class="std-name-btn"
+                  [class.clickable]="isPresent(st.id)"
+                  (click)="isPresent(st.id) && openStudentModal(st.id)"
+                >
+                  <span class="primary">{{ st.name }}</span>
+                  @if (isPresent(st.id)) {
+                    <span class="std-chevron">التفاصيل ›</span>
+                  }
+                </button>
                 <div class="chips" style="margin-top:8px">
                   @for (opt of attOrder; track opt) {
                     <button
@@ -123,31 +133,26 @@ type Step = 'attendance' | 'summary' | 'serd';
                 </div>
 
                 @if (isPresent(st.id)) {
-                  <div class="times">
-                    <label>
-                      وقت الحضور
-                      <input
-                        type="time"
-                        [value]="arrivalOf(st.id)"
-                        (change)="setArrival(st.id, $event)"
-                      />
-                    </label>
-                    <label>
-                      وقت الانصراف
-                      <input
-                        type="time"
-                        [value]="departureOf(st.id)"
-                        (change)="setDeparture(st.id, $event)"
-                      />
-                    </label>
-                  </div>
-                  <app-recitation-panel
-                    [sessionId]="id"
-                    [studentId]="st.id"
-                    [circleId]="s.circleId"
-                    [date]="s.date"
-                    [existing]="recOf(st.id)"
-                  />
+                  @if (recOf(st.id); as r) {
+                    <button
+                      type="button"
+                      class="muted rp-done rp-done-btn"
+                      (click)="openStudentModal(st.id)"
+                    >
+                      سُجّل: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
+                      {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
+                      {{ scoreOf(r) }}٪ — تعديل ›
+                    </button>
+                  } @else {
+                    <button
+                      class="btn btn-primary btn-block"
+                      style="margin-top:8px"
+                      type="button"
+                      (click)="openStudentModal(st.id)"
+                    >
+                      📖 تسجيل التسميع
+                    </button>
+                  }
                 } @else if (recOf(st.id); as r) {
                   <div class="muted rp-done">
                     سُجّل تسميع سابق: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
@@ -165,6 +170,50 @@ type Step = 'attendance' | 'summary' | 'serd';
             >
               التالي: الملخّص ›
             </button>
+          }
+
+          <!-- نافذة تفاصيل الطالب (الحضور والانصراف + التسميع والأخطاء) -->
+          @if (activeStudent(); as st) {
+            <div class="modal-backdrop" (click)="closeStudentModal()">
+              <div class="modal student-modal" (click)="$event.stopPropagation()">
+                <div class="row-between" style="margin-bottom:10px">
+                  <h3 style="margin:0">{{ st.name }}</h3>
+                  <button
+                    class="modal-close"
+                    type="button"
+                    (click)="closeStudentModal()"
+                    aria-label="إغلاق"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div class="times">
+                  <label>
+                    وقت الحضور
+                    <input
+                      type="time"
+                      [value]="arrivalOf(st.id)"
+                      (change)="setArrival(st.id, $event)"
+                    />
+                  </label>
+                  <label>
+                    وقت الانصراف
+                    <input
+                      type="time"
+                      [value]="departureOf(st.id)"
+                      (change)="setDeparture(st.id, $event)"
+                    />
+                  </label>
+                </div>
+                <app-recitation-panel
+                  [sessionId]="id"
+                  [studentId]="st.id"
+                  [circleId]="s.circleId"
+                  [date]="s.date"
+                  [existing]="recOf(st.id)"
+                />
+              </div>
+            </div>
           }
 
           <!-- الملخّص -->
@@ -225,11 +274,11 @@ type Step = 'attendance' | 'summary' | 'serd';
 
             <div class="card" style="margin-top:10px">
               <div class="section-title" style="margin:0 0 8px">
-                نتيجة التسميع (عتبة النجاح ٩٥٪)
+                نتيجة التسميع (عتبة النجاح ٩٠٪)
               </div>
               <div style="display:flex;gap:16px;flex-wrap:wrap">
                 <span
-                  >ناجح (≥ ٩٥٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
+                  >ناجح (≥ ٩٠٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
                 >
                 <span
                   >دون العتبة: <b style="color:var(--danger)">{{ failCount() }}</b></span
@@ -344,9 +393,68 @@ type Step = 'attendance' | 'summary' | 'serd';
       .std-card {
         margin-bottom: 10px;
       }
+      .std-name-btn {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        background: none;
+        border: none;
+        padding: 0;
+        text-align: start;
+        font: inherit;
+        color: inherit;
+        cursor: default;
+      }
+      .std-name-btn.clickable {
+        cursor: pointer;
+      }
+      .std-name-btn .primary {
+        font-weight: 700;
+      }
+      .std-chevron {
+        flex-shrink: 0;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--green);
+      }
       .rp-done {
         margin-top: 8px;
         font-size: 0.84rem;
+      }
+      .rp-done-btn {
+        display: block;
+        width: 100%;
+        text-align: start;
+        background: var(--surface-2);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius-xs);
+        padding: 8px 10px;
+        cursor: pointer;
+        color: var(--text-soft);
+        font: inherit;
+      }
+      .student-modal {
+        max-width: 440px;
+        max-height: 88vh;
+        overflow-y: auto;
+        text-align: start;
+      }
+      .modal-close {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        border: none;
+        background: var(--surface-2);
+        border-radius: 999px;
+        font-size: 1rem;
+        color: var(--text-soft);
+        cursor: pointer;
+      }
+      .modal-close:active {
+        background: var(--border);
       }
       .bar {
         flex: 1;
@@ -449,6 +557,18 @@ export class SessionPage {
   readonly attendance = this.data.sessionAttendance(this.id, this.destroyRef);
   readonly recitations = this.data.sessionRecitations(this.id, this.destroyRef);
   private readonly allSerds = this.data.allSerds(this.destroyRef);
+
+  /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
+  private readonly activeStudentId = signal<string | null>(null);
+  readonly activeStudent = computed(
+    () => this.students()?.find((s) => s.id === this.activeStudentId()) ?? null,
+  );
+  openStudentModal(studentId: string): void {
+    this.activeStudentId.set(studentId);
+  }
+  closeStudentModal(): void {
+    this.activeStudentId.set(null);
+  }
 
   readonly dateLabel = computed(() => dmy(this.session()?.date));
 

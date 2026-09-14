@@ -201,7 +201,7 @@ export class RecitationFormPage implements OnInit {
   readonly kinds: RecitationKind[] = ['new', 'near_review', 'far_review'];
   readonly kindLabels = RECITATION_KIND_LABELS;
   readonly tasmiePass = TASMIE_PASS;
-  readonly score = signal(95);
+  readonly score = signal(TASMIE_PASS);
 
   m = {
     date: today(),

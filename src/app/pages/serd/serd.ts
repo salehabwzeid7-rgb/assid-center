@@ -436,7 +436,7 @@ export class SerdPage {
     this.notes = '';
   }
 
-  /** «ناجح» عند ≥ ٩٠٪ وإلا «راسب» */
+  /** «ناجح» عند ≥ ٩٠٪ وإلا «إعادة» */
   pass(score: number): string {
     return passLabel(score, SARD_PASS);
   }
