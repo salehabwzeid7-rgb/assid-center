@@ -142,19 +142,42 @@ export class DataService {
   //  اشتراكات لحظية — استعلامات بحقل مساواة واحد فقط (بلا فهارس مركّبة)
   // ======================================================================
 
+  /**
+   * معرّفات المستمعين الذين يُبلّغون حاليًّا عن كتابات محلّية لم تصل الخادم
+   * بعد (`snapshot.metadata.hasPendingWrites`) — أساس `hasUnsyncedWrites`
+   * أدناه، وهو التحذير الاستباقيّ الذي كان ناقصًا في حادثة فقدان بيانات
+   * جلسة كاملة (v1.19.3): كان المعلّم يرى توست «✅ حُفظ» فور الحفظ المحلّيّ
+   * دون أيّ إشارة إن كانت المزامنة الفعليّة مع الخادم لم تكتمل بعد.
+   */
+  private readonly pendingSyncListeners = signal<ReadonlySet<symbol>>(new Set());
+  /** true ما دام أيّ مستمع نشط يُبلّغ عن كتابات محليّة لم تُزامَن مع الخادم بعد. */
+  readonly hasUnsyncedWrites = computed(() => this.pendingSyncListeners().size > 0);
+
   private live<T extends { id: string; ownerId?: string }>(
     q: Query<DocumentData>,
     destroyRef?: DestroyRef,
     sortBy?: (a: T, b: T) => number,
   ): Signal<T[] | undefined> {
     const out = signal<T[] | undefined>(undefined);
+    const listenerId = Symbol('live-listener');
+    const setPending = (pending: boolean) => {
+      this.pendingSyncListeners.update((s) => {
+        if (pending === s.has(listenerId)) return s;
+        const next = new Set(s);
+        if (pending) next.add(listenerId);
+        else next.delete(listenerId);
+        return next;
+      });
+    };
     const unsub = onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snap) => {
         const rows = this.inScope(
           snap.docs.map((d) => ({ id: d.id, ...(d.data() as object) }) as T),
         );
         out.set(sortBy ? rows.sort(sortBy) : rows);
+        setPending(snap.metadata.hasPendingWrites);
       },
       (err) => {
         // خطأ عابر في مستمع Firestore (انقطاع شبكة، تجديد رمز الدخول، إلخ) —
@@ -168,7 +191,10 @@ export class DataService {
         this.notify.error('تعذّرت مزامنة البيانات مؤقّتًا — بياناتك لم تُحذف، أعد تحميل الصفحة');
       },
     );
-    destroyRef?.onDestroy(unsub);
+    destroyRef?.onDestroy(() => {
+      unsub();
+      setPending(false);
+    });
     return out;
   }
 

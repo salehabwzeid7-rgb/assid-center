@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { NotifyService } from '../core/notify.service';
+import { DataService } from '../core/data.service';
 
 /** حاوية الإشعارات: التوستات + شريط الاتصال + نافذة التأكيد. تُركَّب مرة في الجذر. */
 @Component({
@@ -7,6 +8,10 @@ import { NotifyService } from '../core/notify.service';
   template: `
     @if (!notify.online()) {
       <div class="net-banner">وضع دون اتصال — تُحفظ التغييرات وتُزامَن تلقائيًا لاحقًا</div>
+    } @else if (data.hasUnsyncedWrites()) {
+      <div class="net-banner pending">
+        ⏳ توجد تغييرات لم تصل الخادم بعد — أبقِ التطبيق مفتوحًا حتى تكتمل المزامنة
+      </div>
     } @else if (notify.syncing()) {
       <div class="net-banner syncing"><span class="dot"></span> جارٍ المزامنة…</div>
     }
@@ -63,4 +68,5 @@ import { NotifyService } from '../core/notify.service';
 })
 export class ToastHostComponent {
   readonly notify = inject(NotifyService);
+  readonly data = inject(DataService);
 }
