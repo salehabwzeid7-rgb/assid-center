@@ -373,13 +373,13 @@ type Step = 'attendance' | 'summary' | 'serd';
               </div>
             </div>
 
-            <!-- تقرير مصوَّر (صورة قابلة للمشاركة) — جدول مقسَّم بحدّ أقصى ١٥ طالبًا لكل صورة -->
+            <!-- تقرير مصوَّر (صورة قابلة للمشاركة) — جدول مقسَّم بحدّ أقصى ١٠ طلّاب لكل صورة -->
             <div class="card report-card" style="margin-top:12px">
               <div class="row-between" style="margin-bottom:8px">
                 <b>تقرير مصوَّر (صورة)</b>
               </div>
               <p class="muted" style="margin:0 0 8px;font-size:.82rem">
-                نفس بيانات التقرير أعلاه بصيغة صورة جدول، مقسَّمة تلقائيًّا بحدّ أقصى ١٥ طالبًا لكلّ
+                نفس بيانات التقرير أعلاه بصيغة صورة جدول، مقسَّمة تلقائيًّا بحدّ أقصى ١٠ طلّاب لكلّ
                 صورة — تصلح للمشاركة مباشرةً في واتساب أو التنزيل.
               </p>
               <app-report-image [pages]="reportImagePages()" [meta]="reportImageMeta()" />
@@ -799,24 +799,23 @@ export class SessionPage {
   });
 
   /** أقصى عدد طلّاب في كلّ صورة تقرير — طلب صريح من المستخدم، ثابت غير قابل للتعديل. */
-  private readonly REPORT_IMAGE_PAGE_SIZE = 15;
+  private readonly REPORT_IMAGE_PAGE_SIZE = 10;
 
-  /** ترويسة التقرير المصوَّر — نفس عنوان/إجماليّ التقرير النصّيّ بلا أيقونة الرمز التعبيريّ. */
+  /** ترويسة التقرير المصوَّر — العنوان واسم معلّم الحلقة (من بيانات الحساب)، بلا عدّادات إجماليّة. */
   readonly reportImageMeta = computed<ReportImageMeta>(() => {
     const s = this.session();
-    const n = this.students()?.length ?? 0;
-    if (!s) return { title: '', totals: '' };
+    if (!s) return { title: '', teacherName: '' };
     return {
       title: `${circleLabel(this.circle())} — ${weekdayAr(s.date)} ${dmy(s.date)}`,
-      totals: `الحضور: ${this.presentTotal()}/${n} · التسميع: ${this.recitedTotal()}/${n}`,
+      teacherName: this.auth.teacher()?.name ?? '',
     };
   });
 
   /**
-   * صفحات التقرير المصوَّر — ١٥ طالبًا كحدّ أقصى لكلّ صفحة/صورة (طلب صريح)،
+   * صفحات التقرير المصوَّر — ١٠ طلّاب كحدّ أقصى لكلّ صفحة/صورة (طلب صريح)،
    * بنفس ترتيب `reportStudentsOrder` (سمّعوا ← لم يسمّعوا ← غائبون، أبجديًّا
    * داخل كلّ مجموعة). كلّ طالب صفّ واحد (لا يُحتسَب تعدّد التسميعات ضمن حدّ
-   * الـ١٥ — تظهر كمقاطع إضافيّة داخل نفس الصفّ عبر `rowspan`).
+   * الـ١٠ — تظهر كمقاطع إضافيّة داخل نفس الصفّ عبر `rowspan`).
    */
   readonly reportImagePages = computed<ReportImagePage[]>(() => {
     const s = this.session();
@@ -835,7 +834,6 @@ export class SessionPage {
             hesitation: r.promptCount,
             mistakes: r.hifzErrors,
             rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
-            notes: r.notes?.trim() || undefined,
           };
         });
       } else if (a?.status === 'absent') {

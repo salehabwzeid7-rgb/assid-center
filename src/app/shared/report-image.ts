@@ -9,7 +9,6 @@ export interface ReportImageSegment {
   hesitation?: number;
   mistakes?: number;
   rating?: string;
-  notes?: string;
   /** نصّ نائب يشغل بقيّة الصفّ بدل الأعمدة العدديّة — «لم يسمع» أو «غائب» أو حالة الحضور. */
   placeholderText?: string;
   placeholderClass?: 'not-recited' | 'absent';
@@ -33,7 +32,8 @@ export interface ReportImagePage {
 
 export interface ReportImageMeta {
   title: string;
-  totals: string;
+  /** اسم معلّم الحلقة — من بيانات الحساب المحفوظة. */
+  teacherName: string;
 }
 
 /**
@@ -53,7 +53,7 @@ export interface ReportImageMeta {
       } @else {
         <div class="ri-toolbar">
           <span class="muted" style="font-size:.82rem"
-            >{{ pages().length }} {{ pages().length === 1 ? 'صورة' : 'صور' }} — ١٥ طالبًا كحدّ أقصى
+            >{{ pages().length }} {{ pages().length === 1 ? 'صورة' : 'صور' }} — ١٠ طلّاب كحدّ أقصى
             لكلّ صورة</span
           >
           <button type="button" class="chip" (click)="regenerate()" [disabled]="busy()">
@@ -73,64 +73,62 @@ export interface ReportImageMeta {
       <div class="ri-offscreen">
         @for (page of pages(); track page.pageNumber) {
           <div class="ri-page" #pageEl [attr.data-page]="page.pageNumber">
-            <div class="ri-band"></div>
             <div class="ri-header">
               <div class="ri-title">{{ meta().title }}</div>
-              <div class="ri-totals">{{ meta().totals }}</div>
+              <div class="ri-teacher">معلّم الحلقة: {{ meta().teacherName }}</div>
+            </div>
+            <div class="ri-body">
+              <table class="ri-table">
+                <thead>
+                  <tr>
+                    <th class="ri-c-idx">#</th>
+                    <th class="ri-c-name">اسم الطالب</th>
+                    <th class="ri-c-att">الحضور</th>
+                    <th class="ri-c-detail">السورة (من – إلى)</th>
+                    <th class="ri-c-num">تردّد</th>
+                    <th class="ri-c-num">خطأ</th>
+                    <th class="ri-c-rating">العلامة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of page.rows; track row.index) {
+                    @for (seg of row.segments; track $index) {
+                      <tr [class.ri-row-absent]="seg.placeholderClass === 'absent'">
+                        @if ($index === 0) {
+                          <td class="ri-c-idx" [attr.rowspan]="row.segments.length">
+                            {{ row.index }}
+                          </td>
+                          <td class="ri-c-name" [attr.rowspan]="row.segments.length">
+                            {{ row.name }}
+                          </td>
+                          <td class="ri-c-att" [attr.rowspan]="row.segments.length">
+                            {{ row.attendanceLabel || '—' }}
+                          </td>
+                        }
+                        @if (seg.placeholderText) {
+                          <td
+                            colspan="4"
+                            class="ri-placeholder"
+                            [class.ri-not-recited]="seg.placeholderClass === 'not-recited'"
+                            [class.ri-absent]="seg.placeholderClass === 'absent'"
+                          >
+                            {{ seg.placeholderText }}
+                          </td>
+                        } @else {
+                          <td class="ri-c-detail">{{ seg.detail }}</td>
+                          <td class="ri-c-num">{{ seg.hesitation }}</td>
+                          <td class="ri-c-num">{{ seg.mistakes }}</td>
+                          <td class="ri-c-rating">{{ seg.rating }}</td>
+                        }
+                      </tr>
+                    }
+                  }
+                </tbody>
+              </table>
               @if (page.totalPages > 1) {
                 <div class="ri-pageno">صفحة {{ page.pageNumber }} من {{ page.totalPages }}</div>
               }
             </div>
-            <table class="ri-table">
-              <thead>
-                <tr>
-                  <th class="ri-c-idx">#</th>
-                  <th class="ri-c-name">اسم الطالب</th>
-                  <th class="ri-c-att">الحضور</th>
-                  <th class="ri-c-detail">السورة (من – إلى)</th>
-                  <th class="ri-c-num">تردّد</th>
-                  <th class="ri-c-num">خطأ</th>
-                  <th class="ri-c-rating">العلامة</th>
-                  <th class="ri-c-notes">ملاحظات</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of page.rows; track row.index) {
-                  @for (seg of row.segments; track $index) {
-                    <tr [class.ri-row-absent]="seg.placeholderClass === 'absent'">
-                      @if ($index === 0) {
-                        <td class="ri-c-idx" [attr.rowspan]="row.segments.length">
-                          {{ row.index }}
-                        </td>
-                        <td class="ri-c-name" [attr.rowspan]="row.segments.length">
-                          {{ row.name }}
-                        </td>
-                        <td class="ri-c-att" [attr.rowspan]="row.segments.length">
-                          {{ row.attendanceLabel || '—' }}
-                        </td>
-                      }
-                      @if (seg.placeholderText) {
-                        <td
-                          colspan="5"
-                          class="ri-placeholder"
-                          [class.ri-not-recited]="seg.placeholderClass === 'not-recited'"
-                          [class.ri-absent]="seg.placeholderClass === 'absent'"
-                        >
-                          {{ seg.placeholderText }}
-                        </td>
-                      } @else {
-                        <td class="ri-c-detail">{{ seg.detail }}</td>
-                        <td class="ri-c-num">{{ seg.hesitation }}</td>
-                        <td class="ri-c-num">{{ seg.mistakes }}</td>
-                        <td class="ri-c-rating">{{ seg.rating }}</td>
-                        <td class="ri-c-notes">{{ seg.notes || '—' }}</td>
-                      }
-                    </tr>
-                  }
-                }
-              </tbody>
-            </table>
-            <div class="ri-band"></div>
           </div>
         }
       </div>
@@ -219,49 +217,58 @@ export interface ReportImageMeta {
       }
       .ri-page {
         width: 760px;
-        background: var(--surface, #fff);
+        background: #fff;
         font-family: 'Cairo', 'Tajawal', 'Segoe UI', system-ui, sans-serif;
         direction: rtl;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
       }
-      .ri-band {
-        height: 10px;
-        background-image: var(--misk-pattern, none);
-        background-repeat: repeat-x;
-        background-size: 22px 10px;
-        opacity: 0.55;
-      }
+      /* ترويسة خضراء ثابتة بصرف النظر عن سمة التطبيق الحاليّة (مِسك/الزمرّد) —
+         تلوين مقصود للتقرير المصوَّر نفسه، لا يتبع ألوان السمة النشطة. */
       .ri-header {
-        padding: 18px 24px 12px;
+        padding: 22px 24px 18px;
         text-align: center;
-        border-bottom: 2px solid var(--gold, #a9822f);
+        background: linear-gradient(135deg, #0d5c3f, #083f2b);
       }
       .ri-title {
-        font-size: 1.2rem;
+        font-size: 1.22rem;
         font-weight: 800;
-        color: var(--gold-deep, #a9822f);
+        color: #fff;
       }
-      .ri-totals {
-        margin-top: 4px;
-        font-size: 0.9rem;
+      .ri-teacher {
+        margin-top: 6px;
+        font-size: 0.88rem;
         font-weight: 700;
-        color: var(--text-soft, #555);
+        color: rgba(255, 255, 255, 0.88);
+      }
+      /* خلفية بيضاء نظيفة مع زخرفة هندسيّة خفيفة جدًّا (علامة مائيّة) — مستقلّة
+         عن متغيّرات سمة التطبيق عمدًا حتى تبقى ثابتة ومضمونة الظهور في كل حال. */
+      .ri-body {
+        padding: 14px 20px 18px;
+        background-color: #fff;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46' viewBox='0 0 46 46'%3E%3Cg fill='none' stroke='%230d5c3f' stroke-width='1' opacity='0.07'%3E%3Cpath d='M23 3 L43 23 L23 43 L3 23 Z'/%3E%3Ccircle cx='23' cy='23' r='3.5'/%3E%3C/g%3E%3C/svg%3E");
+        background-repeat: repeat;
       }
       .ri-pageno {
-        margin-top: 2px;
-        font-size: 0.78rem;
+        margin-top: 12px;
+        text-align: center;
+        font-size: 0.8rem;
+        font-weight: 700;
         color: var(--text-soft, #888);
       }
       .ri-table {
         width: 100%;
         border-collapse: collapse;
         font-size: 0.82rem;
+        background: #fff;
       }
       .ri-table th {
-        background: var(--gold-tint, #f3ebd6);
-        color: var(--gold-deep, #a9822f);
+        background: #eaf3ee;
+        color: #0d5c3f;
         font-weight: 800;
         padding: 8px 6px;
-        border-bottom: 2px solid var(--gold, #a9822f);
+        border-bottom: 2px solid #0d5c3f;
       }
       .ri-table td {
         padding: 7px 6px;
@@ -277,10 +284,10 @@ export interface ReportImageMeta {
         text-align: start;
         font-size: 0.78rem;
       }
-      .ri-c-notes {
-        text-align: start;
-        font-size: 0.76rem;
-        color: var(--text-soft, #666);
+      .ri-c-rating {
+        font-weight: 700;
+        white-space: nowrap;
+        font-size: 0.78rem;
       }
       .ri-placeholder {
         text-align: center;
