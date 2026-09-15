@@ -9,9 +9,14 @@ export interface ReportImageSegment {
   hesitation?: number;
   mistakes?: number;
   rating?: string;
-  /** نصّ نائب يشغل بقيّة الصفّ بدل الأعمدة العدديّة — «لم يسمع» أو «غائب» أو حالة الحضور. */
+  /**
+   * نصّ نائب يشغل بقيّة الصفّ بدل الأعمدة العدديّة — «لم يسمع» أو «غائب» أو
+   * حالة الحضور (وضع `recitation`)، أو حالة الحضور/نتيجة الاختبار مباشرةً
+   * (وضعا `attendance`/`exam` — كلّ صفّ فيهما نائب دائمًا، بلا عمود بيانات حقيقيّ منفصل).
+   */
   placeholderText?: string;
-  placeholderClass?: 'not-recited' | 'absent';
+  /** `neutral` = نصّ عاديّ بلا تلوين تحذيريّ (حاضر/متأخر في وضع الحضور، أو نتيجة ناجحة في وضع الاختبار). */
+  placeholderClass?: 'not-recited' | 'absent' | 'neutral';
 }
 
 /** صفّ طالب واحد — قد يحوي أكثر من مقطع تسميع (حفظ جديد + مراجعة بنفس الجلسة). */
@@ -84,10 +89,14 @@ export interface ReportImageMeta {
                     <th class="ri-c-idx">#</th>
                     <th class="ri-c-name">اسم الطالب</th>
                     <th class="ri-c-att">الحضور</th>
-                    <th class="ri-c-detail">السورة (من – إلى)</th>
-                    <th class="ri-c-num">تردّد</th>
-                    <th class="ri-c-num">خطأ</th>
-                    <th class="ri-c-rating">العلامة</th>
+                    @if (mode() === 'recitation') {
+                      <th class="ri-c-detail">السورة (من – إلى)</th>
+                      <th class="ri-c-num">تردّد</th>
+                      <th class="ri-c-num">خطأ</th>
+                      <th class="ri-c-rating">العلامة</th>
+                    } @else {
+                      <th class="ri-c-rating">{{ mode() === 'exam' ? 'النتيجة' : 'الحالة' }}</th>
+                    }
                   </tr>
                 </thead>
                 <tbody>
@@ -107,10 +116,11 @@ export interface ReportImageMeta {
                         }
                         @if (seg.placeholderText) {
                           <td
-                            colspan="4"
+                            [attr.colspan]="mode() === 'recitation' ? 4 : 1"
                             class="ri-placeholder"
                             [class.ri-not-recited]="seg.placeholderClass === 'not-recited'"
                             [class.ri-absent]="seg.placeholderClass === 'absent'"
+                            [class.ri-neutral]="seg.placeholderClass === 'neutral'"
                           >
                             {{ seg.placeholderText }}
                           </td>
@@ -299,6 +309,9 @@ export interface ReportImageMeta {
       .ri-absent {
         color: var(--text-soft, #999);
       }
+      .ri-neutral {
+        color: #0d5c3f;
+      }
       .ri-row-absent {
         background: var(--bg, #faf8f2);
         opacity: 0.75;
@@ -380,6 +393,12 @@ export class ReportImageComponent {
 
   readonly pages = input.required<ReportImagePage[]>();
   readonly meta = input.required<ReportImageMeta>();
+  /**
+   * يحدّد أعمدة الجدول: `recitation` (الافتراضيّ، تقرير الجلسة الاعتياديّ —
+   * السورة/تردّد/خطأ/العلامة)، `attendance` (حلقات التجويد — عمود «الحالة»
+   * وحيد بدل أعمدة التسميع)، أو `exam` (اختبار تجويد — عمود «النتيجة» وحيد).
+   */
+  readonly mode = input<'recitation' | 'attendance' | 'exam'>('recitation');
 
   readonly busy = signal(false);
   readonly generated = signal(false);

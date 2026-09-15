@@ -71,6 +71,18 @@ export const routes: Routes = [
           import('./pages/circle-stats/circle-stats').then((m) => m.CircleStatsPage),
       },
       {
+        // اختبارات التجويد (حلقات التجويد فقط) — قائمة + إنشاء
+        path: 'circle/:id/exams',
+        loadComponent: () =>
+          import('./pages/tajweed-exams/tajweed-exams').then((m) => m.TajweedExamsPage),
+      },
+      {
+        // اختبار تجويد واحد — تفاصيل ودرجات وتقارير
+        path: 'circle/:id/exams/:examId',
+        loadComponent: () =>
+          import('./pages/tajweed-exam/tajweed-exam').then((m) => m.TajweedExamPage),
+      },
+      {
         path: 'session/:id',
         loadComponent: () => import('./pages/session/session').then((m) => m.SessionPage),
       },

@@ -11,6 +11,7 @@ import {
   WEEKDAY_ORDER,
   circleTypeLabel,
   isActualRecitation,
+  isTajweedCircle,
   type Circle,
   type Session,
 } from '../../core/models';
@@ -111,6 +112,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <span class="tile-ico">📊</span>
           <span class="tile-label">الإحصائيات</span>
         </a>
+        @if (isTajweed()) {
+          <a class="tile" [routerLink]="['/circle', id, 'exams']">
+            <span class="tile-ico">🧪</span>
+            <span class="tile-label">اختبارات</span>
+          </a>
+        }
       </div>
 
       <button
@@ -153,7 +160,10 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <span class="grow">
               <span class="primary">{{ dmy(s.date) }}</span>
               <span class="secondary">
-                حضور {{ countPresent(s.id) }}/{{ studentTotal() }} · تسميع {{ countRecite(s.id) }}
+                حضور {{ countPresent(s.id) }}/{{ studentTotal() }}
+                @if (!isTajweed()) {
+                  · تسميع {{ countRecite(s.id) }}
+                }
               </span>
             </span>
             <span [class]="'badge b-' + (s.status === 'open' ? 'late' : 'present')">
@@ -270,6 +280,7 @@ export class CirclePage {
   typeLabel(c: Circle): string {
     return circleTypeLabel(c);
   }
+  readonly isTajweed = computed(() => isTajweedCircle(this.circle()));
   readonly todayIso = today();
   readonly todayLabel = dmy(this.todayIso);
 

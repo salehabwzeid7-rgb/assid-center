@@ -85,6 +85,16 @@ service cloud.firestore {
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
+    match /tajweedExams/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /tajweedExamResults/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
 
     /** سجل الحركات (v1.21.0) — دائم لا يُحذف أبدًا، حتى من صاحبه (يُستعاد بتعليمه restoredAt فقط، لا بالحذف). */
     match /activityLog/{id} {

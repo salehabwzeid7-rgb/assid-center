@@ -237,6 +237,11 @@ export function isHifzCircle(c: Pick<Circle, 'type'> | null | undefined): boolea
   return !!c && (c.type === 'memorization' || c.type === undefined);
 }
 
+/** هل الحلقة حلقة تجويد؟ — مادّة دراسة لا تسميع/سرد قرآنيّ. */
+export function isTajweedCircle(c: Pick<Circle, 'type'> | null | undefined): boolean {
+  return !!c && c.type === 'tajweed';
+}
+
 /** الطالب */
 export interface Student extends Owned {
   id: string;
@@ -454,6 +459,45 @@ export interface ExamRecord extends Owned {
   createdAt: number;
 }
 
+/**
+ * اختبار تجويد — حدث اختبار واحد داخل حلقة تجويد (مبحث/اسم + تاريخ ووقت
+ * ومدّة + قائمة الطلّاب المستهدَفين)، مستقلّ تمامًا عن اختبارات أجزاء القرآن
+ * (`ExamRecord` أعلاه، خاصّ بحلقات التحفيظ). راجع `TajweedExamResult` لدرجة
+ * كلّ طالب ضمن هذا الاختبار.
+ */
+export interface TajweedExam extends Owned {
+  id: string;
+  circleId: string;
+  /** اسم الاختبار أو المبحث — مثال: «مخارج الحروف» */
+  name: string;
+  date: string;
+  time?: string;
+  /** مدّة الاختبار بالدقائق (اختياريّ) */
+  durationMin?: number;
+  /** الطلّاب المستهدَفون بهذا الاختبار (اختيار الكلّ أو فئة منهم) */
+  studentIds: string[];
+  createdAt: number;
+}
+
+/**
+ * درجة طالب واحد ضمن اختبار تجويد — سجلّ واحد لكلّ (اختبار، طالب)، معرّفه
+ * `{examId}_{studentId}`. `examName`/`date` منسوختان من `TajweedExam` وقت
+ * الحفظ (تكرار متعمَّد) حتى تعرض صفحة ملفّ الطالب النتائج دون استعلام إضافيّ
+ * عبر المجموعتين.
+ */
+export interface TajweedExamResult extends Owned {
+  id: string;
+  examId: string;
+  circleId: string;
+  studentId: string;
+  examName: string;
+  date: string;
+  /** درجة الاختبار ٠..١٠٠ */
+  score: number;
+  notes?: string;
+  createdAt: number;
+}
+
 /** أسماء المجموعات المشتركة على مستوى الجذر */
 export const COL = {
   circles: 'circles',
@@ -464,6 +508,8 @@ export const COL = {
   evaluations: 'evaluations',
   serd: 'serd',
   exams: 'exams',
+  tajweedExams: 'tajweedExams',
+  tajweedExamResults: 'tajweedExamResults',
   activityLog: 'activityLog',
 } as const;
 
@@ -489,7 +535,15 @@ export const ACTIVITY_ACTION_LABELS: Record<ActivityAction, string> = {
 
 /** نوع السجلّ المتأثّر بالحركة. */
 export type ActivityTarget =
-  'student' | 'circle' | 'session' | 'attendance' | 'recitation' | 'evaluation' | 'serd' | 'exam';
+  | 'student'
+  | 'circle'
+  | 'session'
+  | 'attendance'
+  | 'recitation'
+  | 'evaluation'
+  | 'serd'
+  | 'exam'
+  | 'tajweedExam';
 
 export const ACTIVITY_TARGET_LABELS: Record<ActivityTarget, string> = {
   student: 'طالب',
@@ -500,6 +554,7 @@ export const ACTIVITY_TARGET_LABELS: Record<ActivityTarget, string> = {
   evaluation: 'تقييم يوميّ',
   serd: 'سرد',
   exam: 'اختبار',
+  tajweedExam: 'اختبار تجويد',
 };
 
 /** حقل تغيّر ضمن حركة «تعديل» — بقيمتيه قبل وبعد، لعرض تفصيليّ. */

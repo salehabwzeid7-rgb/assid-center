@@ -3,9 +3,11 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import {
   ATTENDANCE_LABELS,
+  EXAM_PASS,
   SARD_PASS,
   circleTypeLabel,
   isActualRecitation,
+  passLabel,
   scoreOf,
   studentCircleIds,
   type Circle,
@@ -162,6 +164,22 @@ import { PageHeaderComponent } from '../../shared/page-header';
         <p class="hint" style="margin:12px 2px 4px">
           يُسجَّل التسميع والتقييم اليوميّ من داخل جلسة الحلقة النشطة.
         </p>
+
+        <!-- نتائج اختبارات التجويد — تُزامَن تلقائيًّا فور حفظها من صفحة الاختبار -->
+        @if (tajweedResults() && tajweedResults()!.length > 0) {
+          <div class="section-title">نتائج اختبارات التجويد</div>
+          @for (r of tajweedResults(); track r.id) {
+            <div class="list-item" style="cursor:default">
+              <span class="grow">
+                <span class="primary">{{ r.examName }}</span>
+                <span class="secondary">{{ dmy(r.date) }}</span>
+              </span>
+              <span [class]="'badge ' + (r.score >= examPass ? 'b-present' : 'b-absent')">
+                {{ r.score }}٪ — {{ passLabel(r.score, examPass) }}
+              </span>
+            </div>
+          }
+        }
 
         <!-- سجلّ الحضور -->
         <div class="section-title">سجلّ الحضور</div>
@@ -335,6 +353,9 @@ export class StudentPage {
 
   readonly attLabels = ATTENDANCE_LABELS;
   readonly dmy = dmy;
+  readonly examPass = EXAM_PASS;
+  readonly passLabel = passLabel;
+  readonly tajweedResults = this.data.studentTajweedExamResults(this.id, this.destroyRef);
 
   typeText(c: Circle): string {
     return circleTypeLabel(c);

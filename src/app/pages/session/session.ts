@@ -15,6 +15,7 @@ import {
   TASMIE_PASS,
   circleLabel,
   isActualRecitation,
+  isTajweedCircle,
   ratingLabel,
   scoreOf,
   studentCircleIds,
@@ -91,18 +92,21 @@ type Step = 'attendance' | 'summary' | 'serd';
 
         @if (s.status === 'closed') {
           <div class="edit-banner">
-            ✎ الجلسة منتهية — يمكنك تعديل الحضور والتسميع وإضافة تسميعات، وتُحفظ التغييرات فورًا.
+            ✎ الجلسة منتهية — يمكنك تعديل
+            {{ isTajweed() ? 'الحضور' : 'الحضور والتسميع وإضافة تسميعات' }}، وتُحفظ التغييرات فورًا.
           </div>
         }
 
         <div class="tabs" style="margin-top:12px">
           <button [class.active]="step() === 'attendance'" (click)="step.set('attendance')">
-            الحضور والتسميع
+            {{ isTajweed() ? 'الحضور' : 'الحضور والتسميع' }}
           </button>
           <button [class.active]="step() === 'summary'" (click)="step.set('summary')">
             الملخّص
           </button>
-          <button [class.active]="step() === 'serd'" (click)="step.set('serd')">السرد</button>
+          @if (!isTajweed()) {
+            <button [class.active]="step() === 'serd'" (click)="step.set('serd')">السرد</button>
+          }
         </div>
 
         @if (students() === undefined) {
@@ -110,12 +114,14 @@ type Step = 'attendance' | 'summary' | 'serd';
         } @else if (students()!.length === 0) {
           <div class="empty"><span class="icon">👤</span> لا يوجد طلاب نشطون في هذه الحلقة.</div>
         } @else {
-          <!-- الحضور والتسميع -->
+          <!-- الحضور (والتسميع لحلقات التحفيظ فقط) -->
           @if (step() === 'attendance') {
             <div class="row-between section-title">
               <span>
-                الحضور {{ presentTotal() }}/{{ students()!.length }} · التسميع
-                {{ recitedTotal() }}/{{ students()!.length }}
+                الحضور {{ presentTotal() }}/{{ students()!.length }}
+                @if (!isTajweed()) {
+                  · التسميع {{ recitedTotal() }}/{{ students()!.length }}
+                }
               </span>
               <button class="chip" type="button" (click)="markAllPresent()">تعيين الكل حاضر</button>
             </div>
@@ -149,48 +155,50 @@ type Step = 'attendance' | 'summary' | 'serd';
                   }
                 </div>
 
-                @if (isPresent(st.id)) {
-                  @for (r of recsOf(st.id); track r.kind) {
-                    @if (r.notRecited) {
+                @if (!isTajweed()) {
+                  @if (isPresent(st.id)) {
+                    @for (r of recsOf(st.id); track r.kind) {
+                      @if (r.notRecited) {
+                        <button
+                          type="button"
+                          class="muted rp-done rp-done-btn rp-not-recited"
+                          (click)="openStudentModal(st.id)"
+                        >
+                          ⭕ لم يسمّع — تعديل ›
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          class="muted rp-done rp-done-btn"
+                          (click)="openStudentModal(st.id)"
+                        >
+                          {{ kindLabels[r.kind] }}: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
+                          {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
+                          {{ scoreOf(r) }}٪ — تعديل ›
+                        </button>
+                      }
+                    }
+                    @if (canAddKind(st.id)) {
                       <button
+                        class="btn btn-primary btn-block"
+                        style="margin-top:8px"
                         type="button"
-                        class="muted rp-done rp-done-btn rp-not-recited"
                         (click)="openStudentModal(st.id)"
                       >
-                        ⭕ لم يسمّع — تعديل ›
-                      </button>
-                    } @else {
-                      <button
-                        type="button"
-                        class="muted rp-done rp-done-btn"
-                        (click)="openStudentModal(st.id)"
-                      >
-                        {{ kindLabels[r.kind] }}: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
-                        {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
-                        {{ scoreOf(r) }}٪ — تعديل ›
+                        📖 {{ recsOf(st.id).length ? 'تسجيل تسميع آخر' : 'تسجيل التسميع' }}
                       </button>
                     }
-                  }
-                  @if (canAddKind(st.id)) {
-                    <button
-                      class="btn btn-primary btn-block"
-                      style="margin-top:8px"
-                      type="button"
-                      (click)="openStudentModal(st.id)"
-                    >
-                      📖 {{ recsOf(st.id).length ? 'تسجيل تسميع آخر' : 'تسجيل التسميع' }}
-                    </button>
-                  }
-                } @else if (recsOf(st.id).length > 0) {
-                  @for (r of recsOf(st.id); track r.kind) {
-                    @if (r.notRecited) {
-                      <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
-                    } @else {
-                      <div class="muted rp-done">
-                        سُجّل تسميع سابق ({{ kindLabels[r.kind] }}): {{ surahName(r.fromSurah) }}
-                        {{ r.fromAyah }} ← {{ surahName(r.toSurah) }} {{ r.toAyah }} ·
-                        {{ r.pages }} وجه · {{ scoreOf(r) }}٪
-                      </div>
+                  } @else if (recsOf(st.id).length > 0) {
+                    @for (r of recsOf(st.id); track r.kind) {
+                      @if (r.notRecited) {
+                        <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
+                      } @else {
+                        <div class="muted rp-done">
+                          سُجّل تسميع سابق ({{ kindLabels[r.kind] }}): {{ surahName(r.fromSurah) }}
+                          {{ r.fromAyah }} ← {{ surahName(r.toSurah) }} {{ r.toAyah }} ·
+                          {{ r.pages }} وجه · {{ scoreOf(r) }}٪
+                        </div>
+                      }
                     }
                   }
                 }
@@ -239,39 +247,54 @@ type Step = 'attendance' | 'summary' | 'serd';
                     />
                   </label>
                 </div>
-                <app-recitation-panel
-                  [sessionId]="id"
-                  [studentId]="st.id"
-                  [circleId]="s.circleId"
-                  [date]="s.date"
-                  [existingEntries]="recsOf(st.id)"
-                />
+                @if (!isTajweed()) {
+                  <app-recitation-panel
+                    [sessionId]="id"
+                    [studentId]="st.id"
+                    [circleId]="s.circleId"
+                    [date]="s.date"
+                    [existingEntries]="recsOf(st.id)"
+                  />
+                }
               </div>
             </div>
           }
 
           <!-- الملخّص -->
           @if (step() === 'summary') {
-            <div class="stat-grid">
-              <div class="stat">
-                <div class="num">{{ presentTotal() }}/{{ students()!.length }}</div>
-                <div class="label">الحضور ({{ presentRate() }}٪)</div>
+            @if (isTajweed()) {
+              <div class="stat-grid" style="grid-template-columns:1fr 1fr">
+                <div class="stat">
+                  <div class="num">{{ presentTotal() }}/{{ students()!.length }}</div>
+                  <div class="label">الحضور ({{ presentRate() }}٪)</div>
+                </div>
+                <div class="stat">
+                  <div class="num">{{ countAtt('absent') }}</div>
+                  <div class="label">غائبون</div>
+                </div>
               </div>
-              <div class="stat">
-                <div class="num">{{ recitedTotal() }}</div>
-                <div class="label">عدد المسمّعين</div>
+            } @else {
+              <div class="stat-grid">
+                <div class="stat">
+                  <div class="num">{{ presentTotal() }}/{{ students()!.length }}</div>
+                  <div class="label">الحضور ({{ presentRate() }}٪)</div>
+                </div>
+                <div class="stat">
+                  <div class="num">{{ recitedTotal() }}</div>
+                  <div class="label">عدد المسمّعين</div>
+                </div>
+                <div class="stat">
+                  <div class="num">{{ totalPages() }}</div>
+                  <div class="label">مجموع الأوجه</div>
+                </div>
+                <div class="stat">
+                  <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
+                  <div class="label">متوسّط التسميع</div>
+                </div>
               </div>
-              <div class="stat">
-                <div class="num">{{ totalPages() }}</div>
-                <div class="label">مجموع الأوجه</div>
-              </div>
-              <div class="stat">
-                <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
-                <div class="label">متوسّط التسميع</div>
-              </div>
-            </div>
+            }
 
-            @if (overtimeCount() > 0) {
+            @if (!isTajweed() && overtimeCount() > 0) {
               <div class="card" style="margin-top:10px">
                 <div class="section-title" style="margin:0 0 6px">زمن التسميع (٤ د/وجه)</div>
                 <span style="color:var(--danger);font-weight:700">
@@ -306,27 +329,29 @@ type Step = 'attendance' | 'summary' | 'serd';
               }
             </div>
 
-            <div class="card" style="margin-top:10px">
-              <div class="section-title" style="margin:0 0 8px">
-                نتيجة التسميع (عتبة النجاح ٩٠٪)
-              </div>
-              <div style="display:flex;gap:16px;flex-wrap:wrap">
-                <span
-                  >ناجح (≥ ٩٠٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
-                >
-                <span
-                  >دون العتبة: <b style="color:var(--danger)">{{ failCount() }}</b></span
-                >
-              </div>
-              <div class="bar" style="margin-top:8px">
-                <i [style.width.%]="passPct()"></i>
-              </div>
-              @if (notRecitedNames().length) {
-                <div class="muted" style="margin-top:8px;font-size:.86rem">
-                  لم يسمّعوا: {{ notRecitedNames().join('، ') }}
+            @if (!isTajweed()) {
+              <div class="card" style="margin-top:10px">
+                <div class="section-title" style="margin:0 0 8px">
+                  نتيجة التسميع (عتبة النجاح ٩٠٪)
                 </div>
-              }
-            </div>
+                <div style="display:flex;gap:16px;flex-wrap:wrap">
+                  <span
+                    >ناجح (≥ ٩٠٪): <b style="color:var(--ok,#3b6b4a)">{{ passCount() }}</b></span
+                  >
+                  <span
+                    >دون العتبة: <b style="color:var(--danger)">{{ failCount() }}</b></span
+                  >
+                </div>
+                <div class="bar" style="margin-top:8px">
+                  <i [style.width.%]="passPct()"></i>
+                </div>
+                @if (notRecitedNames().length) {
+                  <div class="muted" style="margin-top:8px;font-size:.86rem">
+                    لم يسمّعوا: {{ notRecitedNames().join('، ') }}
+                  </div>
+                }
+              </div>
+            }
 
             <div class="card" style="margin-top:10px">
               <div class="field" style="margin:0">
@@ -382,7 +407,11 @@ type Step = 'attendance' | 'summary' | 'serd';
                 نفس بيانات التقرير أعلاه بصيغة صورة جدول، مقسَّمة تلقائيًّا بحدّ أقصى ١٠ طلّاب لكلّ
                 صورة — تصلح للمشاركة مباشرةً في واتساب أو التنزيل.
               </p>
-              <app-report-image [pages]="reportImagePages()" [meta]="reportImageMeta()" />
+              <app-report-image
+                [pages]="reportImagePages()"
+                [meta]="reportImageMeta()"
+                [mode]="isTajweed() ? 'attendance' : 'recitation'"
+              />
             </div>
 
             <a
@@ -602,6 +631,11 @@ export class SessionPage {
   readonly circle = computed(
     () => this.allCircles()?.find((c) => c.id === this.circleId()) ?? null,
   );
+  /**
+   * حلقة تجويد؟ — لا تسميع ولا سرد فيها (مادّة دراسيّة، لا حفظ قرآنيّ)، فتُخفى
+   * كلّ واجهات التسميع/السرد وتُبسَّط الحصّة لتتبّع الحضور فقط.
+   */
+  readonly isTajweed = computed(() => isTajweedCircle(this.circle()));
   readonly students = computed(() => {
     const cid = this.circleId();
     if (!cid) return undefined;
@@ -733,7 +767,9 @@ export class SessionPage {
     const recs = this.recsOf(st.id);
     const lines = [`${index}. ${st.name}`, `• الحضور: ${this.attendanceLine(a, s)}`];
     const present = a?.status === 'present' || a?.status === 'late';
-    if (present) {
+    // حلقات التجويد لا تسميع فيها إطلاقًا — لا معنى لسطر «لم يُسمّع في هذه
+    // الجلسة» هنا (يوحي بتسميع متوقَّع لم يحدث)، فيُكتفى بسطر الحضور وحده.
+    if (present && !this.isTajweed()) {
       const actual = recs.filter(isActualRecitation);
       if (actual.length > 0) {
         // قد يكون للطالب أكثر من تسميع بنفس الجلسة (حفظ جديد + مراجعة) —
@@ -792,7 +828,9 @@ export class SessionPage {
     const intro = (t?.reportIntro ?? '').trim() || DEFAULT_REPORT_INTRO;
     const outro = (t?.reportOutro ?? '').trim() || DEFAULT_REPORT_OUTRO;
     const header = `📋 ${circleLabel(this.circle())} — ${weekdayAr(s.date)} ${dmy(s.date)}`;
-    const totals = `الحضور: ${this.presentTotal()}/${students.length} · التسميع: ${this.recitedTotal()}/${students.length}`;
+    const totals = this.isTajweed()
+      ? `الحضور: ${this.presentTotal()}/${students.length}`
+      : `الحضور: ${this.presentTotal()}/${students.length} · التسميع: ${this.recitedTotal()}/${students.length}`;
     const rule = '━━━━━━━━━━━━';
     const blocks = students.map((st, i) => this.studentBlock(i + 1, st, s));
     return [intro, '', header, totals, rule, '', blocks.join('\n\n'), '', rule, outro].join('\n');
@@ -820,33 +858,44 @@ export class SessionPage {
   readonly reportImagePages = computed<ReportImagePage[]>(() => {
     const s = this.session();
     if (!s) return [];
+    const tajweed = this.isTajweed();
     const ordered = this.reportStudentsOrder();
     const rows = ordered.map((st, i) => {
       const a = this.attOf(st.id);
-      const actual = this.recsOf(st.id).filter(isActualRecitation);
       const attendanceLabel = this.attendanceTimeSpan(a, s);
       let segments: ReportImageSegment[];
-      if (actual.length > 0) {
-        segments = actual.map((r) => {
-          const score = scoreOf(r);
-          return {
-            detail: `${this.kindLabels[r.kind]}: ${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
-            hesitation: r.promptCount,
-            mistakes: r.hifzErrors,
-            rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
-          };
-        });
-      } else if (a?.status === 'absent') {
-        segments = [{ placeholderText: 'غائب', placeholderClass: 'absent' }];
-      } else if (a?.status === 'present' || a?.status === 'late') {
-        segments = [{ placeholderText: 'لم يسمع', placeholderClass: 'not-recited' }];
-      } else {
+      if (tajweed) {
+        // حلقة تجويد — صفّ الحالة دائمًا نائب واحد بلا مفهوم «لم يسمع» إطلاقًا.
         segments = [
           {
             placeholderText: a ? ATTENDANCE_LABELS[a.status] : 'لم يُسجَّل',
-            placeholderClass: 'not-recited',
+            placeholderClass: a?.status === 'absent' ? 'absent' : 'neutral',
           },
         ];
+      } else {
+        const actual = this.recsOf(st.id).filter(isActualRecitation);
+        if (actual.length > 0) {
+          segments = actual.map((r) => {
+            const score = scoreOf(r);
+            return {
+              detail: `${this.kindLabels[r.kind]}: ${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
+              hesitation: r.promptCount,
+              mistakes: r.hifzErrors,
+              rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
+            };
+          });
+        } else if (a?.status === 'absent') {
+          segments = [{ placeholderText: 'غائب', placeholderClass: 'absent' }];
+        } else if (a?.status === 'present' || a?.status === 'late') {
+          segments = [{ placeholderText: 'لم يسمع', placeholderClass: 'not-recited' }];
+        } else {
+          segments = [
+            {
+              placeholderText: a ? ATTENDANCE_LABELS[a.status] : 'لم يُسجَّل',
+              placeholderClass: 'not-recited',
+            },
+          ];
+        }
       }
       return { index: i + 1, name: st.name, attendanceLabel, segments };
     });

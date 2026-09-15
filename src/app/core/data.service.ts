@@ -39,6 +39,8 @@ import {
   type EvaluationRecord,
   type SerdRecord,
   type ExamRecord,
+  type TajweedExam,
+  type TajweedExamResult,
   type ActivityAction,
   type ActivityTarget,
   type ActivityFieldChange,
@@ -94,6 +96,10 @@ const CIRCLE_DIFF_FIELDS: DiffField[] = [
   { key: 'tajweedLevel', label: 'مستوى التجويد' },
   { key: 'fromTime', label: 'بداية الحصّة' },
   { key: 'toTime', label: 'نهاية الحصّة' },
+];
+const TAJWEED_EXAM_RESULT_DIFF_FIELDS: DiffField[] = [
+  { key: 'score', label: 'الدرجة' },
+  { key: 'notes', label: 'ملاحظات' },
 ];
 
 /** التاريخ الحالي بصيغة YYYY-MM-DD (توقيت الجهاز المحلي) */
@@ -843,11 +849,21 @@ export class DataService {
    * تبقى سجلّات السرد والاختبار (تقدّم الطالب في الحفظ) لأنّها ملك الطالب لا الحلقة.
    */
   async deleteCircle(id: string): Promise<void> {
-    const [circleSnap, sessions, attendance, recitations, students] = await Promise.all([
+    const [
+      circleSnap,
+      sessions,
+      attendance,
+      recitations,
+      tajweedExams,
+      tajweedExamResults,
+      students,
+    ] = await Promise.all([
       getDoc(this.ref(COL.circles, id)),
       getDocs(query(this.col(COL.sessions), where('circleId', '==', id))),
       getDocs(query(this.col(COL.attendance), where('circleId', '==', id))),
       getDocs(query(this.col(COL.recitations), where('circleId', '==', id))),
+      getDocs(query(this.col(COL.tajweedExams), where('circleId', '==', id))),
+      getDocs(query(this.col(COL.tajweedExamResults), where('circleId', '==', id))),
       getDocs(this.col(COL.students)),
     ]);
 
@@ -864,6 +880,8 @@ export class DataService {
       [COL.sessions, sessions.docs],
       [COL.attendance, attendance.docs],
       [COL.recitations, recitations.docs],
+      [COL.tajweedExams, tajweedExams.docs],
+      [COL.tajweedExamResults, tajweedExamResults.docs],
     ] as const) {
       for (const d of docs) {
         snapshots.push({ collectionName, id: d.id, data: d.data() as Record<string, unknown> });
@@ -1069,7 +1087,14 @@ export class DataService {
    * لا يمسّ الحلقات. العمليّة ذرّيّة على دفعات وتنعكس لحظيًّا على كلّ الأجهزة.
    */
   async deleteStudent(id: string): Promise<void> {
-    const cols = [COL.attendance, COL.recitations, COL.evaluations, COL.serd, COL.exams];
+    const cols = [
+      COL.attendance,
+      COL.recitations,
+      COL.evaluations,
+      COL.serd,
+      COL.exams,
+      COL.tajweedExamResults,
+    ];
     const [studentSnap, ...snaps] = await Promise.all([
       getDoc(this.ref(COL.students, id)),
       ...cols.map((c) => getDocs(query(this.col(c), where('studentId', '==', id)))),
@@ -1301,6 +1326,149 @@ export class DataService {
         ],
         studentName: student?.name,
         sessionLabel: before.date,
+      });
+    }
+  }
+
+  // ---------- اختبارات التجويد (حلقات التجويد فقط، مستقلّة عن اختبارات أجزاء القرآن) ----------
+
+  /** اختبارات حلقة تجويد معيّنة — الأحدث تاريخًا أوّلًا. */
+  tajweedExamsByCircle(
+    circleId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<TajweedExam[] | undefined> {
+    const q = query(this.col(COL.tajweedExams), where('circleId', '==', circleId));
+    return this.live<TajweedExam>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** نتائج اختبار تجويد معيّن (كلّ الطلّاب المُقيَّمين فيه). */
+  tajweedExamResultsByExam(
+    examId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<TajweedExamResult[] | undefined> {
+    const q = query(this.col(COL.tajweedExamResults), where('examId', '==', examId));
+    return this.live<TajweedExamResult>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** كلّ نتائج اختبارات التجويد لطالب معيّن — لمزامنتها مع صفحة ملفّه الشخصيّ. */
+  studentTajweedExamResults(
+    studentId: string,
+    destroyRef?: DestroyRef,
+  ): Signal<TajweedExamResult[] | undefined> {
+    const q = query(this.col(COL.tajweedExamResults), where('studentId', '==', studentId));
+    return this.live<TajweedExamResult>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
+  }
+
+  async addTajweedExam(input: {
+    circleId: string;
+    name: string;
+    date: string;
+    time?: string;
+    durationMin?: number;
+    studentIds: string[];
+  }): Promise<string> {
+    const created = await addDoc(
+      this.col(COL.tajweedExams),
+      this.owned({ ...clean(input), createdAt: Date.now() }),
+    );
+    await this.logActivity({
+      action: 'create',
+      target: 'tajweedExam',
+      summary: `إنشاء اختبار تجويد «${input.name}» (${input.studentIds.length} طالبًا)`,
+      sessionLabel: input.date,
+    });
+    return created.id;
+  }
+
+  async updateTajweedExam(
+    id: string,
+    patch: Partial<Pick<TajweedExam, 'name' | 'date' | 'time' | 'durationMin' | 'studentIds'>>,
+  ): Promise<void> {
+    await updateDoc(this.ref(COL.tajweedExams, id), clean(patch));
+  }
+
+  /** حذف اختبار تجويد وكلّ نتائجه المرتبطة معًا — ذرّيًّا مع تسجيل في سجلّ الحركات. */
+  async deleteTajweedExam(id: string): Promise<void> {
+    const [examSnap, results] = await Promise.all([
+      getDoc(this.ref(COL.tajweedExams, id)),
+      getDocs(query(this.col(COL.tajweedExamResults), where('examId', '==', id))),
+    ]);
+    if (!examSnap.exists()) return;
+    const exam = examSnap.data() as TajweedExam;
+    const snapshots: ActivitySnapshot[] = [
+      { collectionName: COL.tajweedExams, id, data: exam as unknown as Record<string, unknown> },
+    ];
+    const ops: Parameters<DataService['runBatched']>[0] = [
+      { kind: 'delete', ref: this.ref(COL.tajweedExams, id) },
+    ];
+    for (const d of results.docs) {
+      snapshots.push({
+        collectionName: COL.tajweedExamResults,
+        id: d.id,
+        data: d.data() as Record<string, unknown>,
+      });
+      ops.push({ kind: 'delete', ref: d.ref });
+    }
+    await this.runBatched(ops);
+    await this.logActivity({
+      action: 'delete',
+      target: 'tajweedExam',
+      summary: `حذف اختبار التجويد «${exam.name}» (${results.docs.length} نتيجة مرتبطة)`,
+      snapshots,
+      sessionLabel: exam.date,
+    });
+  }
+
+  /**
+   * يسجّل/يحدّث درجة طالب في اختبار تجويد — معرّف ثابت `{examId}_{studentId}`
+   * فلا يتكرّر السجلّ عند إعادة الحفظ (upsert حقيقيّ). تُزامَن النتيجة تلقائيًّا
+   * مع صفحة ملفّ الطالب عبر `studentTajweedExamResults()` (نفس المجموعة، بلا
+   * أيّ خطوة نسخ إضافيّة).
+   */
+  async upsertTajweedExamResult(
+    examId: string,
+    circleId: string,
+    studentId: string,
+    examName: string,
+    date: string,
+    score: number,
+    notes?: string,
+  ): Promise<void> {
+    const id = `${examId}_${studentId}`;
+    const before = await this.getOneForAudit<TajweedExamResult>(COL.tajweedExamResults, id);
+    const payload = this.owned(
+      clean({ examId, circleId, studentId, examName, date, score, notes, createdAt: Date.now() }),
+    );
+    await setDoc(this.ref(COL.tajweedExamResults, id), payload, { merge: true });
+    const student = await this.getStudent(studentId).catch(() => null);
+    if (before) {
+      const changes = diffFields(
+        before as unknown as Record<string, unknown>,
+        payload as unknown as Record<string, unknown>,
+        TAJWEED_EXAM_RESULT_DIFF_FIELDS,
+      );
+      if (changes.length) {
+        await this.logActivity({
+          action: 'update',
+          target: 'tajweedExam',
+          summary: `تعديل درجة اختبار التجويد لـ${student?.name ?? ''}`,
+          fieldChanges: changes,
+          snapshots: [
+            {
+              collectionName: COL.tajweedExamResults,
+              id,
+              data: before as unknown as Record<string, unknown>,
+            },
+          ],
+          studentName: student?.name,
+        });
+      }
+    } else {
+      await this.logActivity({
+        action: 'create',
+        target: 'tajweedExam',
+        summary: `تسجيل درجة اختبار تجويد لـ${student?.name ?? ''} (${score}٪)`,
+        studentName: student?.name,
       });
     }
   }
