@@ -799,13 +799,23 @@ export class SessionPage {
   departureOf(studentId: string): string {
     return this.attOf(studentId)?.departureTime ?? '';
   }
-  setArrival(studentId: string, e: Event): void {
+  async setArrival(studentId: string, e: Event): Promise<void> {
     const v = (e.target as HTMLInputElement).value;
-    void this.data.setAttendanceTime(this.id, studentId, { arrivalTime: v });
+    try {
+      await this.data.setAttendanceTime(this.id, studentId, { arrivalTime: v });
+    } catch (err) {
+      console.error(err);
+      this.notify.error('تعذّر حفظ وقت الحضور');
+    }
   }
-  setDeparture(studentId: string, e: Event): void {
+  async setDeparture(studentId: string, e: Event): Promise<void> {
     const v = (e.target as HTMLInputElement).value;
-    void this.data.setAttendanceTime(this.id, studentId, { departureTime: v });
+    try {
+      await this.data.setAttendanceTime(this.id, studentId, { departureTime: v });
+    } catch (err) {
+      console.error(err);
+      this.notify.error('تعذّر حفظ وقت الانصراف');
+    }
   }
   /** ملخّص السرد لطالب: الأجزاء المكتملة، وكم منها سُرِد، وكم بانتظار السرد. */
   serdOf(st: { id: string; memorizedSurahs?: number[] }): {
@@ -878,16 +888,25 @@ export class SessionPage {
 
   async setStatus(status: 'open' | 'closed'): Promise<void> {
     // عند إنهاء الجلسة نملأ وقت انصراف كلّ حاضر/متأخّر لم يُسجَّل له انصراف بعد.
+    // فشل هذا التعبئة التلقائيّة (اتصال ضعيف مثلًا) لا يجب أن يمنع إنهاء
+    // الجلسة نفسه — كانت العمليّة السابقة تتوقّف بالكامل بصمت لو فشل أيّ
+    // طالب واحد ضمن Promise.all، فلا تُنهى الجلسة إطلاقًا بلا أيّ تنبيه.
     if (status === 'closed') {
       const t = nowHHMM();
-      await Promise.all(
-        (this.attendance() ?? [])
-          .filter((a) => (a.status === 'present' || a.status === 'late') && !a.departureTime)
-          .map((a) => this.data.setAttendanceTime(this.id, a.studentId, { departureTime: t })),
-      );
+      try {
+        await Promise.all(
+          (this.attendance() ?? [])
+            .filter((a) => (a.status === 'present' || a.status === 'late') && !a.departureTime)
+            .map((a) => this.data.setAttendanceTime(this.id, a.studentId, { departureTime: t })),
+        );
+      } catch (e) {
+        console.error(e);
+        this.notify.error('تعذّر تسجيل وقت انصراف بعض الطلّاب تلقائيًّا — يمكنك تعديله يدويًّا');
+      }
     }
     await this.notify.run(() => this.data.setSessionStatus(this.id, status), {
       success: status === 'closed' ? 'أُنهيت الجلسة' : 'أُعيد فتح الجلسة',
+      error: 'تعذّر تغيير حالة الجلسة',
     });
   }
 

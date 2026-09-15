@@ -3,11 +3,16 @@ rules_version = '2';
 // ==========================================================================
 //  قواعد أمان Firestore — الماهر
 //
-//  نموذج مبسّط ومشترك: كل معلّم مسجَّل الدخول يقرأ ويكتب البيانات المشتركة
-//  (الحلقات، الطلاب، الجلسات، الحضور، التسميع، التقييم). الحماية الأساسية:
-//  يجب أن يكون المستخدم مسجَّل الدخول عبر Firebase Authentication.
+//  عزل الحسابات (تعدّد المستأجرين، من v1.15.0): كل مستند إمّا:
+//    • بلا حقل ownerId  → مستند «قديم» في مساحة مشتركة، يقرأه ويكتبه أيّ
+//      معلّم مسجَّل الدخول — تمامًا كسلوك ما قبل v1.15.0، فلا يُمَسّ.
+//    • بحقل ownerId     → مستند حساب معزول، لا يقرأه أو يكتبه إلا صاحبه.
+//  كانت هذه القاعدة مطبَّقة سابقًا على مستوى العميل فقط (DataService.inScope)
+//  دون أيّ حماية فعليّة على الخادم — أيّ مستخدم مسجَّل دخول كان يقدر يقرأ أو
+//  يعدّل بيانات أيّ حساب آخر مباشرةً عبر Firestore SDK. أصبحت الآن مفروضة
+//  هنا فعليًّا (v1.21.1).
 //
-//  النشر مرة واحدة:  npm run firebase:rules
+//  النشر:  npm run firebase:rules
 // ==========================================================================
 
 service cloud.firestore {
@@ -17,15 +22,77 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // البيانات التعليمية المشتركة
-    match /circles/{id}      { allow read, write: if signedIn(); }
-    match /students/{id}     { allow read, write: if signedIn(); }
-    match /sessions/{id}     { allow read, write: if signedIn(); }
-    match /attendance/{id}   { allow read, write: if signedIn(); }
-    match /recitations/{id}  { allow read, write: if signedIn(); }
-    match /evaluations/{id}  { allow read, write: if signedIn(); }
-    match /serd/{id}         { allow read, write: if signedIn(); }
-    match /exams/{id}        { allow read, write: if signedIn(); }
+    /** صاحب المستند — مساحة مشتركة (بلا ownerId) أو مالكه فقط. */
+    function isOwner(data) {
+      return !('ownerId' in data) || data.ownerId == request.auth.uid;
+    }
+
+    /**
+     * كالسابقة، لكن تتسامح مع مستند غير موجود أصلًا (`resource == null`).
+     * ضروريّة لأنّ Firestore يُقيِّم القواعد حتى على get()/delete() لمستند
+     * غير موجود، وأيّ إشارة لـ `resource.data` حينها تُسبّب خطأ تقييم
+     * (يُعامَل كرفض) بدل السماح بقراءة نتيجتها «غير موجود» بشكل طبيعي —
+     * وهذا بالضبط ما كان يمنع `addManualSession`/`getOne` من العمل.
+     */
+    function isOwnerOrMissing(res) {
+      return res == null || isOwner(res.data);
+    }
+
+    /**
+     * مجموعات البيانات التعليميّة: قراءة/تعديل/حذف تتطلّب ملكية المستند
+     * الحاليّ (أو كونه مشتركًا قديمًا)، والتعديل يتطلّب أيضًا ألّا تنقل
+     * الكتابة الجديدة المستند لملكيّة معلّم آخر (لا يمكن تحويل ownerId
+     * لحساب غيرك). الإنشاء يتطلّب أن يكون المستند الجديد بلا ownerId
+     * (حساب قديم) أو بـ ownerId يساوي كاتبه بالضبط (لا يمكن انتحال حساب آخر).
+     */
+    match /circles/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /students/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /sessions/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /attendance/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /recitations/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /evaluations/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /serd/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+    match /exams/{id} {
+      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+    }
+
+    /** سجل الحركات (v1.21.0) — دائم لا يُحذف أبدًا، حتى من صاحبه (يُستعاد بتعليمه restoredAt فقط، لا بالحذف). */
+    match /activityLog/{id} {
+      allow read: if signedIn() && isOwnerOrMissing(resource);
+      allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
+      allow create: if signedIn() && isOwner(request.resource.data);
+      allow delete: if false;
+    }
 
     // ملفّات المعلّمين (اسم/جوال) — كلٌّ يعدّل ملفّه، ويقرأ الجميع
     match /teachers/{uid} {
@@ -33,9 +100,11 @@ service cloud.firestore {
       allow write: if signedIn() && request.auth.uid == uid;
     }
 
-    // أي مجموعة أخرى مستقبلًا: مسجَّل الدخول فقط
-    match /{document=**} {
-      allow read, write: if signedIn();
-    }
+    // عمدًا بلا قاعدة عامّة شاملة (`match /{document=**}`) في آخر الملفّ:
+    // قواعد Firestore تُقيَّم كـ OR بين كلّ match تطابق نفس المسار، فأيّ
+    // قاعدة عامّة هنا كانت ستُبطل كلّ قواعد isOwner أعلاه (هذا بالضبط ما
+    // كشفه اختبار العزل بين الحسابات — راجع v1.21.1). أيّ مسار غير مذكور
+    // صراحةً أعلاه يُرفَض تلقائيًّا افتراضيًّا — وهذا هو السلوك الصحيح؛ عند
+    // إضافة مجموعة جديدة أضِف لها قاعدة isOwner صريحة فوق، لا قاعدة عامّة.
   }
 }

@@ -13,6 +13,7 @@ import {
   where,
   writeBatch,
   deleteField,
+  arrayUnion,
   type CollectionReference,
   type DocumentReference,
   type Query,
@@ -384,12 +385,32 @@ export class DataService {
     return this.inScope([{ id: s.id, ...(s.data() as object) } as T])[0] ?? null;
   }
 
+  /**
+   * كـ`getOne` لكن تتسامح مع فشل القراءة (بلا اتصال وبلا نسخة محليّة مخزَّنة
+   * لهذا المستند تحديدًا، فيرمي Firestore خطأً بدل إرجاع نتيجة فارغة).
+   * تُستخدم حصرًا لقراءة «الحالة السابقة» لأغراض سجلّ التدقيق قبل حفظ/حذف —
+   * يجب ألّا يمنع تعذّر هذه القراءة تنفيذ العمليّة الأساسيّة نفسها، وإلا
+   * توقّف الحفظ/الحذف عن العمل بلا اتصال (كان يعمل قبل v1.21.0)، فقط يخسر
+   * تسجيل حركة التدقيق لتلك المرّة تحديدًا.
+   */
+  private async getOneForAudit<T extends { id: string; ownerId?: string }>(
+    coll: string,
+    id: string,
+  ): Promise<T | null> {
+    try {
+      return await this.getOne<T>(coll, id);
+    } catch (e) {
+      console.warn('تعذّرت قراءة الحالة السابقة لسجل التدقيق (على الأرجح بلا اتصال):', e);
+      return null;
+    }
+  }
+
   async getSession(id: string): Promise<Session | null> {
     return this.getOne<Session>(COL.sessions, id);
   }
 
   async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
-    const before = await this.getOne<Session>(COL.sessions, id);
+    const before = await this.getOneForAudit<Session>(COL.sessions, id);
     await updateDoc(this.ref(COL.sessions, id), {
       status,
       ...(status === 'closed' ? { closedAt: Date.now() } : {}),
@@ -400,7 +421,7 @@ export class DataService {
         target: 'session',
         summary: `${status === 'closed' ? 'إنهاء' : 'إعادة فتح'} جلسة ${before.date}`,
         fieldChanges: [
-          { field: 'status', label: 'حالة الجلسة', before: before.status, after: status },
+          { field: 'sessionStatus', label: 'حالة الجلسة', before: before.status, after: status },
         ],
         snapshots: [
           { collectionName: COL.sessions, id, data: before as unknown as Record<string, unknown> },
@@ -416,15 +437,40 @@ export class DataService {
 
   /** حذف الجلسة وكل حضورها وتسميعها */
   async deleteSession(id: string): Promise<void> {
-    const [att, rec] = await Promise.all([
+    const [sessionSnap, att, rec] = await Promise.all([
+      getDoc(this.ref(COL.sessions, id)),
       getDocs(query(this.col(COL.attendance), where('sessionId', '==', id))),
       getDocs(query(this.col(COL.recitations), where('sessionId', '==', id))),
     ]);
-    await Promise.all([
-      ...att.docs.map((d) => deleteDoc(d.ref)),
-      ...rec.docs.map((d) => deleteDoc(d.ref)),
-      deleteDoc(this.ref(COL.sessions, id)),
-    ]);
+    const snapshots: ActivitySnapshot[] = [];
+    if (sessionSnap.exists()) {
+      snapshots.push({
+        collectionName: COL.sessions,
+        id,
+        data: sessionSnap.data() as Record<string, unknown>,
+      });
+    }
+    const ops: Parameters<DataService['runBatched']>[0] = [];
+    for (const [collectionName, docs] of [
+      [COL.attendance, att.docs],
+      [COL.recitations, rec.docs],
+    ] as const) {
+      for (const d of docs) {
+        snapshots.push({ collectionName, id: d.id, data: d.data() as Record<string, unknown> });
+        ops.push({ kind: 'delete', ref: d.ref });
+      }
+    }
+    ops.push({ kind: 'delete', ref: this.ref(COL.sessions, id) });
+    await this.runBatched(ops);
+
+    const label = (sessionSnap.data() as Session | undefined)?.date ?? 'جلسة محذوفة';
+    await this.logActivity({
+      action: 'delete',
+      target: 'session',
+      summary: `حذف جلسة ${label} وكلّ حضورها وتسميعها (${Math.max(0, snapshots.length - 1)} سجلًّا مرتبطًا)`,
+      snapshots,
+      sessionLabel: label,
+    });
   }
 
   // ---------- سجلات ضمن جلسة ----------
@@ -456,7 +502,7 @@ export class DataService {
     departureTime?: string;
   }): Promise<void> {
     const id = `${input.sessionId}_${input.studentId}`;
-    const before = await this.getOne<AttendanceRecord>(COL.attendance, id);
+    const before = await this.getOneForAudit<AttendanceRecord>(COL.attendance, id);
     await setDoc(
       this.ref(COL.attendance, id),
       this.owned(clean({ ...input, createdAt: Date.now() })),
@@ -503,7 +549,7 @@ export class DataService {
     input: NewRecitation,
   ): Promise<void> {
     const id = `${sessionId}_${studentId}`;
-    const before = await this.getOne<RecitationRecord>(COL.recitations, id);
+    const before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
     await setDoc(
       this.ref(COL.recitations, id),
       this.owned({ ...clean(input), createdAt: Date.now() }),
@@ -643,7 +689,7 @@ export class DataService {
   }
 
   async updateCircle(id: string, patch: Partial<NewCircle>): Promise<void> {
-    const before = await this.getOne<Circle>(COL.circles, id);
+    const before = await this.getOneForAudit<Circle>(COL.circles, id);
     const next: Record<string, unknown> = { ...patch };
     if (patch.name !== undefined) next['name'] = patch.name.trim();
     if (patch.weekdays !== undefined) next['weekdays'] = [...patch.weekdays].sort((a, b) => a - b);
@@ -854,7 +900,7 @@ export class DataService {
   }
 
   async updateStudent(id: string, patch: Partial<NewStudent>): Promise<void> {
-    const before = await this.getOne<Student>(COL.students, id);
+    const before = await this.getOneForAudit<Student>(COL.students, id);
     await updateDoc(this.ref(COL.students, id), clean(patch));
     if (before) {
       const changes = diffFields(
@@ -882,7 +928,7 @@ export class DataService {
   }
 
   async setStudentActive(id: string, active: boolean): Promise<void> {
-    const before = await this.getOne<Student>(COL.students, id);
+    const before = await this.getOneForAudit<Student>(COL.students, id);
     await updateDoc(this.ref(COL.students, id), { active });
     if (before && before.active !== active) {
       await this.logActivity({
@@ -942,24 +988,30 @@ export class DataService {
    * يُستدعى تلقائيًّا عند تسجيل «حفظ جديد» في الجلسة/التسميع.
    * يُرجع عدد السور المضافة والأجزاء التي اكتملت حفظًا بهذه الإضافة.
    */
+  /**
+   * يضمّ سورًا لمقرّر الطالب بكتابة ذرّيّة (`arrayUnion`) بدل قراءة-تعديل-كتابة
+   * كاملة الصفيف — لا تُفقد أيّ سورة أضافتها كتابة متزامنة أخرى (جهازان/جلستان
+   * تحفظان لنفس الطالب في نفس اللحظة)، ولا تتعطّل الكتابة نفسها بلا اتصال.
+   * قراءة «قبل» هنا (لحساب added/completedJuz فقط، للتنبيه في الواجهة) تتسامح
+   * مع الفشل — قد تُقدَّر الأرقام المُعادة تقريبيًّا حينها، لكن البيانات
+   * الفعليّة تبقى صحيحة دائمًا بفضل arrayUnion.
+   */
   async mergeStudentMemorizedSurahs(
     studentId: string,
     surahs: number[],
   ): Promise<{ added: number; completedJuz: number[] }> {
     const valid = surahs.filter((n) => Number.isInteger(n) && n >= 1 && n <= 114);
     if (valid.length === 0) return { added: 0, completedJuz: [] };
-    const student = await this.getStudent(studentId);
-    if (!student) return { added: 0, completedJuz: [] };
-    const prev = student.memorizedSurahs ?? [];
-    const set = new Set(prev);
-    const before = set.size;
-    valid.forEach((n) => set.add(n));
-    if (set.size === before) return { added: 0, completedJuz: [] };
-    const next = [...set].sort((a, b) => a - b);
-    await updateDoc(this.ref(COL.students, studentId), { memorizedSurahs: next });
+    const before = await this.getOneForAudit<Student>(COL.students, studentId);
+    const prev = before?.memorizedSurahs ?? [];
+    const prevSet = new Set(prev);
+    const newOnes = valid.filter((n) => !prevSet.has(n));
+    await updateDoc(this.ref(COL.students, studentId), { memorizedSurahs: arrayUnion(...valid) });
+    if (newOnes.length === 0) return { added: 0, completedJuz: [] };
+    const next = [...new Set([...prev, ...newOnes])];
     const wasComplete = new Set(completedJuz(prev));
     const newlyComplete = completedJuz(next).filter((j) => !wasComplete.has(j));
-    return { added: set.size - before, completedJuz: newlyComplete };
+    return { added: newOnes.length, completedJuz: newlyComplete };
   }
 
   // ---------- السرد (مراجعة الأجزاء المحفوظة) ----------
@@ -994,7 +1046,7 @@ export class DataService {
   }
 
   async deleteSerd(id: string): Promise<void> {
-    const before = await this.getOne<SerdRecord>(COL.serd, id);
+    const before = await this.getOneForAudit<SerdRecord>(COL.serd, id);
     await deleteDoc(this.ref(COL.serd, id));
     if (before) {
       const student = await this.getStudent(before.studentId);
@@ -1042,7 +1094,7 @@ export class DataService {
   }
 
   async deleteExam(id: string): Promise<void> {
-    const before = await this.getOne<ExamRecord>(COL.exams, id);
+    const before = await this.getOneForAudit<ExamRecord>(COL.exams, id);
     await deleteDoc(this.ref(COL.exams, id));
     if (before) {
       const student = await this.getStudent(before.studentId);
@@ -1063,6 +1115,14 @@ export class DataService {
       this.col(COL.recitations),
       this.owned({ ...clean(input), createdAt: Date.now() }),
     );
+    const student = await this.getStudent(input.studentId).catch(() => null);
+    await this.logActivity({
+      action: 'create',
+      target: 'recitation',
+      summary: `تسجيل تسميع ${student?.name ?? ''}`,
+      studentName: student?.name,
+      sessionLabel: input.date,
+    });
     return created.id;
   }
 
@@ -1071,11 +1131,19 @@ export class DataService {
       this.col(COL.evaluations),
       this.owned({ ...clean(input), createdAt: Date.now() }),
     );
+    const student = await this.getStudent(input.studentId).catch(() => null);
+    await this.logActivity({
+      action: 'create',
+      target: 'evaluation',
+      summary: `تسجيل تقييم يوميّ لـ${student?.name ?? ''}`,
+      studentName: student?.name,
+      sessionLabel: input.date,
+    });
     return created.id;
   }
 
   async deleteRecitation(id: string): Promise<void> {
-    const before = await this.getOne<RecitationRecord>(COL.recitations, id);
+    const before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
     await deleteDoc(this.ref(COL.recitations, id));
     if (before) {
       const student = await this.getStudent(before.studentId);
@@ -1097,7 +1165,7 @@ export class DataService {
   }
 
   async deleteEvaluation(id: string): Promise<void> {
-    const before = await this.getOne<EvaluationRecord>(COL.evaluations, id);
+    const before = await this.getOneForAudit<EvaluationRecord>(COL.evaluations, id);
     await deleteDoc(this.ref(COL.evaluations, id));
     if (before) {
       const student = await this.getStudent(before.studentId);

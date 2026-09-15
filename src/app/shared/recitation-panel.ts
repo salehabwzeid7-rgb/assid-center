@@ -839,20 +839,27 @@ export class RecitationPanelComponent implements OnInit {
     this.saving.set(false);
     if (!ok) return;
 
-    // «حفظ جديد» يُضيف السور تلقائيًّا إلى مقرّر الطالب وينبّه عند اكتمال جزء
+    // «حفظ جديد» يُضيف السور تلقائيًّا إلى مقرّر الطالب وينبّه عند اكتمال جزء.
+    // التسميع نفسه حُفظ بنجاح بالفعل (التوست أعلاه) — فشل هذه الخطوة الثانويّة
+    // (اتصال ضعيف مثلًا) يجب أن يظهر بوضوح لا أن يختفي بصمت وسط نجاح ظاهريّ.
     if (this.m.kind === 'new') {
-      const { added, completedJuz } = await this.data.mergeStudentMemorizedSurahs(
-        this.studentId(),
-        surahsBetween(fromSurah, toSurah),
-      );
-      if (added > 0) {
-        this.notify.success(
-          added === 1 ? 'أُضيفت سورة إلى مقرّر الطالب' : `أُضيفت ${added} سور إلى مقرّر الطالب`,
+      try {
+        const { added, completedJuz } = await this.data.mergeStudentMemorizedSurahs(
+          this.studentId(),
+          surahsBetween(fromSurah, toSurah),
         );
-      }
-      if (completedJuz.length > 0) {
-        const jz = completedJuz.map((j) => `الجزء ${j}`).join(' و');
-        this.notify.info(`🎉 أكمل الطالب حفظ ${jz} — سجّل السرد والاختبار من صفحتيهما.`);
+        if (added > 0) {
+          this.notify.success(
+            added === 1 ? 'أُضيفت سورة إلى مقرّر الطالب' : `أُضيفت ${added} سور إلى مقرّر الطالب`,
+          );
+        }
+        if (completedJuz.length > 0) {
+          const jz = completedJuz.map((j) => `الجزء ${j}`).join(' و');
+          this.notify.info(`🎉 أكمل الطالب حفظ ${jz} — سجّل السرد والاختبار من صفحتيهما.`);
+        }
+      } catch (e) {
+        console.error(e);
+        this.notify.error('حُفظ التسميع، لكن تعذّر تحديث مقرّر الطالب — أعِد فتح السجلّ للتأكّد');
       }
     }
   }

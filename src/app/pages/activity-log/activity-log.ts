@@ -7,6 +7,7 @@ import {
   ACTIVITY_TARGET_LABELS,
   ATTENDANCE_LABELS,
   RECITATION_KIND_LABELS,
+  SESSION_STATUS_LABELS,
   type ActivityAction,
   type ActivityLogEntry,
 } from '../../core/models';
@@ -34,6 +35,9 @@ function formatFieldValue(field: string, v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
   if (field === 'status' && typeof v === 'string' && v in ATTENDANCE_LABELS) {
     return ATTENDANCE_LABELS[v as keyof typeof ATTENDANCE_LABELS];
+  }
+  if (field === 'sessionStatus' && typeof v === 'string' && v in SESSION_STATUS_LABELS) {
+    return SESSION_STATUS_LABELS[v as keyof typeof SESSION_STATUS_LABELS];
   }
   if (field === 'kind' && typeof v === 'string' && v in RECITATION_KIND_LABELS) {
     return RECITATION_KIND_LABELS[v as keyof typeof RECITATION_KIND_LABELS];

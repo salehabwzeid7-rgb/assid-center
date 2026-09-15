@@ -80,9 +80,13 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
         @if (editing()) {
           <label class="row-between" style="cursor:pointer">
-            <span>الطالب نشط في الحلقة</span>
+            <span>الطالب نشط</span>
             <input type="checkbox" name="active" [(ngModel)]="m.active" />
           </label>
+          <p class="hint" style="margin:4px 0 0">
+            يشمل هذا كلّ حلقات الطالب — إلغاء تفعيله يُخفيه من كلّ القوائم والإحصائيّات النشطة في
+            كلّ حلقة مسجَّل فيها، لا حلقة واحدة فقط.
+          </p>
           <div class="divider"></div>
         }
 

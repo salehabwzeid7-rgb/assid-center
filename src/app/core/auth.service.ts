@@ -14,7 +14,7 @@ import {
   sendPasswordResetEmail,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { TEACHERS, type Teacher } from './models';
 
@@ -180,27 +180,30 @@ export class AuthService {
     this.teacher.set({ id: u.uid, ...fresh });
   }
 
-  /** تحديث بيانات المعلّم (الاسم/الجوال/رسائل تقرير الجلسة) — يحفظ `tenantId` كما هو. */
+  /**
+   * تحديث بيانات المعلّم (الاسم/الجوال/رسائل تقرير الجلسة) — تحديث جزئيّ
+   * (`updateDoc`) للحقول المُمرَّرة فقط، لا استبدال كامل للمستند. الاستبدال
+   * الكامل السابق كان يعتمد على النسخة المحليّة المخزَّنة (`this.teacher()`)
+   * كأساس، فلو عُدِّل المستند من جهاز آخر خلال نفس الجلسة، كان يُكتَب فوقه
+   * ويُلغى تعديل الجهاز الآخر بصمت رغم أنّ هذا الجهاز لم يمسّ تلك الحقول.
+   */
   async updateTeacher(
     patch: Partial<Pick<Teacher, 'name' | 'phone' | 'reportIntro' | 'reportOutro'>>,
   ): Promise<void> {
     const u = this.user();
     const current = this.teacher();
     if (!u || !current) return;
-    const next: Teacher = { ...current, ...patch };
-    const doc_: Record<string, unknown> = {
-      name: next.name,
-      email: next.email,
-      phone: next.phone ?? '',
-      reportIntro: next.reportIntro ?? '',
-      reportOutro: next.reportOutro ?? '',
-      createdAt: next.createdAt,
-    };
-    if (next.tenantId) doc_['tenantId'] = next.tenantId;
-    await setDoc(doc(db, TEACHERS, u.uid), doc_);
+    const fields: Record<string, unknown> = {};
+    if (patch.name !== undefined) fields['name'] = patch.name;
+    if (patch.phone !== undefined) fields['phone'] = patch.phone;
+    if (patch.reportIntro !== undefined) fields['reportIntro'] = patch.reportIntro;
+    if (patch.reportOutro !== undefined) fields['reportOutro'] = patch.reportOutro;
+    if (Object.keys(fields).length > 0) {
+      await updateDoc(doc(db, TEACHERS, u.uid), fields);
+    }
     if (patch.name && patch.name !== u.displayName) {
       await updateProfile(u, { displayName: patch.name });
     }
-    this.teacher.set(next);
+    this.teacher.set({ ...current, ...patch });
   }
 }
