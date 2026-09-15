@@ -623,12 +623,32 @@ export class DataService {
     return this.live<RecitationRecord>(q, destroyRef, this.byDateDesc);
   }
 
+  /**
+   * سجلّ حضور الطالب — بمقعد واحد لكلّ تاريخ. حصص قديمة أُنشئت بمعرّف عشوائيّ
+   * (قبل اعتماد المعرّف الثابت «{circleId}_{date}» — راجع `addManualSession`)
+   * قد تتعايش مع حصّة أحدث بالمعرّف الثابت لنفس اليوم، فيحمل الطالب سجلّي
+   * حضور منفصلين (بمعرّفي مستند مختلفين) لنفس التاريخ — أحيانًا بحالتين
+   * متعارضتين (حاضر في أحدهما وغائب في الآخر)، فيظهر الطالب «حاضرًا وغائبًا
+   * معًا» في نفس اليوم. نُبقي هنا الأحدث كتابةً (`createdAt`) لكلّ تاريخ فقط،
+   * فلا يظهر تعارض أبدًا مهما كان أصل البيانات. آمنة تمامًا حين لا يوجد
+   * تكرار أصلًا (الحالة الطبيعيّة) — لا تُغيّر شيئًا حينها.
+   */
   studentAttendance(
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<AttendanceRecord[] | undefined> {
     const q = query(this.col(COL.attendance), where('studentId', '==', studentId));
-    return this.live<AttendanceRecord>(q, destroyRef, this.byDateDesc);
+    const raw = this.live<AttendanceRecord>(q, destroyRef, this.byDateDesc);
+    return computed(() => {
+      const list = raw();
+      if (list === undefined) return undefined;
+      const byDate = new Map<string, AttendanceRecord>();
+      for (const a of list) {
+        const existing = byDate.get(a.date);
+        if (!existing || a.createdAt > existing.createdAt) byDate.set(a.date, a);
+      }
+      return [...byDate.values()].sort(this.byDateDesc);
+    });
   }
 
   studentEvaluations(
@@ -641,12 +661,24 @@ export class DataService {
 
   // ---------- سجلات الحلقة (للإحصائيات) ----------
 
+  /** كالسابقة — مقعد واحد لكلّ (طالب، تاريخ) لنفس السبب الموثَّق في `studentAttendance`. */
   circleAttendance(
     circleId: string,
     destroyRef?: DestroyRef,
   ): Signal<AttendanceRecord[] | undefined> {
     const q = query(this.col(COL.attendance), where('circleId', '==', circleId));
-    return this.live<AttendanceRecord>(q, destroyRef);
+    const raw = this.live<AttendanceRecord>(q, destroyRef);
+    return computed(() => {
+      const list = raw();
+      if (list === undefined) return undefined;
+      const byKey = new Map<string, AttendanceRecord>();
+      for (const a of list) {
+        const key = `${a.studentId}_${a.date}`;
+        const existing = byKey.get(key);
+        if (!existing || a.createdAt > existing.createdAt) byKey.set(key, a);
+      }
+      return [...byKey.values()];
+    });
   }
 
   circleRecitations(
@@ -659,14 +691,36 @@ export class DataService {
 
   // ---------- للوحة الرئيسية ----------
 
+  /** كالسابقة — مقعد واحد لكلّ طالب في هذا التاريخ لنفس السبب الموثَّق في `studentAttendance`. */
   attendanceForDate(date: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
     const q = query(this.col(COL.attendance), where('date', '==', date));
-    return this.live<AttendanceRecord>(q, destroyRef);
+    const raw = this.live<AttendanceRecord>(q, destroyRef);
+    return computed(() => {
+      const list = raw();
+      if (list === undefined) return undefined;
+      const byStudent = new Map<string, AttendanceRecord>();
+      for (const a of list) {
+        const existing = byStudent.get(a.studentId);
+        if (!existing || a.createdAt > existing.createdAt) byStudent.set(a.studentId, a);
+      }
+      return [...byStudent.values()];
+    });
   }
 
-  /** كل سجلات الحضور (لحساب معدّل الحضور العام في البانر). */
+  /** كل سجلات الحضور (لحساب معدّل الحضور العام في البانر) — مقعد واحد لكلّ (طالب، تاريخ). */
   allAttendance(destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
-    return this.live<AttendanceRecord>(query(this.col(COL.attendance)), destroyRef);
+    const raw = this.live<AttendanceRecord>(query(this.col(COL.attendance)), destroyRef);
+    return computed(() => {
+      const list = raw();
+      if (list === undefined) return undefined;
+      const byKey = new Map<string, AttendanceRecord>();
+      for (const a of list) {
+        const key = `${a.studentId}_${a.date}`;
+        const existing = byKey.get(key);
+        if (!existing || a.createdAt > existing.createdAt) byKey.set(key, a);
+      }
+      return [...byKey.values()];
+    });
   }
 
   recitationsForDate(
