@@ -74,6 +74,8 @@ const RECITATION_DIFF_FIELDS: DiffField[] = [
   { key: 'score', label: 'النسبة' },
   { key: 'hifzErrors', label: 'أخطاء الحفظ' },
   { key: 'tajweedErrors', label: 'أخطاء التجويد' },
+  { key: 'promptCount', label: 'التردّد' },
+  { key: 'rating', label: 'التقييم' },
   { key: 'notRecited', label: 'لم يسمّع' },
   { key: 'notes', label: 'ملاحظات التسميع' },
 ];

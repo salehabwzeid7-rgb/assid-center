@@ -15,6 +15,7 @@ import {
   TASMIE_PASS,
   circleLabel,
   isActualRecitation,
+  ratingLabel,
   scoreOf,
   studentCircleIds,
   type AttendanceRecord,
@@ -29,12 +30,24 @@ import { fmt12, isValidHHMM, nowHHMM } from '../../core/time';
 import { completedJuz, surahName } from '../../core/quran-data';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { RecitationPanelComponent } from '../../shared/recitation-panel';
+import {
+  ReportImageComponent,
+  type ReportImageMeta,
+  type ReportImagePage,
+  type ReportImageSegment,
+} from '../../shared/report-image';
 
 type Step = 'attendance' | 'summary' | 'serd';
 
 @Component({
   selector: 'app-session',
-  imports: [FormsModule, RouterLink, PageHeaderComponent, RecitationPanelComponent],
+  imports: [
+    FormsModule,
+    RouterLink,
+    PageHeaderComponent,
+    RecitationPanelComponent,
+    ReportImageComponent,
+  ],
   template: `
     <app-page-header [title]="'جلسة ' + dateLabel()" />
 
@@ -358,6 +371,18 @@ type Step = 'attendance' | 'summary' | 'serd';
                 </button>
                 <button class="btn btn-ghost" type="button" (click)="copyReport()">📋 نسخ</button>
               </div>
+            </div>
+
+            <!-- تقرير مصوَّر (صورة قابلة للمشاركة) — جدول مقسَّم بحدّ أقصى ١٥ طالبًا لكل صورة -->
+            <div class="card report-card" style="margin-top:12px">
+              <div class="row-between" style="margin-bottom:8px">
+                <b>تقرير مصوَّر (صورة)</b>
+              </div>
+              <p class="muted" style="margin:0 0 8px;font-size:.82rem">
+                نفس بيانات التقرير أعلاه بصيغة صورة جدول، مقسَّمة تلقائيًّا بحدّ أقصى ١٥ طالبًا لكلّ
+                صورة — تصلح للمشاركة مباشرةً في واتساب أو التنزيل.
+              </p>
+              <app-report-image [pages]="reportImagePages()" [meta]="reportImageMeta()" />
             </div>
 
             <a
@@ -685,15 +710,22 @@ export class SessionPage {
   private attendanceLine(a: AttendanceRecord | null, s: Session): string {
     if (!a) return 'لم يُسجَّل';
     const label = ATTENDANCE_LABELS[a.status];
-    if (a.status === 'present' || a.status === 'late') {
-      const fromRaw = isValidHHMM(a.arrivalTime) ? a.arrivalTime : s.fromTime;
-      const toRaw = isValidHHMM(a.departureTime) ? a.departureTime : s.toTime;
-      const from = isValidHHMM(fromRaw) ? fmt12(fromRaw) : '';
-      const to = isValidHHMM(toRaw) ? fmt12(toRaw) : '';
-      const span = from && to ? ` (${from} – ${to})` : from ? ` (حضر ${from})` : '';
-      return label + span;
-    }
-    return label;
+    const span = this.attendanceTimeSpan(a, s);
+    return span ? `${label} (${span})` : label;
+  }
+
+  /**
+   * مدى وقت الحضور/الانصراف وحده («٤:٠٠ م – ٥:٠٠ م») بلا اسم الحالة —
+   * يُستخدم في عمود «الحضور» بالتقرير المصوَّر حيث الحالة نفسها عمود منفصل.
+   * نفس منطق الرجوع لتوقيت الحصّة الافتراضيّ أعلاه، منطق واحد فقط.
+   */
+  private attendanceTimeSpan(a: AttendanceRecord | null, s: Session): string {
+    if (!a || (a.status !== 'present' && a.status !== 'late')) return '';
+    const fromRaw = isValidHHMM(a.arrivalTime) ? a.arrivalTime : s.fromTime;
+    const toRaw = isValidHHMM(a.departureTime) ? a.departureTime : s.toTime;
+    const from = isValidHHMM(fromRaw) ? fmt12(fromRaw) : '';
+    const to = isValidHHMM(toRaw) ? fmt12(toRaw) : '';
+    return from && to ? `${from} – ${to}` : from ? `حضر ${from}` : '';
   }
 
   private studentBlock(index: number, st: Student, s: Session): string {
@@ -708,11 +740,14 @@ export class SessionPage {
         // سطر منفصل لكلّ نوع، موسومًا باسمه حتى لا يلتبس بغيره.
         for (const r of actual) {
           const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
+          const score = scoreOf(r);
           lines.push(
-            `• التسميع (${this.kindLabels[r.kind]}): ${r.pages} وجه — ${scoreOf(r)}٪ (${range})`,
+            `• التسميع (${this.kindLabels[r.kind]}): ${r.pages} وجه — ${score}٪ (${ratingLabel(score, r.rating)}) (${range})`,
           );
-          if (r.hifzErrors || r.tajweedErrors) {
-            lines.push(`  الأخطاء: حفظ ${r.hifzErrors} · تجويد ${r.tajweedErrors}`);
+          if (r.hifzErrors || r.tajweedErrors || r.promptCount) {
+            lines.push(
+              `  الأخطاء: خطأ ${r.hifzErrors} · تجويد ${r.tajweedErrors} · تردّد ${r.promptCount}`,
+            );
           }
           if (r.notes?.trim()) lines.push(`  ملاحظة: ${r.notes.trim()}`);
         }
@@ -761,6 +796,72 @@ export class SessionPage {
     const rule = '━━━━━━━━━━━━';
     const blocks = students.map((st, i) => this.studentBlock(i + 1, st, s));
     return [intro, '', header, totals, rule, '', blocks.join('\n\n'), '', rule, outro].join('\n');
+  });
+
+  /** أقصى عدد طلّاب في كلّ صورة تقرير — طلب صريح من المستخدم، ثابت غير قابل للتعديل. */
+  private readonly REPORT_IMAGE_PAGE_SIZE = 15;
+
+  /** ترويسة التقرير المصوَّر — نفس عنوان/إجماليّ التقرير النصّيّ بلا أيقونة الرمز التعبيريّ. */
+  readonly reportImageMeta = computed<ReportImageMeta>(() => {
+    const s = this.session();
+    const n = this.students()?.length ?? 0;
+    if (!s) return { title: '', totals: '' };
+    return {
+      title: `${circleLabel(this.circle())} — ${weekdayAr(s.date)} ${dmy(s.date)}`,
+      totals: `الحضور: ${this.presentTotal()}/${n} · التسميع: ${this.recitedTotal()}/${n}`,
+    };
+  });
+
+  /**
+   * صفحات التقرير المصوَّر — ١٥ طالبًا كحدّ أقصى لكلّ صفحة/صورة (طلب صريح)،
+   * بنفس ترتيب `reportStudentsOrder` (سمّعوا ← لم يسمّعوا ← غائبون، أبجديًّا
+   * داخل كلّ مجموعة). كلّ طالب صفّ واحد (لا يُحتسَب تعدّد التسميعات ضمن حدّ
+   * الـ١٥ — تظهر كمقاطع إضافيّة داخل نفس الصفّ عبر `rowspan`).
+   */
+  readonly reportImagePages = computed<ReportImagePage[]>(() => {
+    const s = this.session();
+    if (!s) return [];
+    const ordered = this.reportStudentsOrder();
+    const rows = ordered.map((st, i) => {
+      const a = this.attOf(st.id);
+      const actual = this.recsOf(st.id).filter(isActualRecitation);
+      const attendanceLabel = this.attendanceTimeSpan(a, s);
+      let segments: ReportImageSegment[];
+      if (actual.length > 0) {
+        segments = actual.map((r) => {
+          const score = scoreOf(r);
+          return {
+            detail: `${this.kindLabels[r.kind]}: ${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
+            hesitation: r.promptCount,
+            mistakes: r.hifzErrors,
+            rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
+            notes: r.notes?.trim() || undefined,
+          };
+        });
+      } else if (a?.status === 'absent') {
+        segments = [{ placeholderText: 'غائب', placeholderClass: 'absent' }];
+      } else if (a?.status === 'present' || a?.status === 'late') {
+        segments = [{ placeholderText: 'لم يسمع', placeholderClass: 'not-recited' }];
+      } else {
+        segments = [
+          {
+            placeholderText: a ? ATTENDANCE_LABELS[a.status] : 'لم يُسجَّل',
+            placeholderClass: 'not-recited',
+          },
+        ];
+      }
+      return { index: i + 1, name: st.name, attendanceLabel, segments };
+    });
+    const size = this.REPORT_IMAGE_PAGE_SIZE;
+    const chunks: ReportImagePage[] = [];
+    for (let i = 0; i < rows.length; i += size) {
+      chunks.push({ pageNumber: 0, totalPages: 0, rows: rows.slice(i, i + size) });
+    }
+    chunks.forEach((p, i) => {
+      p.pageNumber = i + 1;
+      p.totalPages = chunks.length;
+    });
+    return chunks;
   });
 
   /**

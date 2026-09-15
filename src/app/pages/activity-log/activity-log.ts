@@ -29,6 +29,10 @@ const RANGE_LABELS: Record<RangeFilter, string> = {
   month: 'آخر شهر',
   all: 'كل الوقت',
 };
+const RATING_LABELS: Record<'very_good' | 'excellent', string> = {
+  very_good: 'جيد جدًّا',
+  excellent: 'ممتاز',
+};
 
 /** يحوّل قيمة حقل خامّة إلى نصّ عربيّ مقروء — يعرف بعض الحقول الشائعة، وإلا يعرضها كما هي. */
 function formatFieldValue(field: string, v: unknown): string {
@@ -41,6 +45,9 @@ function formatFieldValue(field: string, v: unknown): string {
   }
   if (field === 'kind' && typeof v === 'string' && v in RECITATION_KIND_LABELS) {
     return RECITATION_KIND_LABELS[v as keyof typeof RECITATION_KIND_LABELS];
+  }
+  if (field === 'rating' && typeof v === 'string' && v in RATING_LABELS) {
+    return RATING_LABELS[v as keyof typeof RATING_LABELS];
   }
   if (typeof v === 'boolean') return v ? 'نعم' : 'لا';
   return String(v);

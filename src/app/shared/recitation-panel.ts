@@ -299,15 +299,60 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
         </div>
 
         <div class="rp-field">
-          <label>مرّات التلقين (الفتح على الطالب)</label>
-          <input
-            type="number"
-            inputmode="numeric"
-            min="0"
-            [(ngModel)]="m.promptCount"
-            [ngModelOptions]="{ standalone: true }"
-          />
+          <label>التردّد (التلقين على الطالب)</label>
+          <div class="err-tally">
+            <button
+              type="button"
+              class="rp-step"
+              (click)="bumpPrompt(-1)"
+              [disabled]="m.promptCount <= 0"
+              aria-label="إنقاص تردّد"
+            >
+              −
+            </button>
+            <input
+              class="err-count-in"
+              type="number"
+              inputmode="numeric"
+              min="0"
+              [(ngModel)]="m.promptCount"
+              [ngModelOptions]="{ standalone: true }"
+              aria-label="عدد مرّات التردّد"
+            />
+            <button
+              type="button"
+              class="rp-step err-tap"
+              (click)="bumpPrompt(1)"
+              aria-label="تسجيل تردّد"
+            >
+              +1
+            </button>
+          </div>
         </div>
+
+        @if (showRatingChoice()) {
+          <div class="rp-field">
+            <label>التقييم</label>
+            <div class="rating-choice">
+              <button
+                type="button"
+                class="rating-opt"
+                [class.active]="(m.rating ?? 'very_good') === 'very_good'"
+                (click)="setRating('very_good')"
+              >
+                جيد جدًّا
+              </button>
+              <button
+                type="button"
+                class="rating-opt"
+                [class.active]="m.rating === 'excellent'"
+                (click)="setRating('excellent')"
+              >
+                ممتاز
+              </button>
+            </div>
+          </div>
+        }
 
         <div class="rp-field">
           <label>ملاحظات المعلّم</label>
@@ -497,6 +542,25 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
         font-size: 0.9rem;
         font-weight: 800;
       }
+      .rating-choice {
+        display: flex;
+        gap: 8px;
+      }
+      .rating-opt {
+        flex: 1;
+        padding: 9px 6px;
+        border: 1px solid var(--green);
+        background: var(--surface);
+        color: var(--green);
+        border-radius: 9px;
+        font-size: 0.88rem;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .rating-opt.active {
+        background: var(--green);
+        color: #fff;
+      }
       .rp-timer-btns {
         display: flex;
         gap: 8px;
@@ -582,8 +646,12 @@ export class RecitationPanelComponent implements OnInit {
     hifzErrors: 0,
     tajweedErrors: 0,
     promptCount: 0,
+    rating: undefined as 'very_good' | 'excellent' | undefined,
     notes: '',
   };
+
+  /** يظهر اختيار التقييم اليدويّ فقط عند بلوغ الدرجة عتبة النجاح فأعلى. */
+  readonly showRatingChoice = computed(() => this.score() >= TASMIE_PASS);
   /** عدد الأوجه — إشارة مستقلّة لأنّ المؤقّت يتفاعل معها لحظيًّا. */
   readonly pages = signal(1);
 
@@ -730,6 +798,7 @@ export class RecitationPanelComponent implements OnInit {
       this.m.hifzErrors = 0;
       this.m.tajweedErrors = 0;
       this.m.promptCount = 0;
+      this.m.rating = undefined;
       this.m.notes = '';
       this.pages.set(1);
       this.score.set(TASMIE_PASS);
@@ -744,6 +813,7 @@ export class RecitationPanelComponent implements OnInit {
       this.m.hifzErrors = r.hifzErrors;
       this.m.tajweedErrors = r.tajweedErrors;
       this.m.promptCount = r.promptCount;
+      this.m.rating = r.rating;
       this.m.notes = r.notes ?? '';
       this.pages.set(r.pages);
       this.score.set(scoreOf(r));
@@ -795,6 +865,15 @@ export class RecitationPanelComponent implements OnInit {
   /** تسجيل خطأ تجويد بلمسة واحدة — نفس فكرة bumpHifz. */
   bumpTajweed(delta: number): void {
     this.m.tajweedErrors = Math.max(0, (Number(this.m.tajweedErrors) || 0) + delta);
+  }
+  /** تسجيل تردّد (تلقين) بلمسة واحدة — نفس فكرة bumpHifz. */
+  bumpPrompt(delta: number): void {
+    this.m.promptCount = Math.max(0, (Number(this.m.promptCount) || 0) + delta);
+  }
+
+  /** اختيار التقييم اليدويّ (جيد جدًّا/ممتاز) — متاح فقط عند بلوغ عتبة النجاح. */
+  setRating(rating: 'very_good' | 'excellent'): void {
+    this.m.rating = rating;
   }
 
   start(): void {
@@ -904,7 +983,8 @@ export class RecitationPanelComponent implements OnInit {
       score: this.score(),
       hifzErrors: this.clampErrorCount(this.m.hifzErrors),
       tajweedErrors: this.clampErrorCount(this.m.tajweedErrors),
-      promptCount: Number(this.m.promptCount) || 0,
+      promptCount: this.clampErrorCount(this.m.promptCount),
+      rating: this.score() >= this.tasmiePass ? (this.m.rating ?? 'very_good') : undefined,
       durationSec: this.elapsedSec() || undefined,
       notes: this.m.notes.trim() || undefined,
     };
