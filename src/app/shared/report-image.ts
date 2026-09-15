@@ -60,69 +60,78 @@ export interface ReportImageMeta {
         </div>
       }
 
-      <!-- الصفحات المصدرية (تُرسَم دائمًا في الشجرة الحيّة كي تلتقط html-to-image الأنماط الفعليّة) -->
-      @for (page of pages(); track page.pageNumber) {
-        <div class="ri-page" #pageEl [attr.data-page]="page.pageNumber">
-          <div class="ri-band"></div>
-          <div class="ri-header">
-            <div class="ri-title">{{ meta().title }}</div>
-            <div class="ri-totals">{{ meta().totals }}</div>
-            @if (page.totalPages > 1) {
-              <div class="ri-pageno">صفحة {{ page.pageNumber }} من {{ page.totalPages }}</div>
-            }
-          </div>
-          <table class="ri-table">
-            <thead>
-              <tr>
-                <th class="ri-c-idx">#</th>
-                <th class="ri-c-name">اسم الطالب</th>
-                <th class="ri-c-att">الحضور</th>
-                <th class="ri-c-detail">السورة (من – إلى)</th>
-                <th class="ri-c-num">تردّد</th>
-                <th class="ri-c-num">خطأ</th>
-                <th class="ri-c-rating">العلامة</th>
-                <th class="ri-c-notes">ملاحظات</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of page.rows; track row.index) {
-                @for (seg of row.segments; track $index) {
-                  <tr [class.ri-row-absent]="seg.placeholderClass === 'absent'">
-                    @if ($index === 0) {
-                      <td class="ri-c-idx" [attr.rowspan]="row.segments.length">
-                        {{ row.index }}
-                      </td>
-                      <td class="ri-c-name" [attr.rowspan]="row.segments.length">
-                        {{ row.name }}
-                      </td>
-                      <td class="ri-c-att" [attr.rowspan]="row.segments.length">
-                        {{ row.attendanceLabel || '—' }}
-                      </td>
-                    }
-                    @if (seg.placeholderText) {
-                      <td
-                        colspan="5"
-                        class="ri-placeholder"
-                        [class.ri-not-recited]="seg.placeholderClass === 'not-recited'"
-                        [class.ri-absent]="seg.placeholderClass === 'absent'"
-                      >
-                        {{ seg.placeholderText }}
-                      </td>
-                    } @else {
-                      <td class="ri-c-detail">{{ seg.detail }}</td>
-                      <td class="ri-c-num">{{ seg.hesitation }}</td>
-                      <td class="ri-c-num">{{ seg.mistakes }}</td>
-                      <td class="ri-c-rating">{{ seg.rating }}</td>
-                      <td class="ri-c-notes">{{ seg.notes || '—' }}</td>
-                    }
-                  </tr>
-                }
+      <!--
+        الصفحات المصدرية (تُرسَم دائمًا في الشجرة الحيّة كي تلتقط html-to-image الأنماط الفعليّة).
+        غلاف بحجم صفريّ + overflow:hidden بدل إزاحة مطلقة هائلة (كانت top/left: -99999px) —
+        الإزاحات المتطرّفة هذه سبّبت شاشة خضراء صلبة كاملة على بعض متصفّحات الجوّال/WebView
+        (على الأرجح خلل تركيب طبقات GPU عند إزاحة عنصر بهذا البُعد الهائل)؛ هذا النمط
+        (حاوية ثابتة بحجم صفريّ تُخفي المحتوى بالقصّ لا بالإزاحة) هو النمط الآمن المعتاد
+        مع مكتبات html2canvas/html-to-image.
+      -->
+      <div class="ri-offscreen">
+        @for (page of pages(); track page.pageNumber) {
+          <div class="ri-page" #pageEl [attr.data-page]="page.pageNumber">
+            <div class="ri-band"></div>
+            <div class="ri-header">
+              <div class="ri-title">{{ meta().title }}</div>
+              <div class="ri-totals">{{ meta().totals }}</div>
+              @if (page.totalPages > 1) {
+                <div class="ri-pageno">صفحة {{ page.pageNumber }} من {{ page.totalPages }}</div>
               }
-            </tbody>
-          </table>
-          <div class="ri-band"></div>
-        </div>
-      }
+            </div>
+            <table class="ri-table">
+              <thead>
+                <tr>
+                  <th class="ri-c-idx">#</th>
+                  <th class="ri-c-name">اسم الطالب</th>
+                  <th class="ri-c-att">الحضور</th>
+                  <th class="ri-c-detail">السورة (من – إلى)</th>
+                  <th class="ri-c-num">تردّد</th>
+                  <th class="ri-c-num">خطأ</th>
+                  <th class="ri-c-rating">العلامة</th>
+                  <th class="ri-c-notes">ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of page.rows; track row.index) {
+                  @for (seg of row.segments; track $index) {
+                    <tr [class.ri-row-absent]="seg.placeholderClass === 'absent'">
+                      @if ($index === 0) {
+                        <td class="ri-c-idx" [attr.rowspan]="row.segments.length">
+                          {{ row.index }}
+                        </td>
+                        <td class="ri-c-name" [attr.rowspan]="row.segments.length">
+                          {{ row.name }}
+                        </td>
+                        <td class="ri-c-att" [attr.rowspan]="row.segments.length">
+                          {{ row.attendanceLabel || '—' }}
+                        </td>
+                      }
+                      @if (seg.placeholderText) {
+                        <td
+                          colspan="5"
+                          class="ri-placeholder"
+                          [class.ri-not-recited]="seg.placeholderClass === 'not-recited'"
+                          [class.ri-absent]="seg.placeholderClass === 'absent'"
+                        >
+                          {{ seg.placeholderText }}
+                        </td>
+                      } @else {
+                        <td class="ri-c-detail">{{ seg.detail }}</td>
+                        <td class="ri-c-num">{{ seg.hesitation }}</td>
+                        <td class="ri-c-num">{{ seg.mistakes }}</td>
+                        <td class="ri-c-rating">{{ seg.rating }}</td>
+                        <td class="ri-c-notes">{{ seg.notes || '—' }}</td>
+                      }
+                    </tr>
+                  }
+                }
+              </tbody>
+            </table>
+            <div class="ri-band"></div>
+          </div>
+        }
+      </div>
 
       @if (generated() && pages().length > 0) {
         <div class="ri-results">
@@ -155,11 +164,23 @@ export interface ReportImageMeta {
         gap: 10px;
         margin-bottom: 10px;
       }
-      /* الصفحات المصدرية تُرسَم خارج نطاق الرؤية لا display:none (html-to-image يحتاج تخطيطًا فعليًّا) */
+      /*
+        غلاف بحجم صفريّ يقصّ محتواه (overflow:hidden) بدل عنصر بإزاحة مطلقة هائلة —
+        النمط الآمن المعتاد لتحضير عناصر خارج الرؤية قبل التقاطها بمكتبات مثل
+        html-to-image؛ إزاحة متطرّفة (كـ top/left: -99999px) قد تُربك تركيب الطبقات
+        على بعض متصفّحات الجوّال/WebView (لاحظنا شاشة خضراء صلبة كاملة نتيجتها).
+      */
+      .ri-offscreen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+      }
       .ri-page {
-        position: absolute;
-        top: -99999px;
-        left: -99999px;
         width: 760px;
         background: var(--surface, #fff);
         font-family: 'Cairo', 'Tajawal', 'Segoe UI', system-ui, sans-serif;
@@ -275,13 +296,21 @@ export class ReportImageComponent {
     this.busy.set(true);
     try {
       const { toPng } = await import('html-to-image');
-      // ننتظر جولة رسم كاملة حتى تُوجَد عناصر .ri-page في الـ DOM فعليًّا.
-      await new Promise((r) => setTimeout(r, 30));
+      // ننتظر جولتَي رسم كاملتَين (بدل مهلة زمنية ثابتة) حتى يستقرّ تخطيط
+      // عناصر .ri-page فعليًّا قبل الالتقاط — أوثق عبر أجهزة/متصفّحات مختلفة.
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const nodes = document.querySelectorAll<HTMLElement>('.ri-page');
       const out: { pageNumber: number; dataUrl: string }[] = [];
       for (const node of Array.from(nodes)) {
         const pageNumber = Number(node.dataset['page']) || out.length + 1;
-        const dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#ffffff' });
+        // تمرير الأبعاد صراحةً (بدل الاعتماد على حساب html-to-image التلقائيّ)
+        // يزيل أيّ التباس في حجم اللوحة الملتقَطة عبر المتصفّحات المختلفة.
+        const dataUrl = await toPng(node, {
+          pixelRatio: 2,
+          backgroundColor: '#ffffff',
+          width: node.scrollWidth,
+          height: node.scrollHeight,
+        });
         out.push({ pageNumber, dataUrl });
       }
       this.images.set(out);
