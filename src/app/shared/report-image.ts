@@ -431,34 +431,56 @@ export class ReportImageComponent {
   }
 
   /**
+   * ألبوم الصور المخصَّص لتقارير الجلسات — يُنشَأ مرّة واحدة فقط عند أوّل حفظ،
+   * ثم يُعاد استخدام نفس المعرّف. مُخبَّأ هنا فقط (لا نخزّنه)؛ لو أُعيد إنشاء
+   * المكوّن (فتح تقرير جديد) يُعاد البحث عنه بالاسم بدل إنشاء ألبوم مكرّر.
+   */
+  private albumId: string | null = null;
+
+  /**
    * على الويب: تنزيل عاديّ عبر رابط `<a download>` — يعمل بشكل موثوق في المتصفّحات.
-   * على أندرويد (Capacitor WebView): `<a download>` مع رابط `data:` لا يعمل عمليًّا
-   * (المتصفّح/الواجهة لا يُطلقان تنزيلًا حقيقيًّا لروابط data: الطويلة) — لذا نكتب
-   * الملف فعليًّا عبر `@capacitor/filesystem` إلى مجلّد التطبيق الخاصّ (Documents)،
-   * وهو مسار لا يحتاج أذونات تخزين إضافيّة على أندرويد الحديث (تخزين معزول بالتطبيق).
+   *
+   * على أندرويد (Capacitor WebView): جُرِّب أوّلًا `<a download>` (لا يعمل —
+   * الواجهة لا تُطلق تنزيلًا حقيقيًّا لروابط data: الطويلة)، ثم `@capacitor/filesystem`
+   * بمجلّد `Directory.Documents` — **تبيّن أنّ هذا خطأ فعليّ لا افتراض نظريّ**: توثيق
+   * الإضافة نفسها يوضّح أنّ `Directory.Documents` على أندرويد هو مجلّد المستندات
+   * *العامّ* المشترك (وليس معزولًا بالتطبيق كما افترضتُ)، وغير قابل للكتابة على
+   * أندرويد ١٠ إلا بتفعيل `requestLegacyExternalStorage` (غير مُفعَّل هنا)، ومقيَّد
+   * أكثر على أندرويد ١١+ — فكان يفشل بخطأ حقيقيّ عند كلّ محاولة كتابة، مطابقًا
+   * تمامًا لما أبلغ عنه المستخدم («تعذّر حفظ الصورة على الجهاز»).
+   *
+   * الحل الصحيح: `@capacitor-community/media` — إضافة مخصّصة تحديدًا لحفظ
+   * الصور في معرض الجهاز عبر MediaStore (أندرويد) بشكل سليم عبر كل إصدارات
+   * أندرويد، **بلا أذونات تخزين إضافيّة** طالما الحفظ في ألبوم خاصّ بالتطبيق
+   * فقط (وضعنا هنا بالضبط — لا نحتاج الوصول لكل صور الجهاز).
    */
   async download(img: { pageNumber: number; dataUrl: string }): Promise<void> {
-    const fileName = `تقرير-الجلسة-${img.pageNumber}.png`;
+    const fileName = `تقرير-الجلسة-${img.pageNumber}`;
     if (!Capacitor.isNativePlatform()) {
       const a = document.createElement('a');
       a.href = img.dataUrl;
-      a.download = fileName;
+      a.download = fileName + '.png';
       a.click();
       return;
     }
     this.saving.set(img.pageNumber);
     try {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      const base64 = img.dataUrl.split(',')[1] ?? '';
-      await Filesystem.writeFile({
-        path: fileName,
-        data: base64,
-        directory: Directory.Documents,
-        recursive: true,
-      });
-      this.notify.success(
-        'حُفظت الصورة داخل ملفّات تطبيق الماهر (Documents). لإرسالها أو نقلها لمكان آخر استخدم زرّ «↗ مشاركة».',
-      );
+      const { Media } = await import('@capacitor-community/media');
+      const ALBUM_NAME = 'الماهر — تقارير الجلسات';
+      if (!this.albumId) {
+        const { albums } = await Media.getAlbums();
+        const existing = albums.find((a) => a.name === ALBUM_NAME);
+        if (existing) {
+          this.albumId = existing.identifier;
+        } else {
+          await Media.createAlbum({ name: ALBUM_NAME });
+          const { albums: after } = await Media.getAlbums();
+          this.albumId = after.find((a) => a.name === ALBUM_NAME)?.identifier ?? null;
+        }
+      }
+      if (!this.albumId) throw new Error('تعذّر إنشاء ألبوم الصور');
+      await Media.savePhoto({ path: img.dataUrl, albumIdentifier: this.albumId, fileName });
+      this.notify.success('حُفظت الصورة في معرض الصور — ألبوم «الماهر — تقارير الجلسات».');
     } catch (e) {
       console.error(e);
       this.notify.error('تعذّر حفظ الصورة على الجهاز');
