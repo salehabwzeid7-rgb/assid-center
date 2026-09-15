@@ -436,23 +436,57 @@ export class ReportImageComponent {
    * المكوّن (فتح تقرير جديد) يُعاد البحث عنه بالاسم بدل إنشاء ألبوم مكرّر.
    */
   private albumId: string | null = null;
+  private static readonly ALBUM_NAME = 'تقارير الماهر';
+
+  /** نصّ خطأ مقروء من أيّ قيمة مرفوضة — يُعرَض للمستخدم بدل رسالة عامّة غامضة. */
+  private errText(e: unknown): string {
+    if (e instanceof Error) return e.message;
+    if (typeof e === 'string') return e;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return String(e);
+    }
+  }
+
+  /** يبني ملفًّا من data URL ويُشارِكه عبر واجهة المشاركة القياسيّة (Web Share API). يُعيد نجاح/فشل بلا رمي استثناء. */
+  private async webShareFile(
+    img: { pageNumber: number; dataUrl: string },
+    title: string,
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(img.dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], `تقرير-الجلسة-${img.pageNumber}.png`, { type: 'image/png' });
+      const nav = navigator as Navigator & {
+        canShare?: (d?: ShareData) => boolean;
+        share: (d: ShareData) => Promise<void>;
+      };
+      if (!nav.canShare?.({ files: [file] })) return false;
+      await nav.share({ files: [file], title });
+      return true;
+    } catch (e) {
+      console.error('[report-image] فشلت المشاركة عبر Web Share API:', e);
+      return false;
+    }
+  }
 
   /**
    * على الويب: تنزيل عاديّ عبر رابط `<a download>` — يعمل بشكل موثوق في المتصفّحات.
    *
-   * على أندرويد (Capacitor WebView): جُرِّب أوّلًا `<a download>` (لا يعمل —
-   * الواجهة لا تُطلق تنزيلًا حقيقيًّا لروابط data: الطويلة)، ثم `@capacitor/filesystem`
-   * بمجلّد `Directory.Documents` — **تبيّن أنّ هذا خطأ فعليّ لا افتراض نظريّ**: توثيق
-   * الإضافة نفسها يوضّح أنّ `Directory.Documents` على أندرويد هو مجلّد المستندات
-   * *العامّ* المشترك (وليس معزولًا بالتطبيق كما افترضتُ)، وغير قابل للكتابة على
-   * أندرويد ١٠ إلا بتفعيل `requestLegacyExternalStorage` (غير مُفعَّل هنا)، ومقيَّد
-   * أكثر على أندرويد ١١+ — فكان يفشل بخطأ حقيقيّ عند كلّ محاولة كتابة، مطابقًا
-   * تمامًا لما أبلغ عنه المستخدم («تعذّر حفظ الصورة على الجهاز»).
-   *
-   * الحل الصحيح: `@capacitor-community/media` — إضافة مخصّصة تحديدًا لحفظ
-   * الصور في معرض الجهاز عبر MediaStore (أندرويد) بشكل سليم عبر كل إصدارات
-   * أندرويد، **بلا أذونات تخزين إضافيّة** طالما الحفظ في ألبوم خاصّ بالتطبيق
-   * فقط (وضعنا هنا بالضبط — لا نحتاج الوصول لكل صور الجهاز).
+   * على أندرويد (Capacitor WebView)، محاولتان مستقلّتان بالترتيب (كلّ واحدة
+   * لا تعتمد على الأخرى، فشل الأولى لا يمنع تجربة الثانية):
+   *  ١) `@capacitor-community/media` (`savePhoto`) — حفظ مباشر في معرض الصور
+   *     ضمن ألبوم خاصّ بالتطبيق. أفضل تجربة إن نجحت (بلا أيّ تدخّل من المستخدم).
+   *  ٢) صفحة مشاركة النظام (`navigator.share`) — يختار المستخدم بنفسه أين
+   *     يحفظ الصورة (المعرض، الملفّات، واتساب...). لا تعتمد على أيّ إضافة
+   *     Capacitor إطلاقًا (معيار وِبّ خالص) فتبقى مسارًا مستقلًّا حقًّا لا يفشل
+   *     لنفس سبب فشل المحاولة الأولى.
+   * إن فشلتا معًا، تُعرَض رسالة الخطأ **الفعليّة** من المحاولة الأولى (بدل
+   * نصّ عامّ ثابت) — كانت رسالتا الإصدارين ١.٢٣.٢/١.٢٣.٣ السابقتين نصًّا ثابتًا
+   * لا يحمل أيّ معلومة تشخيصيّة حقيقيّة، فلم يكن ممكنًا معرفة السبب الفعليّ من
+   * بلاغ المستخدم وحده — هذا الإصدار يُصلح تلك الفجوة التشخيصيّة تحديدًا، حتى
+   * لو ظلّ الحفظ المباشر يفشل لسبب لم يظهر بعد.
    */
   async download(img: { pageNumber: number; dataUrl: string }): Promise<void> {
     const fileName = `تقرير-الجلسة-${img.pageNumber}`;
@@ -464,47 +498,46 @@ export class ReportImageComponent {
       return;
     }
     this.saving.set(img.pageNumber);
+    let primaryErr = '';
     try {
       const { Media } = await import('@capacitor-community/media');
-      const ALBUM_NAME = 'الماهر — تقارير الجلسات';
       if (!this.albumId) {
         const { albums } = await Media.getAlbums();
-        const existing = albums.find((a) => a.name === ALBUM_NAME);
-        if (existing) {
-          this.albumId = existing.identifier;
-        } else {
-          await Media.createAlbum({ name: ALBUM_NAME });
+        const existing = albums.find((a) => a.name === ReportImageComponent.ALBUM_NAME);
+        this.albumId = existing?.identifier ?? null;
+        if (!this.albumId) {
+          await Media.createAlbum({ name: ReportImageComponent.ALBUM_NAME });
           const { albums: after } = await Media.getAlbums();
-          this.albumId = after.find((a) => a.name === ALBUM_NAME)?.identifier ?? null;
+          this.albumId =
+            after.find((a) => a.name === ReportImageComponent.ALBUM_NAME)?.identifier ?? null;
         }
       }
-      if (!this.albumId) throw new Error('تعذّر إنشاء ألبوم الصور');
+      if (!this.albumId) throw new Error('لم يظهر الألبوم بعد إنشائه');
       await Media.savePhoto({ path: img.dataUrl, albumIdentifier: this.albumId, fileName });
-      this.notify.success('حُفظت الصورة في معرض الصور — ألبوم «الماهر — تقارير الجلسات».');
-    } catch (e) {
-      console.error(e);
-      this.notify.error('تعذّر حفظ الصورة على الجهاز');
-    } finally {
+      this.notify.success(
+        `حُفظت الصورة في معرض الصور — ألبوم «${ReportImageComponent.ALBUM_NAME}».`,
+      );
       this.saving.set(null);
+      return;
+    } catch (e) {
+      primaryErr = this.errText(e);
+      console.error('[report-image] فشل الحفظ المباشر في المعرض:', e);
     }
+
+    const shared = await this.webShareFile(img, 'تقرير الجلسة');
+    this.saving.set(null);
+    if (shared) return;
+
+    this.notify.error(
+      `تعذّر حفظ الصورة تلقائيًّا (${primaryErr || 'خطأ غير معروف'}). افتح الصورة بالضغط عليها واحفظها يدويًّا (ضغط مطوَّل ← حفظ الصورة).`,
+    );
   }
 
   async share(img: { pageNumber: number; dataUrl: string }): Promise<void> {
-    try {
-      const res = await fetch(img.dataUrl);
-      const blob = await res.blob();
-      const file = new File([blob], `تقرير-الجلسة-${img.pageNumber}.png`, { type: 'image/png' });
-      const nav = navigator as Navigator & {
-        canShare?: (d?: ShareData) => boolean;
-        share: (d: ShareData) => Promise<void>;
-      };
-      if (nav.canShare?.({ files: [file] })) {
-        await nav.share({ files: [file], title: 'تقرير الجلسة' });
-      } else {
-        await this.download(img);
-      }
-    } catch {
-      /* المستخدم ألغى المشاركة — لا حاجة لرسالة خطأ */
+    const ok = await this.webShareFile(img, 'تقرير الجلسة');
+    if (!ok && !Capacitor.isNativePlatform()) {
+      // على الويب فقط: لا مشاركة نظام متاحة، فالبديل المعقول الوحيد تنزيل عاديّ.
+      await this.download(img);
     }
   }
 }
