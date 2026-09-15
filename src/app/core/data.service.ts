@@ -14,6 +14,7 @@ import {
   writeBatch,
   deleteField,
   arrayUnion,
+  runTransaction,
   type CollectionReference,
   type DocumentReference,
   type Query,
@@ -549,34 +550,58 @@ export class DataService {
     input: NewRecitation,
   ): Promise<void> {
     const id = `${sessionId}_${studentId}`;
-    const before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
-    await setDoc(
-      this.ref(COL.recitations, id),
-      this.owned({ ...clean(input), createdAt: Date.now() }),
-    );
+    const ref = this.ref(COL.recitations, id);
+    const payload = this.owned({ ...clean(input), createdAt: Date.now() });
+    let before: RecitationRecord | null = null;
+    try {
+      // معاملة ذرّيّة: تحمي من فقدان تعديل حين يحفظ جهازان متّصلان بالإنترنت
+      // لنفس السجلّ في اللحظة نفسها تقريبًا (كلّ من يقرأ قبل الآخر يكتب فوقه
+      // بصمت في المسار العاديّ). المعاملات لا تعمل بلا اتصال إطلاقًا (خلافًا
+      // للكتابة العاديّة المخزَّنة محلّيًّا)، فنتراجع تلقائيًّا للمسار المعتاد
+      // أدناه عند فشلها لأيّ سبب — يبقى الحفظ يعمل دائمًا بلا اتصال كالمعتاد.
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        before = snap.exists()
+          ? (this.inScope([{ id: snap.id, ...(snap.data() as object) }] as RecitationRecord[])[0] ??
+            null)
+          : null;
+        tx.set(ref, payload);
+      });
+    } catch (e) {
+      console.warn('تعذّرت الكتابة الذرّيّة للتسميع (على الأرجح بلا اتصال) — الكتابة المعتادة:', e);
+      before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
+      await setDoc(ref, payload);
+    }
+
+    // سجلّ التدقيق — فشل أيّ خطوة هنا (قراءة اسم الطالب بلا اتصال مثلًا) يجب
+    // ألّا يظهر للمعلّم كفشل في حفظ التسميع نفسه، فهو محفوظ فعلًا في هذه اللحظة.
     if (before) {
-      const changes = diffFields(
-        before as unknown as Record<string, unknown>,
-        input as unknown as Record<string, unknown>,
-        RECITATION_DIFF_FIELDS,
-      );
-      if (changes.length) {
-        const student = await this.getStudent(studentId);
-        await this.logActivity({
-          action: 'update',
-          target: 'recitation',
-          summary: `تعديل تسميع ${student?.name ?? ''}`,
-          fieldChanges: changes,
-          snapshots: [
-            {
-              collectionName: COL.recitations,
-              id,
-              data: before as unknown as Record<string, unknown>,
-            },
-          ],
-          studentName: student?.name,
-          sessionLabel: input.date,
-        });
+      try {
+        const changes = diffFields(
+          before as unknown as Record<string, unknown>,
+          input as unknown as Record<string, unknown>,
+          RECITATION_DIFF_FIELDS,
+        );
+        if (changes.length) {
+          const student = await this.getStudent(studentId);
+          await this.logActivity({
+            action: 'update',
+            target: 'recitation',
+            summary: `تعديل تسميع ${student?.name ?? ''}`,
+            fieldChanges: changes,
+            snapshots: [
+              {
+                collectionName: COL.recitations,
+                id,
+                data: before as unknown as Record<string, unknown>,
+              },
+            ],
+            studentName: student?.name,
+            sessionLabel: input.date,
+          });
+        }
+      } catch (e) {
+        console.warn('تعذّر تسجيل حركة تعديل التسميع في سجل التدقيق (التسميع نفسه محفوظ):', e);
       }
     }
   }

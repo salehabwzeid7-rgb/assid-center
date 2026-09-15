@@ -136,7 +136,11 @@ import { TimeRangePickerComponent } from '../../shared/time-range-picker';
           <div class="alert alert-error">{{ error() }}</div>
         }
 
-        <button class="btn btn-primary btn-block btn-lg" type="submit" [disabled]="saving()">
+        <button
+          class="btn btn-primary btn-block btn-lg"
+          type="submit"
+          [disabled]="saving() || notFound()"
+        >
           {{ saving() ? 'جارٍ الحفظ…' : editing() ? 'حفظ التعديلات' : 'حفظ الحلقة' }}
         </button>
       </form>
@@ -274,6 +278,8 @@ export class CircleFormPage implements OnInit {
   readonly saving = signal(false);
   readonly deleting = signal(false);
   readonly error = signal('');
+  /** true فقط حين تعذّر إيجاد الحلقة عند فتح النموذج (حُذفت من جهاز آخر مثلًا) — يمنع محاولة الحفظ على مستند غير موجود. */
+  readonly notFound = signal(false);
 
   /** آخر اسم مُقترَح تلقائيًّا — لمعرفة إن كان المعلّم عدّل الاسم يدويًّا. */
   private lastAutoName = '';
@@ -316,6 +322,7 @@ export class CircleFormPage implements OnInit {
       this.toTime = c.toTime ?? '';
     } else {
       this.error.set('لم يتم العثور على الحلقة');
+      this.notFound.set(true);
     }
     this.cdr.markForCheck();
   }
@@ -383,10 +390,15 @@ export class CircleFormPage implements OnInit {
     });
     if (!ok) return;
     this.deleting.set(true);
+    // حذف الحلقة يحتاج البحث أوّلًا عن كل حصصها وسجلّاتها المرتبطة عبر
+    // الخادم — لا يعمل هذا البحث بلا اتصال كالحفظ العاديّ، فنوضّح السبب.
+    const errMsg = this.notify.online()
+      ? 'تعذّر حذف الحلقة — أعِد المحاولة'
+      : 'حذف الحلقة يتطلّب اتصالًا بالإنترنت (للبحث عن كل حصصها وسجلّاتها أوّلًا) — أعِد المحاولة بعد عودة الاتصال';
     const done = await this.notify.run(() => this.data.deleteCircle(this.id!).then(() => true), {
       loading: 'جارٍ حذف الحلقة…',
       success: 'حُذفت الحلقة نهائيًّا',
-      error: 'تعذّر حذف الحلقة — أعِد المحاولة',
+      error: errMsg,
     });
     this.deleting.set(false);
     if (done) await this.router.navigateByUrl('/circles');

@@ -94,7 +94,11 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
           <div class="alert alert-error">{{ error() }}</div>
         }
 
-        <button class="btn btn-primary btn-block btn-lg" type="submit" [disabled]="saving()">
+        <button
+          class="btn btn-primary btn-block btn-lg"
+          type="submit"
+          [disabled]="saving() || notFound()"
+        >
           {{ saving() ? 'جارٍ الحفظ…' : editing() ? 'حفظ التعديلات' : 'إضافة الطالب' }}
         </button>
       </form>
@@ -168,6 +172,8 @@ export class StudentFormPage implements OnInit {
   readonly deleting = signal(false);
   readonly error = signal('');
   readonly editing = signal(false);
+  /** true فقط حين تعذّر إيجاد الطالب عند فتح النموذج (حُذف من جهاز آخر مثلًا) — يمنع محاولة الحفظ على مستند غير موجود. */
+  readonly notFound = signal(false);
 
   m = {
     name: '',
@@ -203,6 +209,7 @@ export class StudentFormPage implements OnInit {
         };
       } else {
         this.error.set('لم يتم العثور على الطالب');
+        this.notFound.set(true);
       }
       this.cdr.markForCheck();
     } else if (this.circleParam) {
@@ -211,7 +218,12 @@ export class StudentFormPage implements OnInit {
   }
 
   async submit(): Promise<void> {
-    if (!this.m.name.trim() || this.m.circleIds.length === 0) {
+    // نستبعد أيّ حلقة اختارها المعلّم سابقًا ثمّ حُذفت من جهاز آخر أثناء
+    // التعديل — القائمة المعروضة حيّة وتُخفيها فورًا، لكنّ `m.circleIds`
+    // كانت تبقى تحمل معرّفها فيُعاد كتابتها عند الحفظ (تُبطِل تنظيف الحذف).
+    const liveCircleIds = new Set((this.circles() ?? []).map((c) => c.id));
+    const validCircleIds = this.m.circleIds.filter((id) => liveCircleIds.has(id));
+    if (!this.m.name.trim() || validCircleIds.length === 0) {
       this.error.set('أدخل اسم الطالب واختر حلقة واحدة على الأقلّ');
       return;
     }
@@ -219,7 +231,7 @@ export class StudentFormPage implements OnInit {
     this.error.set('');
     const payload = {
       name: this.m.name.trim(),
-      circleIds: [...this.m.circleIds],
+      circleIds: validCircleIds,
       level: this.m.level.trim() || undefined,
       birthDate: this.m.birthDate || undefined,
       guardianPhone: this.m.guardianPhone.trim() || undefined,
@@ -258,10 +270,15 @@ export class StudentFormPage implements OnInit {
     });
     if (!ok) return;
     this.deleting.set(true);
+    // حذف الطالب يحتاج البحث أوّلًا عن كل سجلّاته المرتبطة (حضور/تسميع/إلخ)
+    // عبر الخادم — لا يعمل هذا البحث بلا اتصال كالحفظ العاديّ، فنوضّح السبب.
+    const errMsg = this.notify.online()
+      ? 'تعذّر حذف الطالب — أعِد المحاولة'
+      : 'حذف الطالب يتطلّب اتصالًا بالإنترنت (للبحث عن كل سجلّاته المرتبطة أوّلًا) — أعِد المحاولة بعد عودة الاتصال';
     const done = await this.notify.run(() => this.data.deleteStudent(this.id!).then(() => true), {
       loading: 'جارٍ حذف الطالب…',
       success: 'حُذف الطالب نهائيًّا',
-      error: 'تعذّر حذف الطالب — أعِد المحاولة',
+      error: errMsg,
     });
     this.deleting.set(false);
     if (done) await this.router.navigateByUrl('/students');

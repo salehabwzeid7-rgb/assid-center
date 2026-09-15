@@ -303,7 +303,9 @@ export class StudentsPage {
   async submitAdd(): Promise<void> {
     const name = this.m.name.trim();
     if (!name) return void this.error.set('أدخل اسم الطالب');
-    if (this.m.circleIds.length === 0) return void this.error.set('اختر حلقة واحدة على الأقلّ');
+    const liveCircleIds = new Set((this.circles() ?? []).map((c) => c.id));
+    const validCircleIds = this.m.circleIds.filter((id) => liveCircleIds.has(id));
+    if (validCircleIds.length === 0) return void this.error.set('اختر حلقة واحدة على الأقلّ');
 
     this.saving.set(true);
     this.error.set('');
@@ -311,7 +313,7 @@ export class StudentsPage {
       () =>
         this.data.addStudent({
           name,
-          circleIds: [...this.m.circleIds],
+          circleIds: validCircleIds,
           level: this.m.level.trim() || undefined,
           birthDate: this.m.birthDate || undefined,
           guardianPhone: this.m.guardianPhone.trim() || undefined,

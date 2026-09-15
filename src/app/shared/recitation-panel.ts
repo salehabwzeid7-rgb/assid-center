@@ -34,11 +34,16 @@ function fmtClock(totalSec: number): string {
   return h > 0 ? `${h}:${p(m)}:${p(r)}` : `${p(m)}:${p(r)}`;
 }
 
-/** الآية التالية مباشرةً بعد نهاية مقطع — تنتقل لبداية السورة التالية عند نهاية السورة. */
-function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: number } {
+/**
+ * الآية التالية مباشرةً بعد نهاية مقطع — تنتقل لبداية السورة التالية عند
+ * نهاية السورة. تُعيد null عند نهاية سورة الناس (١١٤) — أي أنّ الطالب أكمل
+ * حفظ القرآن كاملًا، فلا معنى لاقتراح «المتابعة» من سورة جديدة.
+ */
+function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: number } | null {
   const maxAyah = surah(toSurah)?.ayahs ?? toAyah;
   if (toAyah < maxAyah) return { surah: toSurah, ayah: toAyah + 1 };
-  return { surah: Math.min(114, toSurah + 1), ayah: 1 };
+  if (toSurah >= 114) return null;
+  return { surah: toSurah + 1, ayah: 1 };
 }
 
 /**
@@ -631,6 +636,11 @@ export class RecitationPanelComponent implements OnInit {
 
     if (scoreOf(last) >= TASMIE_PASS) {
       const next = nextAyahAfter(last.toSurah, last.toAyah);
+      if (!next) {
+        // آخر تسميع ناجح انتهى عند نهاية سورة الناس — أكمل الطالب حفظ القرآن كاملًا.
+        this.smartHint.set('🎉 أكمل الطالب حفظ القرآن الكريم كاملًا في آخر تسميع ناجح مسجَّل له!');
+        return;
+      }
       this.m.fromSurah = next.surah;
       this.m.fromAyah = next.ayah;
       this.m.toSurah = next.surah;
@@ -706,6 +716,17 @@ export class RecitationPanelComponent implements OnInit {
   /** يقرّب عدد الأوجه إلى أقرب نصف وجه ولا يسمح بالسالب. */
   clampPages(v: number | string): number {
     return Math.max(0, Math.round((Number(v) || 0) * 2) / 2);
+  }
+  /**
+   * يمنع حفظ عدد أخطاء سالب أو غير رقميّ عند الضغط على «حفظ» — الأزرار
+   * ‎−/+1‎ محميّة أصلًا (bumpHifz/bumpTajweed)، لكنّ الكتابة المباشرة بالحقل
+   * غير مقيَّدة. عمدًا لا نُقيِّدها لحظيًّا أثناء الكتابة (ngModelChange)
+   * لأنّ `m` كائن عاديّ لا إشارة (signal) في تطبيق zoneless، فتحديثه من هناك
+   * لا يُعيد رسم قيمة الحقل المعروضة — القيمة المكتوبة تبقى كما هي في
+   * الواجهة حتى الحفظ، حيث تُصحَّح فعليًّا قبل إرسالها لقاعدة البيانات.
+   */
+  clampErrorCount(v: number | string): number {
+    return Math.max(0, Math.round(Number(v) || 0));
   }
   /** ＋/－ نصف وجه — يزيد زمن المؤقّت المتوقّع بـ ٢ دقيقة لكلّ خطوة. */
   bumpPages(delta: number): void {
@@ -823,8 +844,8 @@ export class RecitationPanelComponent implements OnInit {
       toAyah,
       pages: Number(this.pages()) || 0,
       score: this.score(),
-      hifzErrors: Number(this.m.hifzErrors) || 0,
-      tajweedErrors: Number(this.m.tajweedErrors) || 0,
+      hifzErrors: this.clampErrorCount(this.m.hifzErrors),
+      tajweedErrors: this.clampErrorCount(this.m.tajweedErrors),
       promptCount: Number(this.m.promptCount) || 0,
       durationSec: this.elapsedSec() || undefined,
       notes: this.m.notes.trim() || undefined,

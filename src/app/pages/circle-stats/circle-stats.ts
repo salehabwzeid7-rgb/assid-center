@@ -1,7 +1,7 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
-import { TASMIE_PASS, isActualRecitation, scoreOf, type Circle } from '../../core/models';
+import { TASMIE_PASS, isActualRecitation, scoreOf } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -96,13 +96,14 @@ import { PageHeaderComponent } from '../../shared/page-header';
     `,
   ],
 })
-export class CircleStatsPage implements OnInit {
+export class CircleStatsPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
-  readonly circle = signal<Circle | null>(null);
+  /** إشارة حيّة — تنعكس أيّ تعديلات على الحلقة (اسمها/نوعها) فورًا، لا عند فتح الصفحة فقط. */
+  readonly circle = this.data.circleLive(this.id, this.destroyRef);
 
   private readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   private readonly sessions = this.data.sessionsByCircle(this.id, this.destroyRef);
@@ -168,8 +169,4 @@ export class CircleStatsPage implements OnInit {
       })
       .sort((a, b) => b.rate - a.rate || b.pages - a.pages);
   });
-
-  async ngOnInit(): Promise<void> {
-    this.circle.set(await this.data.getCircle(this.id));
-  }
 }

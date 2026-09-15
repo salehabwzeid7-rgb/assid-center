@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { circleTypeLabel, type Circle } from '../../core/models';
@@ -64,20 +64,17 @@ import { PageHeaderComponent } from '../../shared/page-header';
     </button>
   `,
 })
-export class CircleStudentsPage implements OnInit {
+export class CircleStudentsPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
-  readonly circle = signal<Circle | null>(null);
+  /** إشارة حيّة — تنعكس أيّ تعديلات على الحلقة (اسمها/نوعها) فورًا، لا عند فتح الصفحة فقط. */
+  readonly circle = this.data.circleLive(this.id, this.destroyRef);
   typeLabel(c: Circle): string {
     return circleTypeLabel(c);
   }
   readonly students = this.data.studentsByCircle(this.id, this.destroyRef);
   readonly activeCount = computed(() => this.students()?.filter((s) => s.active).length ?? 0);
-
-  async ngOnInit(): Promise<void> {
-    this.circle.set(await this.data.getCircle(this.id));
-  }
 }
