@@ -40,3 +40,14 @@ export function relativeDay(date: string, todayStr: string): string {
   if (diff === -1) return 'أمس';
   return dmy(date);
 }
+
+/** طابع زمنيّ (ms) → «١٥/٠٩/٢٠٢٦ - ١١:٢٣ ص» — تاريخ ووقت كاملان بتوقيت الجهاز، لسجل الحركات. */
+export function dateTimeFull(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, '0');
+  const dateStr = `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+  const hh = d.getHours();
+  const h12 = hh % 12 === 0 ? 12 : hh % 12;
+  const period = hh >= 12 ? 'م' : 'ص';
+  return `${dateStr} - ${h12}:${p(d.getMinutes())} ${period}`;
+}

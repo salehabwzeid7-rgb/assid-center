@@ -24,6 +24,7 @@ import { NotifyService } from './notify.service';
 import { completedJuz } from './quran-data';
 import {
   COL,
+  ATTENDANCE_LABELS,
   type Circle,
   type CircleType,
   type TajweedLevel,
@@ -36,7 +37,60 @@ import {
   type EvaluationRecord,
   type SerdRecord,
   type ExamRecord,
+  type ActivityAction,
+  type ActivityTarget,
+  type ActivityFieldChange,
+  type ActivitySnapshot,
+  type ActivityLogEntry,
 } from './models';
+
+/** حقل + تسميته العربيّة — أساس بناء `ActivityFieldChange[]` بمقارنة مباشرة. */
+type DiffField = { key: string; label: string };
+
+/** يقارن حقول محدّدة بين نسختين ويُعيد التغييرات الفعليّة فقط (يتجاهل undefined↔null). */
+function diffFields(
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  fields: DiffField[],
+): ActivityFieldChange[] {
+  const changes: ActivityFieldChange[] = [];
+  for (const { key, label } of fields) {
+    const b = before[key] ?? null;
+    const a = after[key] ?? null;
+    if (b !== a) changes.push({ field: key, label, before: b, after: a });
+  }
+  return changes;
+}
+
+const RECITATION_DIFF_FIELDS: DiffField[] = [
+  { key: 'kind', label: 'نوع التسميع' },
+  { key: 'fromSurah', label: 'من سورة' },
+  { key: 'fromAyah', label: 'من آية' },
+  { key: 'toSurah', label: 'إلى سورة' },
+  { key: 'toAyah', label: 'إلى آية' },
+  { key: 'pages', label: 'عدد الأوجه' },
+  { key: 'score', label: 'النسبة' },
+  { key: 'hifzErrors', label: 'أخطاء الحفظ' },
+  { key: 'tajweedErrors', label: 'أخطاء التجويد' },
+  { key: 'notRecited', label: 'لم يسمّع' },
+  { key: 'notes', label: 'ملاحظات التسميع' },
+];
+const ATTENDANCE_DIFF_FIELDS: DiffField[] = [{ key: 'status', label: 'حالة الحضور' }];
+const STUDENT_DIFF_FIELDS: DiffField[] = [
+  { key: 'name', label: 'الاسم' },
+  { key: 'level', label: 'المستوى' },
+  { key: 'guardianPhone', label: 'جوال ولي الأمر' },
+  { key: 'birthDate', label: 'تاريخ الميلاد' },
+  { key: 'currentPlan', label: 'المقرّر الحاليّ' },
+  { key: 'active', label: 'نشط' },
+];
+const CIRCLE_DIFF_FIELDS: DiffField[] = [
+  { key: 'name', label: 'الاسم' },
+  { key: 'type', label: 'النوع' },
+  { key: 'tajweedLevel', label: 'مستوى التجويد' },
+  { key: 'fromTime', label: 'بداية الحصّة' },
+  { key: 'toTime', label: 'نهاية الحصّة' },
+];
 
 /** التاريخ الحالي بصيغة YYYY-MM-DD (توقيت الجهاز المحلي) */
 export function today(): string {
@@ -119,16 +173,74 @@ export class DataService {
     ops: (
       | { kind: 'delete'; ref: DocumentReference }
       | { kind: 'update'; ref: DocumentReference; data: Record<string, unknown> }
+      | { kind: 'set'; ref: DocumentReference; data: Record<string, unknown> }
     )[],
   ): Promise<void> {
     for (let i = 0; i < ops.length; i += 450) {
       const batch = writeBatch(db);
       for (const op of ops.slice(i, i + 450)) {
         if (op.kind === 'delete') batch.delete(op.ref);
-        else batch.update(op.ref, op.data);
+        else if (op.kind === 'update') batch.update(op.ref, op.data);
+        else batch.set(op.ref, op.data);
       }
       await batch.commit();
     }
+  }
+
+  // ======================================================================
+  //  سجلّ الحركات (تدقيق + حذف ناعم + استعادة) — v1.21.0
+  // ======================================================================
+
+  /**
+   * يسجّل حركة (إضافة/تعديل/حذف) في `activityLog` قبل أو بعد تنفيذها.
+   * فشل التسجيل نفسه لا يجب أن يوقف العمليّة الأصليّة — يُسجَّل خطأ بالكونسول
+   * فقط ويُكمَل العمل، فسجلّ التدقيق شبكة أمان إضافيّة لا مصدر البيانات الأساسيّ.
+   */
+  private async logActivity(
+    entry: Omit<ActivityLogEntry, 'id' | 'createdAt' | 'ownerId' | 'actorName' | 'restoredAt'>,
+  ): Promise<void> {
+    try {
+      await addDoc(
+        this.col(COL.activityLog),
+        this.owned(
+          clean({
+            ...entry,
+            actorName: this.auth.teacher()?.name ?? '',
+            createdAt: Date.now(),
+            restoredAt: null,
+          }),
+        ),
+      );
+    } catch (e) {
+      console.error('تعذّر تسجيل الحركة في سجل التدقيق:', e);
+    }
+  }
+
+  /** سجلّ الحركات كاملًا — الأحدث أوّلًا. تُستخدم في شاشة «سجل الحركات» فقط. */
+  activityLog(destroyRef?: DestroyRef): Signal<ActivityLogEntry[] | undefined> {
+    return this.live<ActivityLogEntry>(
+      query(this.col(COL.activityLog)),
+      destroyRef,
+      (a, b) => b.createdAt - a.createdAt,
+    );
+  }
+
+  /**
+   * يستعيد حركة مسجَّلة بالكامل: يعيد كتابة كلّ لقطاتها (`snapshots`) تمامًا
+   * كما كانت — بنفس مجموعتها ومعرّفها — عمليّة ذرّيّة على دفعات، ثمّ يعلّم
+   * الحركة نفسها كمُستعادة (`restoredAt`) دون حذفها من السجلّ.
+   */
+  async restoreActivity(logId: string): Promise<void> {
+    const entry = await this.getOne<ActivityLogEntry>(COL.activityLog, logId);
+    if (!entry) throw new Error('لم يُعثر على سجلّ هذه الحركة');
+    if (!entry.snapshots?.length) throw new Error('لا توجد بيانات محفوظة لاستعادتها لهذه الحركة');
+    const ops: Parameters<DataService['runBatched']>[0] = entry.snapshots.map((s) => ({
+      kind: 'set' as const,
+      ref: this.ref(s.collectionName, s.id),
+      data: s.data,
+    }));
+    await this.runBatched(ops);
+    await updateDoc(this.ref(COL.activityLog, logId), { restoredAt: Date.now() });
   }
 
   private byNameAr = (a: { name: string }, b: { name: string }) =>
@@ -277,10 +389,25 @@ export class DataService {
   }
 
   async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
+    const before = await this.getOne<Session>(COL.sessions, id);
     await updateDoc(this.ref(COL.sessions, id), {
       status,
       ...(status === 'closed' ? { closedAt: Date.now() } : {}),
     });
+    if (before && before.status !== status) {
+      await this.logActivity({
+        action: 'update',
+        target: 'session',
+        summary: `${status === 'closed' ? 'إنهاء' : 'إعادة فتح'} جلسة ${before.date}`,
+        fieldChanges: [
+          { field: 'status', label: 'حالة الجلسة', before: before.status, after: status },
+        ],
+        snapshots: [
+          { collectionName: COL.sessions, id, data: before as unknown as Record<string, unknown> },
+        ],
+        sessionLabel: before.date,
+      });
+    }
   }
 
   async setSessionNote(id: string, note: string): Promise<void> {
@@ -329,11 +456,34 @@ export class DataService {
     departureTime?: string;
   }): Promise<void> {
     const id = `${input.sessionId}_${input.studentId}`;
+    const before = await this.getOne<AttendanceRecord>(COL.attendance, id);
     await setDoc(
       this.ref(COL.attendance, id),
       this.owned(clean({ ...input, createdAt: Date.now() })),
       { merge: true },
     );
+    if (before && before.status !== input.status) {
+      const student = await this.getStudent(input.studentId);
+      await this.logActivity({
+        action: 'update',
+        target: 'attendance',
+        summary: `تغيير حالة حضور ${student?.name ?? ''} من «${ATTENDANCE_LABELS[before.status]}» إلى «${ATTENDANCE_LABELS[input.status]}»`,
+        fieldChanges: diffFields(
+          before as unknown as Record<string, unknown>,
+          input as unknown as Record<string, unknown>,
+          ATTENDANCE_DIFF_FIELDS,
+        ),
+        snapshots: [
+          {
+            collectionName: COL.attendance,
+            id,
+            data: before as unknown as Record<string, unknown>,
+          },
+        ],
+        studentName: student?.name,
+        sessionLabel: input.date,
+      });
+    }
   }
 
   /** تعديل وقت الحضور/الانصراف لطالب في جلسة (دمج — لا يمسّ الحالة). */
@@ -353,10 +503,36 @@ export class DataService {
     input: NewRecitation,
   ): Promise<void> {
     const id = `${sessionId}_${studentId}`;
+    const before = await this.getOne<RecitationRecord>(COL.recitations, id);
     await setDoc(
       this.ref(COL.recitations, id),
       this.owned({ ...clean(input), createdAt: Date.now() }),
     );
+    if (before) {
+      const changes = diffFields(
+        before as unknown as Record<string, unknown>,
+        input as unknown as Record<string, unknown>,
+        RECITATION_DIFF_FIELDS,
+      );
+      if (changes.length) {
+        const student = await this.getStudent(studentId);
+        await this.logActivity({
+          action: 'update',
+          target: 'recitation',
+          summary: `تعديل تسميع ${student?.name ?? ''}`,
+          fieldChanges: changes,
+          snapshots: [
+            {
+              collectionName: COL.recitations,
+              id,
+              data: before as unknown as Record<string, unknown>,
+            },
+          ],
+          studentName: student?.name,
+          sessionLabel: input.date,
+        });
+      }
+    }
   }
 
   async getSessionRecitation(
@@ -457,14 +633,40 @@ export class DataService {
         }),
       ),
     );
+    await this.logActivity({
+      action: 'create',
+      target: 'circle',
+      summary: `إضافة حلقة «${input.name.trim()}»`,
+      circleName: input.name.trim(),
+    });
     return created.id;
   }
 
   async updateCircle(id: string, patch: Partial<NewCircle>): Promise<void> {
+    const before = await this.getOne<Circle>(COL.circles, id);
     const next: Record<string, unknown> = { ...patch };
     if (patch.name !== undefined) next['name'] = patch.name.trim();
     if (patch.weekdays !== undefined) next['weekdays'] = [...patch.weekdays].sort((a, b) => a - b);
     await updateDoc(this.ref(COL.circles, id), clean(next));
+    if (before) {
+      const changes = diffFields(
+        before as unknown as Record<string, unknown>,
+        next,
+        CIRCLE_DIFF_FIELDS,
+      );
+      if (changes.length) {
+        await this.logActivity({
+          action: 'update',
+          target: 'circle',
+          summary: `تعديل بيانات الحلقة «${before.name}»`,
+          fieldChanges: changes,
+          snapshots: [
+            { collectionName: COL.circles, id, data: before as unknown as Record<string, unknown> },
+          ],
+          circleName: before.name,
+        });
+      }
+    }
   }
 
   /**
@@ -476,21 +678,42 @@ export class DataService {
    * تبقى سجلّات السرد والاختبار (تقدّم الطالب في الحفظ) لأنّها ملك الطالب لا الحلقة.
    */
   async deleteCircle(id: string): Promise<void> {
-    const [sessions, attendance, recitations, students] = await Promise.all([
+    const [circleSnap, sessions, attendance, recitations, students] = await Promise.all([
+      getDoc(this.ref(COL.circles, id)),
       getDocs(query(this.col(COL.sessions), where('circleId', '==', id))),
       getDocs(query(this.col(COL.attendance), where('circleId', '==', id))),
       getDocs(query(this.col(COL.recitations), where('circleId', '==', id))),
       getDocs(this.col(COL.students)),
     ]);
 
+    const snapshots: ActivitySnapshot[] = [];
+    if (circleSnap.exists()) {
+      snapshots.push({
+        collectionName: COL.circles,
+        id,
+        data: circleSnap.data() as Record<string, unknown>,
+      });
+    }
     const ops: Parameters<DataService['runBatched']>[0] = [];
-    for (const d of [...sessions.docs, ...attendance.docs, ...recitations.docs]) {
-      ops.push({ kind: 'delete', ref: d.ref });
+    for (const [collectionName, docs] of [
+      [COL.sessions, sessions.docs],
+      [COL.attendance, attendance.docs],
+      [COL.recitations, recitations.docs],
+    ] as const) {
+      for (const d of docs) {
+        snapshots.push({ collectionName, id: d.id, data: d.data() as Record<string, unknown> });
+        ops.push({ kind: 'delete', ref: d.ref });
+      }
     }
     for (const d of students.docs) {
       const s = d.data() as Student;
       const ids = studentCircleIds(s);
       if (ids.includes(id)) {
+        snapshots.push({
+          collectionName: COL.students,
+          id: d.id,
+          data: s as unknown as Record<string, unknown>,
+        });
         ops.push({
           kind: 'update',
           ref: d.ref,
@@ -500,6 +723,15 @@ export class DataService {
     }
     ops.push({ kind: 'delete', ref: this.ref(COL.circles, id) });
     await this.runBatched(ops);
+
+    const name = (circleSnap.data() as Circle | undefined)?.name ?? 'حلقة محذوفة';
+    await this.logActivity({
+      action: 'delete',
+      target: 'circle',
+      summary: `حذف الحلقة «${name}» وكلّ جلساتها وسجلّاتها (${Math.max(0, snapshots.length - 1)} سجلًّا مرتبطًا)`,
+      snapshots,
+      circleName: name,
+    });
   }
 
   /**
@@ -594,6 +826,12 @@ export class DataService {
         createdAt: Date.now(),
       }),
     );
+    await this.logActivity({
+      action: 'create',
+      target: 'session',
+      summary: `إضافة حصّة بتاريخ ${date}`,
+      sessionLabel: date,
+    });
     return id;
   }
 
@@ -606,15 +844,58 @@ export class DataService {
         createdAt: Date.now(),
       }),
     );
+    await this.logActivity({
+      action: 'create',
+      target: 'student',
+      summary: `إضافة الطالب «${input.name.trim()}»`,
+      studentName: input.name.trim(),
+    });
     return created.id;
   }
 
   async updateStudent(id: string, patch: Partial<NewStudent>): Promise<void> {
+    const before = await this.getOne<Student>(COL.students, id);
     await updateDoc(this.ref(COL.students, id), clean(patch));
+    if (before) {
+      const changes = diffFields(
+        before as unknown as Record<string, unknown>,
+        patch as unknown as Record<string, unknown>,
+        STUDENT_DIFF_FIELDS,
+      );
+      if (changes.length) {
+        await this.logActivity({
+          action: 'update',
+          target: 'student',
+          summary: `تعديل بيانات الطالب «${before.name}»`,
+          fieldChanges: changes,
+          snapshots: [
+            {
+              collectionName: COL.students,
+              id,
+              data: before as unknown as Record<string, unknown>,
+            },
+          ],
+          studentName: before.name,
+        });
+      }
+    }
   }
 
   async setStudentActive(id: string, active: boolean): Promise<void> {
+    const before = await this.getOne<Student>(COL.students, id);
     await updateDoc(this.ref(COL.students, id), { active });
+    if (before && before.active !== active) {
+      await this.logActivity({
+        action: 'update',
+        target: 'student',
+        summary: `${active ? 'تنشيط' : 'إلغاء تنشيط'} الطالب «${before.name}»`,
+        fieldChanges: [{ field: 'active', label: 'نشط', before: before.active, after: active }],
+        snapshots: [
+          { collectionName: COL.students, id, data: before as unknown as Record<string, unknown> },
+        ],
+        studentName: before.name,
+      });
+    }
   }
 
   /**
@@ -624,13 +905,36 @@ export class DataService {
    */
   async deleteStudent(id: string): Promise<void> {
     const cols = [COL.attendance, COL.recitations, COL.evaluations, COL.serd, COL.exams];
-    const snaps = await Promise.all(
-      cols.map((c) => getDocs(query(this.col(c), where('studentId', '==', id)))),
-    );
+    const [studentSnap, ...snaps] = await Promise.all([
+      getDoc(this.ref(COL.students, id)),
+      ...cols.map((c) => getDocs(query(this.col(c), where('studentId', '==', id)))),
+    ]);
+    const snapshots: ActivitySnapshot[] = [];
+    if (studentSnap.exists()) {
+      snapshots.push({
+        collectionName: COL.students,
+        id,
+        data: studentSnap.data() as Record<string, unknown>,
+      });
+    }
     const ops: Parameters<DataService['runBatched']>[0] = [];
-    for (const snap of snaps) for (const d of snap.docs) ops.push({ kind: 'delete', ref: d.ref });
+    cols.forEach((collectionName, i) => {
+      for (const d of snaps[i].docs) {
+        snapshots.push({ collectionName, id: d.id, data: d.data() as Record<string, unknown> });
+        ops.push({ kind: 'delete', ref: d.ref });
+      }
+    });
     ops.push({ kind: 'delete', ref: this.ref(COL.students, id) });
     await this.runBatched(ops);
+
+    const name = (studentSnap.data() as Student | undefined)?.name ?? 'طالب محذوف';
+    await this.logActivity({
+      action: 'delete',
+      target: 'student',
+      summary: `حذف الطالب «${name}» وكلّ سجلّاته (${Math.max(0, snapshots.length - 1)} سجلًّا مرتبطًا)`,
+      snapshots,
+      studentName: name,
+    });
   }
 
   /**
@@ -679,11 +983,31 @@ export class DataService {
       this.col(COL.serd),
       this.owned({ ...clean(input), createdAt: Date.now() }),
     );
+    const student = await this.getStudent(input.studentId);
+    await this.logActivity({
+      action: 'create',
+      target: 'serd',
+      summary: `تسجيل سرد الجزء ${input.juz} لـ${student?.name ?? ''}`,
+      studentName: student?.name,
+    });
     return created.id;
   }
 
   async deleteSerd(id: string): Promise<void> {
+    const before = await this.getOne<SerdRecord>(COL.serd, id);
     await deleteDoc(this.ref(COL.serd, id));
+    if (before) {
+      const student = await this.getStudent(before.studentId);
+      await this.logActivity({
+        action: 'delete',
+        target: 'serd',
+        summary: `حذف سجلّ سرد الجزء ${before.juz} لـ${student?.name ?? ''}`,
+        snapshots: [
+          { collectionName: COL.serd, id, data: before as unknown as Record<string, unknown> },
+        ],
+        studentName: student?.name,
+      });
+    }
   }
 
   // ---------- الاختبار (اختبار مستقلّ لكلّ جزء محفوظ) ----------
@@ -707,11 +1031,31 @@ export class DataService {
       this.col(COL.exams),
       this.owned({ ...clean(input), createdAt: Date.now() }),
     );
+    const student = await this.getStudent(input.studentId);
+    await this.logActivity({
+      action: 'create',
+      target: 'exam',
+      summary: `تسجيل اختبار الجزء ${input.juz} لـ${student?.name ?? ''}`,
+      studentName: student?.name,
+    });
     return created.id;
   }
 
   async deleteExam(id: string): Promise<void> {
+    const before = await this.getOne<ExamRecord>(COL.exams, id);
     await deleteDoc(this.ref(COL.exams, id));
+    if (before) {
+      const student = await this.getStudent(before.studentId);
+      await this.logActivity({
+        action: 'delete',
+        target: 'exam',
+        summary: `حذف سجلّ اختبار الجزء ${before.juz} لـ${student?.name ?? ''}`,
+        snapshots: [
+          { collectionName: COL.exams, id, data: before as unknown as Record<string, unknown> },
+        ],
+        studentName: student?.name,
+      });
+    }
   }
 
   async addRecitation(input: NewRecitation): Promise<string> {
@@ -731,11 +1075,47 @@ export class DataService {
   }
 
   async deleteRecitation(id: string): Promise<void> {
+    const before = await this.getOne<RecitationRecord>(COL.recitations, id);
     await deleteDoc(this.ref(COL.recitations, id));
+    if (before) {
+      const student = await this.getStudent(before.studentId);
+      await this.logActivity({
+        action: 'delete',
+        target: 'recitation',
+        summary: `حذف سجلّ تسميع ${student?.name ?? ''}`,
+        snapshots: [
+          {
+            collectionName: COL.recitations,
+            id,
+            data: before as unknown as Record<string, unknown>,
+          },
+        ],
+        studentName: student?.name,
+        sessionLabel: before.date,
+      });
+    }
   }
 
   async deleteEvaluation(id: string): Promise<void> {
+    const before = await this.getOne<EvaluationRecord>(COL.evaluations, id);
     await deleteDoc(this.ref(COL.evaluations, id));
+    if (before) {
+      const student = await this.getStudent(before.studentId);
+      await this.logActivity({
+        action: 'delete',
+        target: 'evaluation',
+        summary: `حذف التقييم اليوميّ لـ${student?.name ?? ''}`,
+        snapshots: [
+          {
+            collectionName: COL.evaluations,
+            id,
+            data: before as unknown as Record<string, unknown>,
+          },
+        ],
+        studentName: student?.name,
+        sessionLabel: before.date,
+      });
+    }
   }
 }
 

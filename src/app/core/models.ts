@@ -440,7 +440,76 @@ export const COL = {
   evaluations: 'evaluations',
   serd: 'serd',
   exams: 'exams',
+  activityLog: 'activityLog',
 } as const;
 
 /** مجموعة ملفّات المعلّمين (اسم/جوال فقط) */
 export const TEACHERS = 'teachers';
+
+/* ==========================================================================
+   سجلّ الحركات (تدقيق + حذف ناعم + استعادة) — v1.21.0
+   كلّ حذف أو استبدال لبيانات حسّاسة (طالب، حلقة، تسميع، حضور، سرد، اختبار،
+   تقييم) يُسجَّل هنا قبل تنفيذه، مع لقطة كاملة (`snapshots`) تكفي لاستعادة
+   الحالة السابقة تمامًا بنفس المجموعة والمعرّف — راجع
+   `DataService.restoreActivity()`. لا يُحذف من هذا السجلّ تلقائيًّا أبدًا.
+   ========================================================================== */
+
+/** نوع الحركة المسجَّلة. */
+export type ActivityAction = 'create' | 'update' | 'delete';
+
+export const ACTIVITY_ACTION_LABELS: Record<ActivityAction, string> = {
+  create: 'إضافة',
+  update: 'تعديل',
+  delete: 'حذف',
+};
+
+/** نوع السجلّ المتأثّر بالحركة. */
+export type ActivityTarget =
+  'student' | 'circle' | 'session' | 'attendance' | 'recitation' | 'evaluation' | 'serd' | 'exam';
+
+export const ACTIVITY_TARGET_LABELS: Record<ActivityTarget, string> = {
+  student: 'طالب',
+  circle: 'حلقة',
+  session: 'جلسة',
+  attendance: 'حضور',
+  recitation: 'تسميع',
+  evaluation: 'تقييم يوميّ',
+  serd: 'سرد',
+  exam: 'اختبار',
+};
+
+/** حقل تغيّر ضمن حركة «تعديل» — بقيمتيه قبل وبعد، لعرض تفصيليّ. */
+export interface ActivityFieldChange {
+  field: string;
+  label: string;
+  before: unknown;
+  after: unknown;
+}
+
+/** لقطة مستند كامل قبل تغييره/حذفه — تكفي وحدها لاستعادته بنفس مجموعته ومعرّفه. */
+export interface ActivitySnapshot {
+  collectionName: string;
+  id: string;
+  data: Record<string, unknown>;
+}
+
+/** سجلّ حركة واحدة — إدخال/تعديل/حذف. */
+export interface ActivityLogEntry extends Owned {
+  id: string;
+  action: ActivityAction;
+  target: ActivityTarget;
+  /** نصّ عربيّ جاهز للعرض يلخّص الحركة. */
+  summary: string;
+  /** تفاصيل الحقول المتغيّرة (action='update' فقط، إن وُجد تغيير فعليّ). */
+  fieldChanges?: ActivityFieldChange[];
+  /** لقطات الحالة قبل الحركة — أساس الاستعادة. غائبة لحركات «إضافة». */
+  snapshots?: ActivitySnapshot[];
+  studentName?: string;
+  circleName?: string;
+  sessionLabel?: string;
+  /** اسم المعلّم الذي نفّذ الحركة، وقت وقوعها. */
+  actorName?: string;
+  /** وقت الاستعادة إن استُعيدت هذه الحركة (null/غائب = لم تُستعَد بعد). */
+  restoredAt?: number | null;
+  createdAt: number;
+}

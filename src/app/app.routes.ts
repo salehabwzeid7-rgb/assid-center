@@ -33,6 +33,11 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/profile/profile').then((m) => m.ProfilePage),
       },
       {
+        path: 'activity-log',
+        loadComponent: () =>
+          import('./pages/activity-log/activity-log').then((m) => m.ActivityLogPage),
+      },
+      {
         path: 'circles/new',
         loadComponent: () =>
           import('./pages/circle-form/circle-form').then((m) => m.CircleFormPage),

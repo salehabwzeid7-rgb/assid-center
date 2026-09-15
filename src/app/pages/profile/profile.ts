@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { NotifyService } from '../../core/notify.service';
 import { UpdateService } from '../../core/update.service';
@@ -10,7 +10,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
   selector: 'app-profile',
-  imports: [FormsModule, PageHeaderComponent],
+  imports: [FormsModule, RouterLink, PageHeaderComponent],
   template: `
     <app-page-header title="حساب المعلّم" />
 
@@ -130,6 +130,15 @@ import { PageHeaderComponent } from '../../shared/page-header';
             }}
           </p>
         }
+      </div>
+
+      <div class="section-title">سجل الحركات</div>
+      <div class="card">
+        <p class="muted" style="margin-top:0;font-size:.86rem">
+          كلّ حذف أو تعديل لبيانات حسّاسة (طالب، حلقة، تسميع، حضور، سرد، اختبار) يُسجَّل هنا
+          تلقائيًّا مع إمكانيّة استعادته بضغطة واحدة، إلى الأبد.
+        </p>
+        <a class="btn btn-ghost btn-block" [routerLink]="['/activity-log']"> عرض سجل الحركات › </a>
       </div>
 
       <div class="section-title">التحديثات</div>
