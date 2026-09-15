@@ -21,6 +21,7 @@ import {
   type AttendanceStatus,
   type RecitationRecord,
   type SerdRecord,
+  type Session,
   type Student,
 } from '../../core/models';
 import { dmy, weekdayAr } from '../../core/format';
@@ -675,23 +676,30 @@ export class SessionPage {
     this.reportOverride.set(null);
   }
 
-  /** سطر حضور طالب في التقرير: «حاضر (٤:٠٠ م – ٥:٠٠ م)» أو «غائب». */
-  private attendanceLine(a: AttendanceRecord | null): string {
+  /**
+   * سطر حضور طالب في التقرير: «حاضر (٤:٠٠ م – ٥:٠٠ م)» أو «غائب». وقت
+   * الحضور/الانصراف الفعليّان (اللذان يُعدّلهما المعلّم يدويًّا) لهما الأولويّة
+   * دائمًا؛ أيّ منهما غير مسجَّل يُستبدَل بتوقيت الحلقة الافتراضيّ (بداية/نهاية
+   * الحصّة المجدولة) بدل أن يظهر السطر بلا توقيت إطلاقًا.
+   */
+  private attendanceLine(a: AttendanceRecord | null, s: Session): string {
     if (!a) return 'لم يُسجَّل';
     const label = ATTENDANCE_LABELS[a.status];
     if (a.status === 'present' || a.status === 'late') {
-      const from = isValidHHMM(a.arrivalTime) ? fmt12(a.arrivalTime) : '';
-      const to = isValidHHMM(a.departureTime) ? fmt12(a.departureTime) : '';
+      const fromRaw = isValidHHMM(a.arrivalTime) ? a.arrivalTime : s.fromTime;
+      const toRaw = isValidHHMM(a.departureTime) ? a.departureTime : s.toTime;
+      const from = isValidHHMM(fromRaw) ? fmt12(fromRaw) : '';
+      const to = isValidHHMM(toRaw) ? fmt12(toRaw) : '';
       const span = from && to ? ` (${from} – ${to})` : from ? ` (حضر ${from})` : '';
       return label + span;
     }
     return label;
   }
 
-  private studentBlock(index: number, st: Student): string {
+  private studentBlock(index: number, st: Student, s: Session): string {
     const a = this.attOf(st.id);
     const recs = this.recsOf(st.id);
-    const lines = [`${index}. ${st.name}`, `• الحضور: ${this.attendanceLine(a)}`];
+    const lines = [`${index}. ${st.name}`, `• الحضور: ${this.attendanceLine(a, s)}`];
     const present = a?.status === 'present' || a?.status === 'late';
     if (present) {
       const actual = recs.filter(isActualRecitation);
@@ -722,10 +730,28 @@ export class SessionPage {
     return lines.join('\n');
   }
 
+  /**
+   * ترتيب طلّاب التقرير: مجموعات بالحالة (سمّعوا ← لم يسمّعوا ← غائبون)،
+   * وداخل كلّ مجموعة أبجديًّا عربيًّا — بدل الترتيب الأبجديّ المطلق وحده الذي
+   * يخلط الحاضر والغائب معًا. القائمة المعروضة في تبويب «الحضور والتسميع»
+   * نفسها (لتحضير الحضور) تبقى بترتيبها الثابت المعتاد — لا نُعيد ترتيبها
+   * حيّةً أثناء التحضير، فقط ترتيب التقرير النهائيّ المُولَّد للمشاركة.
+   */
+  private readonly reportStudentsOrder = computed(() => {
+    const rank = (st: Student): 0 | 1 | 2 => {
+      if (this.recsOf(st.id).some(isActualRecitation)) return 0; // سمّعوا
+      if (this.attOf(st.id)?.status === 'absent') return 2; // غائبون
+      return 1; // لم يسمّعوا (حاضر/متأخر/مأذون بلا تسميع فعليّ)
+    };
+    return [...(this.students() ?? [])].sort(
+      (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'ar'),
+    );
+  });
+
   /** التقرير الكامل: افتتاح المعلّم + الترويسة والتاريخ + قائمة الطلّاب + ختام المعلّم. */
   readonly reportText = computed<string>(() => {
     const s = this.session();
-    const students = this.students() ?? [];
+    const students = this.reportStudentsOrder();
     if (!s) return '';
     const t = this.auth.teacher();
     const intro = (t?.reportIntro ?? '').trim() || DEFAULT_REPORT_INTRO;
@@ -733,7 +759,7 @@ export class SessionPage {
     const header = `📋 ${circleLabel(this.circle())} — ${weekdayAr(s.date)} ${dmy(s.date)}`;
     const totals = `الحضور: ${this.presentTotal()}/${students.length} · التسميع: ${this.recitedTotal()}/${students.length}`;
     const rule = '━━━━━━━━━━━━';
-    const blocks = students.map((st, i) => this.studentBlock(i + 1, st));
+    const blocks = students.map((st, i) => this.studentBlock(i + 1, st, s));
     return [intro, '', header, totals, rule, '', blocks.join('\n\n'), '', rule, outro].join('\n');
   });
 
