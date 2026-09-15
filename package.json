@@ -1,6 +1,6 @@
 {
   "name": "al-maher",
-  "version": "1.21.3",
+  "version": "1.22.0",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
