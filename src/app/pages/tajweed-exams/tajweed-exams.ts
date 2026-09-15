@@ -32,12 +32,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <div class="spinner"></div>
         } @else if (exams()!.length === 0) {
           <div class="empty">
-            <span class="icon">🧪</span> لا توجد اختبارات بعد — أنشئ أوّل اختبار من الزرّ أعلاه.
+            <span class="icon">📝</span> لا توجد اختبارات بعد — أنشئ أوّل اختبار من الزرّ أعلاه.
           </div>
         } @else {
           @for (e of exams(); track e.id) {
             <a class="list-item" [routerLink]="['/circle', id, 'exams', e.id]">
-              <span class="avatar">🧪</span>
+              <span class="avatar">📝</span>
               <span class="grow">
                 <span class="primary">{{ e.name }}</span>
                 <span class="secondary">

@@ -114,8 +114,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </a>
         @if (isTajweed()) {
           <a class="tile" [routerLink]="['/circle', id, 'exams']">
-            <span class="tile-ico">🧪</span>
-            <span class="tile-label">اختبارات</span>
+            <span class="tile-ico">📝</span>
+            <span class="tile-label">الاختبارات</span>
           </a>
         }
       </div>

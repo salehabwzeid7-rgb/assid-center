@@ -21,8 +21,9 @@ import {
   type RecitationKind,
   type RecitationRecord,
 } from '../core/models';
-import { SURAHS, surah, surahName, surahsBetween } from '../core/quran-data';
+import { surah, surahName, surahsBetween } from '../core/quran-data';
 import { ScoreInputComponent } from './score-input';
+import { SurahPickerComponent } from './surah-picker';
 
 /** «دد:ثث» — أو «س:دد:ثث» إن تجاوزت الساعة. */
 function fmtClock(totalSec: number): string {
@@ -61,7 +62,7 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
  */
 @Component({
   selector: 'app-recitation-panel',
-  imports: [FormsModule, RouterLink, ScoreInputComponent],
+  imports: [FormsModule, RouterLink, ScoreInputComponent, SurahPickerComponent],
   template: `
     <div class="rp">
       <!-- الطالب حاضر لكن لم يسمّع — حالة صريحة تُغني عن كامل نموذج التسميع -->
@@ -188,11 +189,7 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
         <div class="rp-row">
           <div class="rp-field">
             <label>من سورة</label>
-            <select [(ngModel)]="m.fromSurah" [ngModelOptions]="{ standalone: true }">
-              @for (su of surahs; track su.n) {
-                <option [value]="su.n">{{ su.n }}. {{ su.name }}</option>
-              }
-            </select>
+            <app-surah-picker [(value)]="m.fromSurah" label="من سورة" />
           </div>
           <div class="rp-field rp-ayah">
             <label>آية</label>
@@ -209,11 +206,7 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
         <div class="rp-row">
           <div class="rp-field">
             <label>إلى سورة</label>
-            <select [(ngModel)]="m.toSurah" [ngModelOptions]="{ standalone: true }">
-              @for (su of surahs; track su.n) {
-                <option [value]="su.n">{{ su.n }}. {{ su.name }}</option>
-              }
-            </select>
+            <app-surah-picker [(value)]="m.toSurah" label="إلى سورة" />
           </div>
           <div class="rp-field rp-ayah">
             <label>آية</label>
@@ -625,7 +618,6 @@ export class RecitationPanelComponent implements OnInit {
    */
   readonly existingEntries = input<RecitationRecord[]>([]);
 
-  readonly surahs = SURAHS;
   readonly kinds: RecitationKind[] = ['new', 'near_review', 'far_review'];
   readonly kindLabels = RECITATION_KIND_LABELS;
   readonly tasmiePass = TASMIE_PASS;

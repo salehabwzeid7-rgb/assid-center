@@ -229,7 +229,7 @@ export class TajweedExamPage {
   readonly reportText = computed<string>(() => {
     const e = this.exam();
     if (!e) return '';
-    const header = `🧪 نتائج اختبار: ${e.name}\n${circleLabel(this.circle())} — ${weekdayAr(e.date)} ${dmy(e.date)}`;
+    const header = `📝 نتائج اختبار: ${e.name}\n${circleLabel(this.circle())} — ${weekdayAr(e.date)} ${dmy(e.date)}`;
     const rows = this.roster();
     const lines = rows.map((r, i) => {
       if (!r.hasResult || r.score === null) return `${i + 1}. ${r.student.name} — لم يُقيَّم بعد`;
