@@ -119,6 +119,24 @@ export function scoreClass(score: number, threshold: number): 'pass' | 'fail' {
   return score >= threshold ? 'pass' : 'fail';
 }
 
+/**
+ * تصنيف نصّيّ أدقّ من `passLabel` (للتقرير المصوَّر ونحوه) — أربع درجات
+ * إيجابيّة الصياغة بدل النجاح/الرسوب الثنائيّ. **لا تُغيّر** عتبة النجاح
+ * الفعليّة `TASMIE_PASS`/`SARD_PASS`/`EXAM_PASS` (تبقى ٩٠ كما هي في كل
+ * مكان آخر بالتطبيق) — هذا تصنيف عرض إضافيّ فوقها فقط.
+ * الحدود كما طلبها المستخدم حرفيًّا (٩٠ و٩٥ و٩٨) بها تراكب عند الحدّ
+ * الأعلى لكل فئة — اعتمدتُ الفئة الأعلى عند التساوي بالضبط (٩٥ → «جيد
+ * جدًّا» لا «جيد»، و٩٨ → «ممتاز» لا «جيد جدًّا»)، وهو المعتاد رياضيًّا؛
+ * صحّح لي إن كان المقصود خلاف ذلك.
+ */
+export type ScoreRating = 'إعادة' | 'جيد' | 'جيد جدًّا' | 'ممتاز';
+export function ratingLabel(score: number): ScoreRating {
+  if (score < 90) return 'إعادة';
+  if (score < 95) return 'جيد';
+  if (score < 98) return 'جيد جدًّا';
+  return 'ممتاز';
+}
+
 /** تقديرات نصّيّة قديمة → نسبة تقريبيّة (لقراءة السجلّات المُنشأة قبل التحديث) */
 const LEGACY_GRADE_SCORE: Record<string, number> = {
   excellent: 98,

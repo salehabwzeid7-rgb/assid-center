@@ -9,6 +9,7 @@ import {
   ATTENDANCE_ORDER,
   DEFAULT_REPORT_INTRO,
   DEFAULT_REPORT_OUTRO,
+  RECITATION_KIND_LABELS,
   SARD_PASS,
   SESSION_STATUS_LABELS,
   TASMIE_PASS,
@@ -18,6 +19,7 @@ import {
   studentCircleIds,
   type AttendanceRecord,
   type AttendanceStatus,
+  type RecitationRecord,
   type SerdRecord,
   type Student,
 } from '../../core/models';
@@ -134,7 +136,7 @@ type Step = 'attendance' | 'summary' | 'serd';
                 </div>
 
                 @if (isPresent(st.id)) {
-                  @if (recOf(st.id); as r) {
+                  @for (r of recsOf(st.id); track r.kind) {
                     @if (r.notRecited) {
                       <button
                         type="button"
@@ -149,30 +151,33 @@ type Step = 'attendance' | 'summary' | 'serd';
                         class="muted rp-done rp-done-btn"
                         (click)="openStudentModal(st.id)"
                       >
-                        سُجّل: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
+                        {{ kindLabels[r.kind] }}: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
                         {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
                         {{ scoreOf(r) }}٪ — تعديل ›
                       </button>
                     }
-                  } @else {
+                  }
+                  @if (canAddKind(st.id)) {
                     <button
                       class="btn btn-primary btn-block"
                       style="margin-top:8px"
                       type="button"
                       (click)="openStudentModal(st.id)"
                     >
-                      📖 تسجيل التسميع
+                      📖 {{ recsOf(st.id).length ? 'تسجيل تسميع آخر' : 'تسجيل التسميع' }}
                     </button>
                   }
-                } @else if (recOf(st.id); as r) {
-                  @if (r.notRecited) {
-                    <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
-                  } @else {
-                    <div class="muted rp-done">
-                      سُجّل تسميع سابق: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
-                      {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
-                      {{ scoreOf(r) }}٪
-                    </div>
+                } @else if (recsOf(st.id).length > 0) {
+                  @for (r of recsOf(st.id); track r.kind) {
+                    @if (r.notRecited) {
+                      <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
+                    } @else {
+                      <div class="muted rp-done">
+                        سُجّل تسميع سابق ({{ kindLabels[r.kind] }}): {{ surahName(r.fromSurah) }}
+                        {{ r.fromAyah }} ← {{ surahName(r.toSurah) }} {{ r.toAyah }} ·
+                        {{ r.pages }} وجه · {{ scoreOf(r) }}٪
+                      </div>
+                    }
                   }
                 }
               </div>
@@ -225,7 +230,7 @@ type Step = 'attendance' | 'summary' | 'serd';
                   [studentId]="st.id"
                   [circleId]="s.circleId"
                   [date]="s.date"
-                  [existing]="recOf(st.id)"
+                  [existingEntries]="recsOf(st.id)"
                 />
               </div>
             </div>
@@ -563,6 +568,7 @@ export class SessionPage {
   readonly attOrder = ATTENDANCE_ORDER;
   readonly scoreOf = scoreOf;
   readonly statusLabels = SESSION_STATUS_LABELS;
+  readonly kindLabels = RECITATION_KIND_LABELS;
   readonly surahName = surahName;
 
   private readonly allStudents = this.data.allStudents(this.destroyRef);
@@ -601,7 +607,16 @@ export class SessionPage {
     () =>
       this.attendance()?.filter((a) => a.status === 'present' || a.status === 'late').length ?? 0,
   );
-  readonly recitedTotal = computed(() => this.actualRecitations().length);
+  /**
+   * عدد الطلّاب المسمّعين (لا عدد سجلّات التسميع) — v1.22.0: طالب واحد قد
+   * يملك أكثر من سجلّ تسميع بنفس الجلسة الآن (حفظ جديد + مراجعة مثلًا)،
+   * فالعدّ بالسجلّات كان سيُظهر رقمًا أكبر من عدد الطلّاب الفعليّ.
+   */
+  readonly recitedTotal = computed(
+    () => new Set(this.actualRecitations().map((r) => r.studentId)).size,
+  );
+  /** عدد سجلّات التسميع الفعليّة (لا الطلّاب) — أساس نسبة النجاح/الرسوب أدناه. */
+  private readonly recitedRecordsTotal = computed(() => this.actualRecitations().length);
   readonly presentRate = computed(() => {
     const n = this.students()?.length ?? 0;
     return n ? Math.round((this.presentTotal() / n) * 100) : 0;
@@ -618,9 +633,9 @@ export class SessionPage {
   readonly passCount = computed(
     () => this.actualRecitations().filter((r) => scoreOf(r) >= TASMIE_PASS).length,
   );
-  readonly failCount = computed(() => this.recitedTotal() - this.passCount());
+  readonly failCount = computed(() => this.recitedRecordsTotal() - this.passCount());
   readonly passPct = computed(() => {
-    const n = this.recitedTotal();
+    const n = this.recitedRecordsTotal();
     return n ? (this.passCount() / n) * 100 : 0;
   });
 
@@ -675,22 +690,32 @@ export class SessionPage {
 
   private studentBlock(index: number, st: Student): string {
     const a = this.attOf(st.id);
-    const r = this.recOf(st.id);
+    const recs = this.recsOf(st.id);
     const lines = [`${index}. ${st.name}`, `• الحضور: ${this.attendanceLine(a)}`];
     const present = a?.status === 'present' || a?.status === 'late';
     if (present) {
-      if (r && isActualRecitation(r)) {
-        const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
-        lines.push(`• التسميع: ${r.pages} وجه — ${scoreOf(r)}٪ (${range})`);
-        if (r.hifzErrors || r.tajweedErrors) {
-          lines.push(`• الأخطاء: حفظ ${r.hifzErrors} · تجويد ${r.tajweedErrors}`);
+      const actual = recs.filter(isActualRecitation);
+      if (actual.length > 0) {
+        // قد يكون للطالب أكثر من تسميع بنفس الجلسة (حفظ جديد + مراجعة) —
+        // سطر منفصل لكلّ نوع، موسومًا باسمه حتى لا يلتبس بغيره.
+        for (const r of actual) {
+          const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
+          lines.push(
+            `• التسميع (${this.kindLabels[r.kind]}): ${r.pages} وجه — ${scoreOf(r)}٪ (${range})`,
+          );
+          if (r.hifzErrors || r.tajweedErrors) {
+            lines.push(`  الأخطاء: حفظ ${r.hifzErrors} · تجويد ${r.tajweedErrors}`);
+          }
+          if (r.notes?.trim()) lines.push(`  ملاحظة: ${r.notes.trim()}`);
         }
-        if (r.notes?.trim()) lines.push(`• ملاحظة: ${r.notes.trim()}`);
-      } else if (r?.notRecited) {
-        const reason = r.notes?.trim();
-        lines.push(`• التسميع: لم يسمّع${reason ? ' — ' + reason : ''}`);
       } else {
-        lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
+        const notRecitedEntry = recs.find((r) => r.notRecited);
+        if (notRecitedEntry) {
+          const reason = notRecitedEntry.notes?.trim();
+          lines.push(`• التسميع: لم يسمّع${reason ? ' — ' + reason : ''}`);
+        } else {
+          lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
+        }
       }
     }
     if (a?.note?.trim()) lines.push(`• ملاحظة الحضور: ${a.note.trim()}`);
@@ -787,8 +812,13 @@ export class SessionPage {
     const st = this.statusOf(studentId);
     return st === 'present' || st === 'late';
   }
-  recOf(studentId: string) {
-    return this.recitations()?.find((r) => r.studentId === studentId) ?? null;
+  /** كلّ سجلّات تسميع هذا الطالب في هذه الجلسة — قد تكون أكثر من واحد (حفظ جديد + مراجعة مثلًا). */
+  recsOf(studentId: string): RecitationRecord[] {
+    return this.recitations()?.filter((r) => r.studentId === studentId) ?? [];
+  }
+  /** ما زال هناك نوع تسميع واحد على الأقلّ لم يُسجَّل بعد لهذا الطالب في هذه الجلسة. */
+  canAddKind(studentId: string): boolean {
+    return this.recsOf(studentId).length < Object.keys(this.kindLabels).length;
   }
   private attOf(studentId: string): AttendanceRecord | null {
     return this.attendance()?.find((a) => a.studentId === studentId) ?? null;

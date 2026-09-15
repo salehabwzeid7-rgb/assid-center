@@ -75,11 +75,6 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/session/session').then((m) => m.SessionPage),
       },
       {
-        path: 'session/:sessionId/recite/:studentId',
-        loadComponent: () =>
-          import('./pages/recitation-form/recitation-form').then((m) => m.RecitationFormPage),
-      },
-      {
         // التقييم اليوميّ — يُفتح من داخل الجلسة النشطة فقط
         path: 'session/:sessionId/evaluate/:studentId',
         loadComponent: () =>

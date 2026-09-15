@@ -165,8 +165,17 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
           <label>نوع التسميع</label>
           <div class="chips">
             @for (k of kinds; track k) {
-              <button type="button" class="chip" [class.active]="m.kind === k" (click)="m.kind = k">
+              <button
+                type="button"
+                class="chip"
+                [class.active]="m.kind === k"
+                [class.has-entry]="!!entryForKind(k)"
+                (click)="selectKind(k)"
+              >
                 {{ kindLabels[k] }}
+                @if (entryForKind(k)) {
+                  <span class="rp-kind-dot">●</span>
+                }
               </button>
             }
           </div>
@@ -321,7 +330,7 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
               ? 'جارٍ الحفظ…'
               : notRecited()
                 ? 'حفظ الحالة'
-                : existing()
+                : entryForKind(m.kind)
                   ? 'حفظ تعديل التسميع'
                   : 'حفظ التسميع'
           }}
@@ -451,6 +460,12 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
       .rp-perpage {
         font-weight: 500;
       }
+      .rp-kind-dot {
+        font-size: 6px;
+        margin-inline-start: 4px;
+        color: var(--green);
+        vertical-align: middle;
+      }
       .rp-hint {
         margin: 0;
         padding: 8px 10px;
@@ -538,8 +553,13 @@ export class RecitationPanelComponent implements OnInit {
   readonly studentId = input.required<string>();
   readonly circleId = input.required<string>();
   readonly date = input.required<string>();
-  /** السجلّ الحاليّ إن وُجد (للتعديل). */
-  readonly existing = input<RecitationRecord | null>(null);
+  /**
+   * كلّ سجلّات تسميع هذا الطالب في هذه الجلسة (v1.22.0) — سجلّ واحد ممكن لكلّ
+   * نوع (حفظ جديد/مراجعة قريبة/مراجعة بعيدة)، فقد يحمل حتى ثلاثة عناصر.
+   * تبديل «نوع التسميع» داخل اللوحة يُحمِّل حقول النموذج من العنصر المطابق
+   * (إن وُجد) بدل استبدال سجلّ واحد ثابت كما كان سابقًا.
+   */
+  readonly existingEntries = input<RecitationRecord[]>([]);
 
   readonly surahs = SURAHS;
   readonly kinds: RecitationKind[] = ['new', 'near_review', 'far_review'];
@@ -600,11 +620,12 @@ export class RecitationPanelComponent implements OnInit {
   });
 
   constructor() {
-    // اقتراح ذكيّ لبداية المقطع — مرّة واحدة فقط، وفقط عند إدخال جديد (لا
-    // تعديل سجلّ موجود لهذه الجلسة)، وفقط إن كانت الحقول لا تزال بقيمها
-    // الافتراضيّة (لم يبدأ المعلّم الكتابة يدويًّا بعد).
+    // اقتراح ذكيّ لبداية المقطع — مرّة واحدة فقط، وفقط عند إدخال جديد تمامًا
+    // (لا يوجد أيّ تسميع مسجَّل بعد لهذا الطالب في هذه الجلسة أيًّا كان نوعه)،
+    // وفقط إن كانت الحقول لا تزال بقيمها الافتراضيّة (لم يبدأ المعلّم الكتابة
+    // يدويًّا بعد).
     effect(() => {
-      if (this.smartPrefillDone || this.existing()) {
+      if (this.smartPrefillDone || this.existingEntries().length > 0) {
         this.smartPrefillDone = true;
         return;
       }
@@ -661,29 +682,13 @@ export class RecitationPanelComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const r = this.existing();
-    if (r) {
-      this.notRecited.set(!!r.notRecited);
-      if (isActualRecitation(r)) {
-        this.m = {
-          kind: r.kind,
-          fromSurah: r.fromSurah,
-          fromAyah: r.fromAyah,
-          toSurah: r.toSurah,
-          toAyah: r.toAyah,
-          hifzErrors: r.hifzErrors,
-          tajweedErrors: r.tajweedErrors,
-          promptCount: r.promptCount,
-          notes: r.notes ?? '',
-        };
-        this.pages.set(r.pages);
-        this.score.set(scoreOf(r));
-        if (r.durationSec) this.elapsedSec.set(r.durationSec);
-      } else {
-        // سجلّ «لم يسمّع» — لا معنى لاستعادة حقول مقطع صفريّة، فقط الملاحظة.
-        this.m.notes = r.notes ?? '';
-      }
-    }
+    // عند فتح اللوحة نعرض أوّل ما هو مسجَّل فعلًا (يُفضَّل «حفظ جديد» إن
+    // وُجد، وإلا أوّل نوع مسجَّل)، أو نموذجًا فارغًا بنوع «حفظ جديد» افتراضيًّا
+    // إن لم يُسجَّل للطالب أيّ تسميع بعد في هذه الجلسة.
+    const entries = this.existingEntries();
+    const first = entries.find((r) => r.kind === 'new') ?? entries[0] ?? null;
+    this.m.kind = first?.kind ?? 'new';
+    this.hydrateFrom(first);
     // استعادة مؤقّت جارٍ بعد قفل الشاشة/إعادة التحميل
     try {
       const raw = sessionStorage.getItem(this.key());
@@ -703,6 +708,56 @@ export class RecitationPanelComponent implements OnInit {
       /* التخزين محجوب */
     }
     this.destroyRef.onDestroy(() => this.clearTick());
+  }
+
+  /** سجلّ الطالب المسجَّل لهذا النوع في هذه الجلسة إن وُجد، وإلا null. */
+  entryForKind(kind: RecitationKind): RecitationRecord | null {
+    return this.existingEntries().find((r) => r.kind === kind) ?? null;
+  }
+
+  /**
+   * يملأ حقول النموذج من سجلّ موجود، أو يعيدها لقيمها الافتراضيّة إن كان
+   * null (نوع لم يُسجَّل له تسميع بعد بهذه الجلسة). لا يمسّ المؤقّت (يبقى
+   * الوقت الجاري مستقلًّا عن نوع التسميع المعروض).
+   */
+  private hydrateFrom(r: RecitationRecord | null): void {
+    if (!r) {
+      this.notRecited.set(false);
+      this.m.fromSurah = 78;
+      this.m.fromAyah = 1;
+      this.m.toSurah = 78;
+      this.m.toAyah = 40;
+      this.m.hifzErrors = 0;
+      this.m.tajweedErrors = 0;
+      this.m.promptCount = 0;
+      this.m.notes = '';
+      this.pages.set(1);
+      this.score.set(TASMIE_PASS);
+      return;
+    }
+    this.notRecited.set(!!r.notRecited);
+    if (isActualRecitation(r)) {
+      this.m.fromSurah = r.fromSurah;
+      this.m.fromAyah = r.fromAyah;
+      this.m.toSurah = r.toSurah;
+      this.m.toAyah = r.toAyah;
+      this.m.hifzErrors = r.hifzErrors;
+      this.m.tajweedErrors = r.tajweedErrors;
+      this.m.promptCount = r.promptCount;
+      this.m.notes = r.notes ?? '';
+      this.pages.set(r.pages);
+      this.score.set(scoreOf(r));
+      if (r.durationSec) this.elapsedSec.set(r.durationSec);
+    } else {
+      // سجلّ «لم يسمّع» — لا معنى لاستعادة حقول مقطع صفريّة، فقط الملاحظة.
+      this.m.notes = r.notes ?? '';
+    }
+  }
+
+  /** تبديل نوع التسميع المعروض داخل اللوحة — يحمّل سجلّ هذا النوع إن وُجد، وإلا نموذجًا فارغًا. */
+  selectKind(kind: RecitationKind): void {
+    this.m.kind = kind;
+    this.hydrateFrom(this.entryForKind(kind));
   }
 
   maxAyah(n: number | string): number {
@@ -803,7 +858,10 @@ export class RecitationPanelComponent implements OnInit {
             circleId: this.circleId(),
             sessionId: this.sessionId(),
             date: this.date(),
-            kind: this.m.kind,
+            // تُحفَظ «لم يسمّع» دائمًا تحت نوع «حفظ جديد» بصرف النظر عن شريحة
+            // النوع المختارة حاليًّا — حالة واحدة تخصّ الجلسة كلّها للطالب، لا
+            // نوعًا بعينه، فلا تتكرّر لكلّ نوع.
+            kind: 'new',
             fromSurah: 0,
             fromAyah: 0,
             toSurah: 0,

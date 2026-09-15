@@ -543,16 +543,33 @@ export class DataService {
     await setDoc(this.ref(COL.attendance, id), this.owned(clean(patch)), { merge: true });
   }
 
-  /** تسميع الطالب ضمن جلسة — سجل واحد لكل طالب في الجلسة (قابل للتعديل) */
+  /**
+   * تسميع الطالب ضمن جلسة — سجل واحد لكل (جلسة، طالب، نوع) — v1.22.0: كان
+   * سابقًا سجلًّا واحدًا فقط لكل (جلسة، طالب) بمعرّف `{sessionId}_{studentId}`
+   * بلا نوع، فمنع هذا تسجيل أكثر من تسميع للطالب في نفس الجلسة (حفظ جديد ثمّ
+   * مراجعة مثلًا) — الثاني كان يستبدل الأوّل بصمت. المعرّف الآن
+   * `{sessionId}_{studentId}_{kind}` فيتيح حتى ٣ سجلّات مستقلّة لكلّ طالب في
+   * الجلسة (واحد لكلّ نوع)، كلٌّ قابل للتعديل بمعزل عن الآخرين.
+   *
+   * توافقيّة مع السجلّات القديمة (بلا هجرة يدويّة منفصلة): إن لم يوجد مستند
+   * بالمعرّف الجديد، يُفحص المعرّف القديم — إن وُجد وكان نوعه مطابقًا لما
+   * يُحفَظ الآن، يُعامَل كـ«قبل» التعديل ثمّ يُهاجَر تلقائيًّا (يُنسخ محتواه
+   * الجديد للمعرّف الجديد ويُحذف القديم) بنفس هذه الكتابة. إن كان نوعه
+   * مختلفًا (الطالب يسجّل نوعًا جديدًا بجانب نوع قديم مسجَّل من قبل التحديث)
+   * يبقى القديم كما هو سليمًا، وتُنشأ نتيجة جديدة منفصلة بجانبه فقط.
+   */
   async upsertSessionRecitation(
     sessionId: string,
     studentId: string,
     input: NewRecitation,
   ): Promise<void> {
-    const id = `${sessionId}_${studentId}`;
+    const id = `${sessionId}_${studentId}_${input.kind}`;
     const ref = this.ref(COL.recitations, id);
+    const legacyId = `${sessionId}_${studentId}`;
+    const legacyRef = this.ref(COL.recitations, legacyId);
     const payload = this.owned({ ...clean(input), createdAt: Date.now() });
     let before: RecitationRecord | null = null;
+    let migrateLegacy = false;
     try {
       // معاملة ذرّيّة: تحمي من فقدان تعديل حين يحفظ جهازان متّصلان بالإنترنت
       // لنفس السجلّ في اللحظة نفسها تقريبًا (كلّ من يقرأ قبل الآخر يكتب فوقه
@@ -561,16 +578,44 @@ export class DataService {
       // أدناه عند فشلها لأيّ سبب — يبقى الحفظ يعمل دائمًا بلا اتصال كالمعتاد.
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(ref);
-        before = snap.exists()
-          ? (this.inScope([{ id: snap.id, ...(snap.data() as object) }] as RecitationRecord[])[0] ??
-            null)
-          : null;
+        if (snap.exists()) {
+          before =
+            this.inScope([{ id: snap.id, ...(snap.data() as object) }] as RecitationRecord[])[0] ??
+            null;
+        } else {
+          const legacySnap = await tx.get(legacyRef);
+          if (legacySnap.exists()) {
+            const legacy =
+              this.inScope([
+                { id: legacySnap.id, ...(legacySnap.data() as object) },
+              ] as RecitationRecord[])[0] ?? null;
+            if (legacy && legacy.kind === input.kind) {
+              before = legacy;
+              migrateLegacy = true;
+            }
+          }
+        }
         tx.set(ref, payload);
+        if (migrateLegacy) tx.delete(legacyRef);
       });
     } catch (e) {
       console.warn('تعذّرت الكتابة الذرّيّة للتسميع (على الأرجح بلا اتصال) — الكتابة المعتادة:', e);
       before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
+      if (!before) {
+        const legacy = await this.getOneForAudit<RecitationRecord>(COL.recitations, legacyId);
+        if (legacy && legacy.kind === input.kind) {
+          before = legacy;
+          migrateLegacy = true;
+        }
+      }
       await setDoc(ref, payload);
+      if (migrateLegacy) {
+        try {
+          await deleteDoc(legacyRef);
+        } catch (e2) {
+          console.warn('تعذّر حذف السجلّ القديم بعد الهجرة (لا يزال سليمًا، سيُعاد لاحقًا):', e2);
+        }
+      }
     }
 
     // سجلّ التدقيق — فشل أيّ خطوة هنا (قراءة اسم الطالب بلا اتصال مثلًا) يجب
@@ -604,13 +649,6 @@ export class DataService {
         console.warn('تعذّر تسجيل حركة تعديل التسميع في سجل التدقيق (التسميع نفسه محفوظ):', e);
       }
     }
-  }
-
-  async getSessionRecitation(
-    sessionId: string,
-    studentId: string,
-  ): Promise<RecitationRecord | null> {
-    return this.getOne<RecitationRecord>(COL.recitations, `${sessionId}_${studentId}`);
   }
 
   // ---------- سجلات الطالب (للملف الشخصي) ----------
