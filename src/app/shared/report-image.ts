@@ -1,4 +1,6 @@
-import { Component, computed, input, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
+import { Capacitor } from '@capacitor/core';
+import { NotifyService } from '../core/notify.service';
 
 /** مقطع تسميع واحد داخل صفّ الطالب — أو نائب حالة («لم يسمع»/«غائب») بدل مقطع فعليّ. */
 export interface ReportImageSegment {
@@ -137,10 +139,27 @@ export interface ReportImageMeta {
         <div class="ri-results">
           @for (img of images(); track img.pageNumber) {
             <div class="ri-result">
-              <img [src]="img.dataUrl" [alt]="'صورة التقرير — صفحة ' + img.pageNumber" />
+              <button
+                type="button"
+                class="ri-thumb-btn"
+                (click)="openLightbox(img)"
+                [attr.aria-label]="'عرض صورة التقرير بالحجم الكامل — صفحة ' + img.pageNumber"
+              >
+                <img [src]="img.dataUrl" [alt]="'صورة التقرير — صفحة ' + img.pageNumber" />
+                <span class="ri-thumb-hint">اضغط للعرض بالحجم الكامل 🔍</span>
+              </button>
               <div class="ri-result-actions">
-                <button type="button" class="btn btn-ghost" (click)="download(img)">
-                  ⬇ تنزيل{{ pages().length > 1 ? ' (صفحة ' + img.pageNumber + ')' : '' }}
+                <button
+                  type="button"
+                  class="btn btn-ghost"
+                  (click)="download(img)"
+                  [disabled]="saving() === img.pageNumber"
+                >
+                  {{
+                    saving() === img.pageNumber
+                      ? 'جارٍ الحفظ…'
+                      : '⬇ تنزيل' + (pages().length > 1 ? ' (صفحة ' + img.pageNumber + ')' : '')
+                  }}
                 </button>
                 @if (canShareFiles()) {
                   <button type="button" class="btn btn-ghost" (click)="share(img)">↗ مشاركة</button>
@@ -148,6 +167,24 @@ export interface ReportImageMeta {
               </div>
             </div>
           }
+        </div>
+      }
+
+      @if (lightboxImg(); as lb) {
+        <div class="ri-lightbox" (click)="closeLightbox()">
+          <button
+            type="button"
+            class="ri-lightbox-close"
+            (click)="closeLightbox()"
+            aria-label="إغلاق"
+          >
+            ✕
+          </button>
+          <img
+            [src]="lb.dataUrl"
+            [alt]="'صورة التقرير — صفحة ' + lb.pageNumber"
+            (click)="$event.stopPropagation()"
+          />
         </div>
       }
     </div>
@@ -265,26 +302,85 @@ export interface ReportImageMeta {
         gap: 14px;
         margin-top: 12px;
       }
-      .ri-result img {
+      .ri-thumb-btn {
+        display: block;
         width: 100%;
-        border-radius: 10px;
+        padding: 0;
         border: 1px solid var(--border, #e5e0d3);
+        border-radius: 10px;
+        background: none;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+      }
+      .ri-thumb-btn img {
+        display: block;
+        width: 100%;
+        border-radius: 9px;
+      }
+      .ri-thumb-hint {
+        position: absolute;
+        inset-inline: 0;
+        bottom: 0;
+        padding: 6px 10px;
+        font-size: 0.76rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent);
+        text-align: center;
       }
       .ri-result-actions {
         display: flex;
         gap: 8px;
         margin-top: 6px;
       }
+      .ri-lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: rgba(0, 0, 0, 0.88);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        cursor: zoom-out;
+      }
+      .ri-lightbox img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        border-radius: 8px;
+        cursor: default;
+      }
+      .ri-lightbox-close {
+        position: absolute;
+        top: 16px;
+        inset-inline-end: 16px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+        font-size: 1.1rem;
+        cursor: pointer;
+      }
     `,
   ],
 })
 export class ReportImageComponent {
+  private readonly notify = inject(NotifyService);
+
   readonly pages = input.required<ReportImagePage[]>();
   readonly meta = input.required<ReportImageMeta>();
 
   readonly busy = signal(false);
   readonly generated = signal(false);
   readonly images = signal<{ pageNumber: number; dataUrl: string }[]>([]);
+  /** رقم الصفحة الجاري حفظها حاليًّا (أو null) — لتعطيل زرّها فقط أثناء الحفظ. */
+  readonly saving = signal<number | null>(null);
+  /** الصورة المعروضة حاليًّا بالحجم الكامل (نافذة معاينة) — أو null إن لم تُفتَح أيّ صورة. */
+  readonly lightboxImg = signal<{ pageNumber: number; dataUrl: string } | null>(null);
 
   readonly canShareFiles = computed(() => {
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
@@ -326,11 +422,49 @@ export class ReportImageComponent {
     void this.generate();
   }
 
-  download(img: { pageNumber: number; dataUrl: string }): void {
-    const a = document.createElement('a');
-    a.href = img.dataUrl;
-    a.download = `تقرير-الجلسة-${img.pageNumber}.png`;
-    a.click();
+  openLightbox(img: { pageNumber: number; dataUrl: string }): void {
+    this.lightboxImg.set(img);
+  }
+
+  closeLightbox(): void {
+    this.lightboxImg.set(null);
+  }
+
+  /**
+   * على الويب: تنزيل عاديّ عبر رابط `<a download>` — يعمل بشكل موثوق في المتصفّحات.
+   * على أندرويد (Capacitor WebView): `<a download>` مع رابط `data:` لا يعمل عمليًّا
+   * (المتصفّح/الواجهة لا يُطلقان تنزيلًا حقيقيًّا لروابط data: الطويلة) — لذا نكتب
+   * الملف فعليًّا عبر `@capacitor/filesystem` إلى مجلّد التطبيق الخاصّ (Documents)،
+   * وهو مسار لا يحتاج أذونات تخزين إضافيّة على أندرويد الحديث (تخزين معزول بالتطبيق).
+   */
+  async download(img: { pageNumber: number; dataUrl: string }): Promise<void> {
+    const fileName = `تقرير-الجلسة-${img.pageNumber}.png`;
+    if (!Capacitor.isNativePlatform()) {
+      const a = document.createElement('a');
+      a.href = img.dataUrl;
+      a.download = fileName;
+      a.click();
+      return;
+    }
+    this.saving.set(img.pageNumber);
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const base64 = img.dataUrl.split(',')[1] ?? '';
+      await Filesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: Directory.Documents,
+        recursive: true,
+      });
+      this.notify.success(
+        'حُفظت الصورة داخل ملفّات تطبيق الماهر (Documents). لإرسالها أو نقلها لمكان آخر استخدم زرّ «↗ مشاركة».',
+      );
+    } catch (e) {
+      console.error(e);
+      this.notify.error('تعذّر حفظ الصورة على الجهاز');
+    } finally {
+      this.saving.set(null);
+    }
   }
 
   async share(img: { pageNumber: number; dataUrl: string }): Promise<void> {
@@ -345,7 +479,7 @@ export class ReportImageComponent {
       if (nav.canShare?.({ files: [file] })) {
         await nav.share({ files: [file], title: 'تقرير الجلسة' });
       } else {
-        this.download(img);
+        await this.download(img);
       }
     } catch {
       /* المستخدم ألغى المشاركة — لا حاجة لرسالة خطأ */
