@@ -220,7 +220,12 @@ export class LoginPage {
       } else {
         await this.auth.register(this.name, this.identifier, this.password);
       }
-      await this.router.navigateByUrl('/');
+      // لو كانت بيانات الدخول (أو التسجيل) تطابق حساب المالك بالضبط، لا
+      // نأخذه لصفحته الرئيسيّة العاديّة كأيّ معلّم — هذا بالضبط ما كان يحدث
+      // ويبدو كأنّه "دخل بحساب معلّم جديد فارغ" رغم أنّه سجَّل دخول حقيقيّ
+      // بحساب المالك (v1.26.2). صفحة الدخول العاديّة يجب أن تتصرّف بشكل صحيح
+      // بغضّ النظر عن أيّ حساب استُخدم فيها، لا فقط بوّابة /sys-check.
+      await this.router.navigateByUrl(this.auth.isOwnerAccount() ? '/sys' : '/');
     } catch (e: unknown) {
       this.error.set(mapAuthError(e));
     } finally {
