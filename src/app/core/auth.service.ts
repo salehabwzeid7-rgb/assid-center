@@ -41,6 +41,23 @@ export class AuthService {
 
   constructor() {
     onAuthStateChanged(auth, async (u) => {
+      // عزل صارم + دورة مصادقة مختلفة للمالك (v1.26.1): جلسة المالك محفوظة
+      // بنفس آليّة الاستمراريّة العاديّة لكل حساب (indexedDB/localStorage) —
+      // لكن يجب أن يُعيد المالك إدخال بياناته في **كل إطلاق تطبيق**، لا يبقى
+      // مسجَّلًا تلقائيًّا كالمعلّمين العاديّين. نميّز "إطلاق تطبيق جديد" عن
+      // "نفس الجلسة تكمل" بعلامة sessionStorage (تُمسَح تلقائيًّا متى ما أُغلق
+      // التطبيق/التبويب فعليًّا، بخلاف localStorage التي تبقى للأبد). لو
+      // استُعيد حساب المالك من جلسة محفوظة سابقة بلا علامة الجلسة الحاليّة،
+      // نُخرجه فورًا بصمت — يحتاج إعادة الدخول (بما فيها بصمة الإصبع إن
+      // فعّلها) من جديد.
+      if (u && (u.email ?? '').toLowerCase() === OWNER_EMAIL && !this.hasOwnerSessionFlag()) {
+        await signOut(auth);
+        this.user.set(null);
+        this.teacher.set(null);
+        this.ready.set(true);
+        this.resolveReady();
+        return;
+      }
       this.user.set(u);
       if (u) {
         await this.loadOrCreateTeacher(u);
@@ -64,19 +81,24 @@ export class AuthService {
     return `${v.replace(/\s+/g, '').toLowerCase()}@assid.local`;
   }
 
-  /** تسجيل الدخول ببريد/اسم وكلمة مرور */
+  /**
+   * تسجيل الدخول ببريد/اسم وكلمة مرور. تُضبط علامة جلسة المالك **قبل** نداء
+   * تسجيل الدخول الفعليّ، لا بعده — سباق زمنيّ حقيقيّ لو ضُبطت لاحقًا: مستمع
+   * onAuthStateChanged في الباني قد يُطلَق فور اكتمال الدخول ويتحقّق من
+   * العلامة قبل أن تصل سطر ضبطها بعد await، فيُخرِج المالك بصمت فور دخوله
+   * بالضبط بسبب غياب علامة لم تُضبط بعد.
+   */
   async login(identifier: string, password: string): Promise<void> {
-    const cred = await signInWithEmailAndPassword(
-      auth,
-      this.identifierToEmail(identifier),
-      password,
-    );
+    const email = this.identifierToEmail(identifier);
+    if (email.toLowerCase() === OWNER_EMAIL) this.setOwnerSessionFlag();
+    const cred = await signInWithEmailAndPassword(auth, email, password);
     await this.loadOrCreateTeacher(cred.user);
   }
 
   /** إنشاء حساب معلّم جديد من الصفر — يحصل على مساحة عمل معزولة خاصّة به. */
   async register(name: string, identifier: string, password: string): Promise<void> {
     const email = this.identifierToEmail(identifier);
+    if (email.toLowerCase() === OWNER_EMAIL) this.setOwnerSessionFlag();
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name.trim() });
     const deviceId = this.getOrCreateDeviceId();
@@ -109,6 +131,36 @@ export class AuthService {
     }
     await signOut(auth);
     this.teacher.set(null);
+    this.clearOwnerSessionFlag();
+  }
+
+  /**
+   * علامة "المالك صادَق في هذه الجلسة الحاليّة" — sessionStorage تحديدًا (لا
+   * localStorage): تُمسَح تلقائيًّا متى ما أُغلق التطبيق فعليًّا (لا مجرّد
+   * تصغيره)، بخلاف بيانات اعتماد Firebase المحفوظة نفسها التي تبقى محليًّا
+   * للأبد (نفس آليّة الاستمراريّة لأيّ حساب عاديّ). هذا ما يفرض على المالك
+   * تحديدًا إعادة المصادقة في كل إطلاق، دون أيّ تغيير على تجربة المعلّمين.
+   */
+  private hasOwnerSessionFlag(): boolean {
+    try {
+      return sessionStorage.getItem('almaher_owner_session') === '1';
+    } catch {
+      return false;
+    }
+  }
+  private setOwnerSessionFlag(): void {
+    try {
+      sessionStorage.setItem('almaher_owner_session', '1');
+    } catch {
+      /* لا بأس — أسوأ الحالات: يُطلَب من المالك الدخول مجدّدًا أبكر من اللازم */
+    }
+  }
+  private clearOwnerSessionFlag(): void {
+    try {
+      sessionStorage.removeItem('almaher_owner_session');
+    } catch {
+      /* لا بأس */
+    }
   }
 
   /**
@@ -203,8 +255,9 @@ export class AuthService {
         },
         { merge: true },
       );
-    } catch (e) {
-      console.warn('تعذّر تسجيل حساب المعلّم الجديد للوحة المالك (غير حرج):', e);
+    } catch {
+      // صامت تمامًا وعمدًا — لا نطبع أيّ رسالة في وحدة تحكّم المعلّم العاديّ
+      // تكشف وجود طبقة مراقبة داخليّة (متطلّب عزل صارم، v1.26.1).
     }
   }
 
@@ -220,8 +273,8 @@ export class AuthService {
         },
         { merge: true },
       );
-    } catch (e) {
-      console.warn('تعذّر تحديث آخر نشاط للوحة المالك (غير حرج):', e);
+    } catch {
+      // صامت عمدًا — راجع الملاحظة أعلاه.
     }
   }
 

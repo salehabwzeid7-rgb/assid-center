@@ -315,8 +315,9 @@ export class DataService {
   ): Promise<void> {
     try {
       await setDoc(doc(db, PLATFORM_COL.deletedItems, logId), payload);
-    } catch (e) {
-      console.warn('تعذّرت كتابة مرآة سجلّ المحذوفات للوحة المالك (غير حرج):', e);
+    } catch {
+      // صامت تمامًا وعمدًا — لا نطبع أيّ رسالة في وحدة تحكّم المعلّم العاديّ
+      // تكشف وجود طبقة مراقبة داخليّة (متطلّب عزل صارم، v1.26.1).
     }
   }
 
@@ -340,8 +341,8 @@ export class DataService {
           { merge: true },
         );
       }
-    } catch (e) {
-      console.warn('تعذّر تحديث عدّادات لوحة المالك (غير حرج):', e);
+    } catch {
+      // صامت عمدًا — راجع ملاحظة writePlatformDeletedItem أعلاه.
     }
   }
 
@@ -361,8 +362,8 @@ export class DataService {
         teacherName,
         createdAt: Date.now(),
       });
-    } catch (e) {
-      console.warn('تعذّرت كتابة مرآة لوحة المالك (غير حرج):', e);
+    } catch {
+      // صامت عمدًا — راجع ملاحظة writePlatformDeletedItem أعلاه.
     }
   }
 
@@ -374,8 +375,8 @@ export class DataService {
       const uid = this.auth.user()?.uid;
       if (!uid) return;
       await deleteDoc(doc(db, PLATFORM_COL.teachers, uid, kind, id));
-    } catch (e) {
-      console.warn('تعذّر حذف مرآة لوحة المالك (غير حرج):', e);
+    } catch {
+      // صامت عمدًا — راجع ملاحظة writePlatformDeletedItem أعلاه.
     }
   }
 

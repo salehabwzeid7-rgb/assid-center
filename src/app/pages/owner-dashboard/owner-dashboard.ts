@@ -41,10 +41,10 @@ const PLATFORM_LABELS: Record<string, string> = { android: 'أندرويد', web
       </div>
 
       <div class="quick-links">
-        <a class="btn btn-ghost btn-block" routerLink="/owner/search"
+        <a class="btn btn-ghost btn-block" routerLink="/sys/search"
           >🔍 بحث عن طالب عبر كل المعلّمين</a
         >
-        <a class="btn btn-ghost btn-block" routerLink="/owner/deleted"
+        <a class="btn btn-ghost btn-block" routerLink="/sys/deleted"
           >🗑️ سجلّ المحذوفات (كل المعلّمين)</a
         >
       </div>
@@ -56,7 +56,7 @@ const PLATFORM_LABELS: Record<string, string> = { android: 'أندرويد', web
         <div class="empty"><span class="icon">👥</span> لا يوجد معلّمون مسجَّلون بعد.</div>
       } @else {
         @for (t of teachers(); track t.id) {
-          <a class="list-item" [routerLink]="['/owner/teacher', t.id]">
+          <a class="list-item" [routerLink]="['/sys/teacher', t.id]">
             <span class="avatar">👤</span>
             <span class="grow">
               <span class="primary">{{ t.name }}</span>

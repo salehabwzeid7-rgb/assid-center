@@ -9,11 +9,14 @@ export const routes: Routes = [
   },
   {
     // بوّابة دخول المالك (v1.26.0) — مستقلّة تمامًا، بلا رابط ظاهر من أيّ تنقّل.
-    path: 'owner-login',
+    // مسار عامّ الاسم عمدًا (لا "owner") — تقليل فرصة الاكتشاف العرضيّ من
+    // متصفّح فضوليّ لسجلّ الروابط أو قائمة المسارات؛ الحماية الفعليّة تبقى
+    // قواعد Firestore (isPlatformOwner) بصرف النظر عن اسم المسار (v1.26.1).
+    path: 'sys-check',
     loadComponent: () => import('./pages/owner-login/owner-login').then((m) => m.OwnerLoginPage),
   },
   {
-    path: 'owner',
+    path: 'sys',
     canActivate: [ownerGuard],
     children: [
       {

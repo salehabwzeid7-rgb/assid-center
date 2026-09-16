@@ -37,7 +37,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
       }
 
       @for (r of results(); track r.teacherId + '_' + r.id) {
-        <a class="list-item" [routerLink]="['/owner/teacher', r.teacherId]">
+        <a class="list-item" [routerLink]="['/sys/teacher', r.teacherId]">
           <span class="avatar">🧒</span>
           <span class="grow">
             <span class="primary">{{ r.name }}</span>

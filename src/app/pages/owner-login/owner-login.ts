@@ -83,7 +83,7 @@ export class OwnerLoginPage {
         this.error.set('بيانات الدخول غير صحيحة');
         return;
       }
-      await this.router.navigateByUrl('/owner');
+      await this.router.navigateByUrl('/sys');
     } catch {
       this.error.set('بيانات الدخول غير صحيحة');
     } finally {
