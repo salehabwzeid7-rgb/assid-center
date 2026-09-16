@@ -18,6 +18,7 @@ import {
   type CollectionReference,
   type DocumentReference,
   type Query,
+  type QueryConstraint,
   type DocumentData,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -176,6 +177,32 @@ export class DataService {
   }
 
   /**
+   * استعلام مُقيَّد بمالك الحساب — ثغرة أمنيّة حقيقيّة مؤكَّدة (مراجعة أمنيّة،
+   * اختُبرت مباشرةً ضدّ مشروع الإنتاج الحقيقيّ بحسابين مستقلّين): كنّا نظنّ
+   * (منذ v1.21.1) أنّ استعلامات القوائم (`getDocs`/`onSnapshot` على مجموعة
+   * كاملة بلا `where`) تُصفّى فعليًّا على الخادم حسب قاعدة `isOwner()` لكلّ
+   * مستند، تمامًا كما تُرفَض قراءة/تعديل/حذف مستند واحد بمعرّفه (وهذا الجزء
+   * صحيح ومؤكَّد). لكن اختبار اختراق مباشر أظهر أنّ استعلام قائمة غير مقيَّد
+   * يُرجع فعليًّا مستندات مملوكة لحساب آخر تمامًا — القاعدة لا تُطبَّق لكلّ
+   * مستند في نتيجة القائمة كما تُطبَّق على get/update/delete المفرد. الحلّ:
+   * تقييد الاستعلام نفسه بـ `where('ownerId','==',uid)` للحسابات المعزولة،
+   * بحيث تتحقّق القاعدة بشكل بديهيّ (مطابقة تامّة، بلا حاجة لفهرس مركّب — عدّة
+   * شروط `==` على حقول مختلفة تُفهرَس تلقائيًّا في Firestore).
+   *
+   * الحسابات القديمة (بلا ownerId، مساحة مشتركة، تينانت=null) تبقى بلا هذا
+   * الشرط الإضافيّ عمدًا — Firestore لا يدعم استعلام «الحقل غير موجود»، فلا
+   * توجد طريقة لتقييد استعلامها بنفس الأسلوب دون هجرة بيانات. يبقى هذا خطرًا
+   * متبقّيًا موثَّقًا لهذه الفئة تحديدًا (مجموعة حسابات مغلقة لا تكبر — كلّ
+   * حساب جديد من v1.15.0 فصاعدًا يُصبح تينانت تلقائيًّا)، لا الفئة السائدة.
+   */
+  private scopedCol(name: string, ...constraints: QueryConstraint[]): Query<DocumentData> {
+    const uid = this.scopeUid();
+    return uid
+      ? query(this.col(name), where('ownerId', '==', uid), ...constraints)
+      : query(this.col(name), ...constraints);
+  }
+
+  /**
    * ينفّذ قائمة عمليّات حذف/تحديث على دفعات ذرّيّة (≤ ٤٥٠ عمليّة لكلّ دفعة، حدّ
    * Firestore ٥٠٠). كلّ دفعة إمّا تنجح كاملةً أو تفشل كاملةً؛ والتغيير ينعكس فورًا
    * على التخزين المحلّيّ (IndexedDB) وعلى السحابة عبر نفس مستمعي onSnapshot.
@@ -230,7 +257,7 @@ export class DataService {
   /** سجلّ الحركات كاملًا — الأحدث أوّلًا. تُستخدم في شاشة «سجل الحركات» فقط. */
   activityLog(destroyRef?: DestroyRef): Signal<ActivityLogEntry[] | undefined> {
     return this.live<ActivityLogEntry>(
-      query(this.col(COL.activityLog)),
+      this.scopedCol(COL.activityLog),
       destroyRef,
       (a, b) => b.createdAt - a.createdAt,
     );
@@ -324,7 +351,7 @@ export class DataService {
   // ---------- الحلقات والطلاب ----------
 
   circles(destroyRef?: DestroyRef): Signal<Circle[] | undefined> {
-    return this.live<Circle>(query(this.col(COL.circles)), destroyRef, this.byNameAr);
+    return this.live<Circle>(this.scopedCol(COL.circles), destroyRef, this.byNameAr);
   }
 
   /** طلاب حلقة معيّنة — يدعم التسجيل المتعدّد (circleIds) والقديم (circleId). */
@@ -334,7 +361,7 @@ export class DataService {
   }
 
   allStudents(destroyRef?: DestroyRef): Signal<Student[] | undefined> {
-    return this.live<Student>(query(this.col(COL.students)), destroyRef, this.byNameAr);
+    return this.live<Student>(this.scopedCol(COL.students), destroyRef, this.byNameAr);
   }
 
   /**
@@ -363,13 +390,13 @@ export class DataService {
   // ---------- الجلسات ----------
 
   sessionsByCircle(circleId: string, destroyRef?: DestroyRef): Signal<Session[] | undefined> {
-    const q = query(this.col(COL.sessions), where('circleId', '==', circleId));
+    const q = this.scopedCol(COL.sessions, where('circleId', '==', circleId));
     return this.live<Session>(q, destroyRef, this.byDateDesc);
   }
 
   /** كل الجلسات (للجدول واللوحة الرئيسية) — مرتّبة بالأحدث تاريخًا. */
   allSessions(destroyRef?: DestroyRef): Signal<Session[] | undefined> {
-    return this.live<Session>(query(this.col(COL.sessions)), destroyRef, this.byDateDesc);
+    return this.live<Session>(this.scopedCol(COL.sessions), destroyRef, this.byDateDesc);
   }
 
   /**
@@ -449,8 +476,8 @@ export class DataService {
   async deleteSession(id: string): Promise<void> {
     const [sessionSnap, att, rec] = await Promise.all([
       getDoc(this.ref(COL.sessions, id)),
-      getDocs(query(this.col(COL.attendance), where('sessionId', '==', id))),
-      getDocs(query(this.col(COL.recitations), where('sessionId', '==', id))),
+      getDocs(this.scopedCol(COL.attendance, where('sessionId', '==', id))),
+      getDocs(this.scopedCol(COL.recitations, where('sessionId', '==', id))),
     ]);
     const snapshots: ActivitySnapshot[] = [];
     if (sessionSnap.exists()) {
@@ -489,7 +516,7 @@ export class DataService {
     sessionId: string,
     destroyRef?: DestroyRef,
   ): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(COL.attendance), where('sessionId', '==', sessionId));
+    const q = this.scopedCol(COL.attendance, where('sessionId', '==', sessionId));
     return this.live<AttendanceRecord>(q, destroyRef);
   }
 
@@ -497,7 +524,7 @@ export class DataService {
     sessionId: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(COL.recitations), where('sessionId', '==', sessionId));
+    const q = this.scopedCol(COL.recitations, where('sessionId', '==', sessionId));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
@@ -666,7 +693,7 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(COL.recitations), where('studentId', '==', studentId));
+    const q = this.scopedCol(COL.recitations, where('studentId', '==', studentId));
     return this.live<RecitationRecord>(q, destroyRef, this.byDateDesc);
   }
 
@@ -684,7 +711,7 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(COL.attendance), where('studentId', '==', studentId));
+    const q = this.scopedCol(COL.attendance, where('studentId', '==', studentId));
     const raw = this.live<AttendanceRecord>(q, destroyRef, this.byDateDesc);
     return computed(() => {
       const list = raw();
@@ -702,7 +729,7 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<EvaluationRecord[] | undefined> {
-    const q = query(this.col(COL.evaluations), where('studentId', '==', studentId));
+    const q = this.scopedCol(COL.evaluations, where('studentId', '==', studentId));
     return this.live<EvaluationRecord>(q, destroyRef, this.byDateDesc);
   }
 
@@ -713,7 +740,7 @@ export class DataService {
     circleId: string,
     destroyRef?: DestroyRef,
   ): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(COL.attendance), where('circleId', '==', circleId));
+    const q = this.scopedCol(COL.attendance, where('circleId', '==', circleId));
     const raw = this.live<AttendanceRecord>(q, destroyRef);
     return computed(() => {
       const list = raw();
@@ -732,7 +759,7 @@ export class DataService {
     circleId: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(COL.recitations), where('circleId', '==', circleId));
+    const q = this.scopedCol(COL.recitations, where('circleId', '==', circleId));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
@@ -740,7 +767,7 @@ export class DataService {
 
   /** كالسابقة — مقعد واحد لكلّ طالب في هذا التاريخ لنفس السبب الموثَّق في `studentAttendance`. */
   attendanceForDate(date: string, destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
-    const q = query(this.col(COL.attendance), where('date', '==', date));
+    const q = this.scopedCol(COL.attendance, where('date', '==', date));
     const raw = this.live<AttendanceRecord>(q, destroyRef);
     return computed(() => {
       const list = raw();
@@ -756,7 +783,7 @@ export class DataService {
 
   /** كل سجلات الحضور (لحساب معدّل الحضور العام في البانر) — مقعد واحد لكلّ (طالب، تاريخ). */
   allAttendance(destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
-    const raw = this.live<AttendanceRecord>(query(this.col(COL.attendance)), destroyRef);
+    const raw = this.live<AttendanceRecord>(this.scopedCol(COL.attendance), destroyRef);
     return computed(() => {
       const list = raw();
       if (list === undefined) return undefined;
@@ -774,7 +801,7 @@ export class DataService {
     date: string,
     destroyRef?: DestroyRef,
   ): Signal<RecitationRecord[] | undefined> {
-    const q = query(this.col(COL.recitations), where('date', '==', date));
+    const q = this.scopedCol(COL.recitations, where('date', '==', date));
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
@@ -860,11 +887,11 @@ export class DataService {
       students,
     ] = await Promise.all([
       getDoc(this.ref(COL.circles, id)),
-      getDocs(query(this.col(COL.sessions), where('circleId', '==', id))),
-      getDocs(query(this.col(COL.attendance), where('circleId', '==', id))),
-      getDocs(query(this.col(COL.recitations), where('circleId', '==', id))),
-      getDocs(query(this.col(COL.tajweedExams), where('circleId', '==', id))),
-      getDocs(query(this.col(COL.tajweedExamResults), where('circleId', '==', id))),
+      getDocs(this.scopedCol(COL.sessions, where('circleId', '==', id))),
+      getDocs(this.scopedCol(COL.attendance, where('circleId', '==', id))),
+      getDocs(this.scopedCol(COL.recitations, where('circleId', '==', id))),
+      getDocs(this.scopedCol(COL.tajweedExams, where('circleId', '==', id))),
+      getDocs(this.scopedCol(COL.tajweedExamResults, where('circleId', '==', id))),
       getDocs(this.col(COL.students)),
     ]);
 
@@ -932,7 +959,7 @@ export class DataService {
     const from = circle.fromTime ?? '';
     const to = circle.toTime ?? '';
 
-    const snap = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circle.id)));
+    const snap = await getDocs(this.scopedCol(COL.sessions, where('circleId', '==', circle.id)));
     const existingDates = new Set<string>();
     const stale: typeof snap.docs = [];
     const retime: typeof snap.docs = [];
@@ -992,7 +1019,7 @@ export class DataService {
     }
     // توافقيّة: قد توجد جلسة قديمة بمعرّف عشوائيّ لنفس التاريخ (قبل اعتماد
     // المعرّف الثابت) — نعيد استخدامها بدل إنشاء تكرار.
-    const legacy = await getDocs(query(this.col(COL.sessions), where('circleId', '==', circleId)));
+    const legacy = await getDocs(this.scopedCol(COL.sessions, where('circleId', '==', circleId)));
     const old = legacy.docs.find((d) => (d.data() as Session).date === date);
     if (old) {
       const s = old.data() as Session;
@@ -1098,7 +1125,7 @@ export class DataService {
     ];
     const [studentSnap, ...snaps] = await Promise.all([
       getDoc(this.ref(COL.students, id)),
-      ...cols.map((c) => getDocs(query(this.col(c), where('studentId', '==', id)))),
+      ...cols.map((c) => getDocs(this.scopedCol(c, where('studentId', '==', id)))),
     ]);
     const snapshots: ActivitySnapshot[] = [];
     if (studentSnap.exists()) {
@@ -1162,17 +1189,17 @@ export class DataService {
   // ---------- السرد (مراجعة الأجزاء المحفوظة) ----------
 
   serdByStudent(studentId: string, destroyRef?: DestroyRef): Signal<SerdRecord[] | undefined> {
-    const q = query(this.col(COL.serd), where('studentId', '==', studentId));
+    const q = this.scopedCol(COL.serd, where('studentId', '==', studentId));
     return this.live<SerdRecord>(q, destroyRef, this.byDateDesc);
   }
 
   circleSerd(circleId: string, destroyRef?: DestroyRef): Signal<SerdRecord[] | undefined> {
-    const q = query(this.col(COL.serd), where('circleId', '==', circleId));
+    const q = this.scopedCol(COL.serd, where('circleId', '==', circleId));
     return this.live<SerdRecord>(q, destroyRef, this.byDateDesc);
   }
 
   allSerds(destroyRef?: DestroyRef): Signal<SerdRecord[] | undefined> {
-    return this.live<SerdRecord>(query(this.col(COL.serd)), destroyRef, this.byDateDesc);
+    return this.live<SerdRecord>(this.scopedCol(COL.serd), destroyRef, this.byDateDesc);
   }
 
   async addSerd(input: NewSerd): Promise<string> {
@@ -1210,17 +1237,17 @@ export class DataService {
   // ---------- الاختبار (اختبار مستقلّ لكلّ جزء محفوظ) ----------
 
   examsByStudent(studentId: string, destroyRef?: DestroyRef): Signal<ExamRecord[] | undefined> {
-    const q = query(this.col(COL.exams), where('studentId', '==', studentId));
+    const q = this.scopedCol(COL.exams, where('studentId', '==', studentId));
     return this.live<ExamRecord>(q, destroyRef, this.byDateDesc);
   }
 
   circleExams(circleId: string, destroyRef?: DestroyRef): Signal<ExamRecord[] | undefined> {
-    const q = query(this.col(COL.exams), where('circleId', '==', circleId));
+    const q = this.scopedCol(COL.exams, where('circleId', '==', circleId));
     return this.live<ExamRecord>(q, destroyRef, this.byDateDesc);
   }
 
   allExams(destroyRef?: DestroyRef): Signal<ExamRecord[] | undefined> {
-    return this.live<ExamRecord>(query(this.col(COL.exams)), destroyRef, this.byDateDesc);
+    return this.live<ExamRecord>(this.scopedCol(COL.exams), destroyRef, this.byDateDesc);
   }
 
   async addExam(input: NewExam): Promise<string> {
@@ -1338,7 +1365,7 @@ export class DataService {
     circleId: string,
     destroyRef?: DestroyRef,
   ): Signal<TajweedExam[] | undefined> {
-    const q = query(this.col(COL.tajweedExams), where('circleId', '==', circleId));
+    const q = this.scopedCol(COL.tajweedExams, where('circleId', '==', circleId));
     return this.live<TajweedExam>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
   }
 
@@ -1347,7 +1374,7 @@ export class DataService {
     examId: string,
     destroyRef?: DestroyRef,
   ): Signal<TajweedExamResult[] | undefined> {
-    const q = query(this.col(COL.tajweedExamResults), where('examId', '==', examId));
+    const q = this.scopedCol(COL.tajweedExamResults, where('examId', '==', examId));
     return this.live<TajweedExamResult>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
   }
 
@@ -1356,7 +1383,7 @@ export class DataService {
     studentId: string,
     destroyRef?: DestroyRef,
   ): Signal<TajweedExamResult[] | undefined> {
-    const q = query(this.col(COL.tajweedExamResults), where('studentId', '==', studentId));
+    const q = this.scopedCol(COL.tajweedExamResults, where('studentId', '==', studentId));
     return this.live<TajweedExamResult>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
   }
 
@@ -1394,7 +1421,7 @@ export class DataService {
   async deleteTajweedExam(id: string): Promise<void> {
     const [examSnap, results] = await Promise.all([
       getDoc(this.ref(COL.tajweedExams, id)),
-      getDocs(query(this.col(COL.tajweedExamResults), where('examId', '==', id))),
+      getDocs(this.scopedCol(COL.tajweedExamResults, where('examId', '==', id))),
     ]);
     if (!examSnap.exists()) return;
     const exam = examSnap.data() as TajweedExam;
