@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { Location } from '@angular/common';
 import { filter, take } from 'rxjs';
@@ -44,6 +44,7 @@ export class App {
     this.update.init();
     this.hideSplashWhenReady();
     this.autoUpgradeLegacyAccount();
+    this.autoBackfillPlatformSummary();
 
     CapApp.addListener('backButton', ({ canGoBack }) => {
       if (canGoBack && history.length > 1) {
@@ -85,6 +86,35 @@ export class App {
         // اتصال مثلًا)؛ زرّ profile.ts اليدويّ يبقى متاحًا للمحاولة يدويًّا.
       }
     })();
+  }
+
+  /**
+   * يملأ ملخّص لوحة المالك لحساب معلّم موجود مسبقًا (v1.26.3) — أيّ حساب
+   * سجَّل قبل شحن الميزة (أو أنشأ حلقات/طلّابًا يومًا قبلها) لن يظهر بشكل
+   * صحيح في لوحة المالك بلا هذا؛ `backfillPlatformTeacherSummary()` محميّة
+   * من إعادة العمل (تتوقّف فورًا إن كان الملخّص مكتملًا بالفعل) فآمنة الاستدعاء
+   * في كل إقلاع بلا أيّ كلفة تُذكَر بعد أوّل مرّة.
+   *
+   * `effect()` تفاعليّ لا فحص لمرّة واحدة عبر `readyPromise` (خلل حقيقيّ
+   * مُكتشَف أثناء الاختبار v1.26.3): ذلك الوعد يُحسَم مرّة واحدة فقط عند أوّل
+   * استدعاء لـ onAuthStateChanged — وهو عادةً يحدث فور إقلاع التطبيق **قبل**
+   * أن يُسجِّل المستخدم دخوله تفاعليًّا من صفحة /login (فيُحسَم بـ
+   * isLoggedIn()=false، ولا تُشغَّل التعبئة إطلاقًا لأيّ تسجيل دخول تفاعليّ
+   * ضمن نفس تحميل الصفحة — تعمل فقط لو كان المستخدم مسجَّلًا دخوله بالفعل
+   * قبل تحميل التطبيق، كإعادة فتحه). الحلّ: تفاعل مع تغيّر `auth.user()` نفسه
+   * (يتغيّر أيضًا عند تسجيل الدخول/التسجيل التفاعليّ لا فقط عند الإقلاع)،
+   * مع حارس `backfilledUid` لمنع تكرار الاستدعاء لنفس الحساب أكثر من مرّة
+   * في نفس جلسة التطبيق.
+   */
+  private backfilledUid: string | null = null;
+  private autoBackfillPlatformSummary(): void {
+    effect(() => {
+      if (!this.auth.ready()) return;
+      const u = this.auth.user();
+      if (!u || this.auth.isOwnerAccount() || this.backfilledUid === u.uid) return;
+      this.backfilledUid = u.uid;
+      void this.data.backfillPlatformTeacherSummary().catch(() => {});
+    });
   }
 
   /**

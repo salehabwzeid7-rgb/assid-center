@@ -169,9 +169,15 @@ service cloud.firestore {
     }
 
     // ملخّص كل معلّم (اسم/بريد/عدّادات) — يكتبه المعلّم نفسه فقط (uid مطابق)،
-    // يقرأه المالك فقط. الحلقات/الطلّاب الفرعيّة نسخ خفيفة بنفس المنطق.
+    // يقرأه المالك (كل الحسابات) أو المعلّم نفسه (مستنده فقط). get عمليّة
+    // مستند مفرد لا list — آمنة مع تعقيد OR (خلافًا لـ list التي تبقى للمالك
+    // حصرًا). صلاحيّة get للمعلّم نفسه ضروريّة: backfillPlatformTeacherSummary()
+    // (v1.26.3) يقرأ مستنده الخاصّ أوّلًا ليتحقّق هل هو مكتمل قبل الكتابة —
+    // خلل حقيقيّ مُكتشَف بالاختبار: بلا هذا يُرفَض الجميع برفض صلاحيّة صامت
+    // فلا تُكتب أيّ بيانات تعبئة إطلاقًا لأيّ حساب، لا القديم فقط.
     match /platformTeachers/{uid} {
-      allow get, list: if isPlatformOwner();
+      allow get: if isPlatformOwner() || (signedIn() && request.auth.uid == uid);
+      allow list: if isPlatformOwner();
       allow write: if signedIn() && request.auth.uid == uid;
 
       match /circleMirror/{id} {

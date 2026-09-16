@@ -77,7 +77,12 @@ export interface ReportImageMeta {
       -->
       <div class="ri-offscreen">
         @for (page of pages(); track page.pageNumber) {
-          <div class="ri-page" #pageEl [attr.data-page]="page.pageNumber">
+          <div
+            class="ri-page"
+            #pageEl
+            [attr.data-page]="page.pageNumber"
+            [style.--ri-scale]="rowScale(page)"
+          >
             <div class="ri-header">
               <div class="ri-title">{{ meta().title }}</div>
               <div class="ri-teacher">معلّم الحلقة: {{ meta().teacherName }}</div>
@@ -237,25 +242,25 @@ export interface ReportImageMeta {
       /* ترويسة خضراء ثابتة بصرف النظر عن سمة التطبيق الحاليّة (مِسك/الزمرّد) —
          تلوين مقصود للتقرير المصوَّر نفسه، لا يتبع ألوان السمة النشطة. */
       .ri-header {
-        padding: 22px 24px 18px;
+        padding: calc(22px * var(--ri-scale, 1)) 24px calc(18px * var(--ri-scale, 1));
         text-align: center;
         background: linear-gradient(135deg, #0d5c3f, #083f2b);
       }
       .ri-title {
-        font-size: 1.22rem;
+        font-size: calc(1.22rem * var(--ri-scale, 1));
         font-weight: 800;
         color: #fff;
       }
       .ri-teacher {
         margin-top: 6px;
-        font-size: 0.88rem;
+        font-size: calc(0.88rem * var(--ri-scale, 1));
         font-weight: 700;
         color: rgba(255, 255, 255, 0.88);
       }
       /* خلفية بيضاء نظيفة مع زخرفة هندسيّة خفيفة جدًّا (علامة مائيّة) — مستقلّة
          عن متغيّرات سمة التطبيق عمدًا حتى تبقى ثابتة ومضمونة الظهور في كل حال. */
       .ri-body {
-        padding: 14px 20px 18px;
+        padding: calc(14px * var(--ri-scale, 1)) 20px calc(18px * var(--ri-scale, 1));
         background-color: #fff;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46' viewBox='0 0 46 46'%3E%3Cg fill='none' stroke='%230d5c3f' stroke-width='1' opacity='0.07'%3E%3Cpath d='M23 3 L43 23 L23 43 L3 23 Z'/%3E%3Ccircle cx='23' cy='23' r='3.5'/%3E%3C/g%3E%3C/svg%3E");
         background-repeat: repeat;
@@ -270,18 +275,18 @@ export interface ReportImageMeta {
       .ri-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.82rem;
+        font-size: calc(0.82rem * var(--ri-scale, 1));
         background: #fff;
       }
       .ri-table th {
         background: #eaf3ee;
         color: #0d5c3f;
         font-weight: 800;
-        padding: 8px 6px;
+        padding: calc(8px * var(--ri-scale, 1)) 6px;
         border-bottom: 2px solid #0d5c3f;
       }
       .ri-table td {
-        padding: 7px 6px;
+        padding: calc(7px * var(--ri-scale, 1)) 6px;
         border-bottom: 1px solid var(--border, #e5e0d3);
         text-align: center;
         vertical-align: middle;
@@ -292,12 +297,12 @@ export interface ReportImageMeta {
       }
       .ri-c-detail {
         text-align: start;
-        font-size: 0.78rem;
+        font-size: calc(0.78rem * var(--ri-scale, 1));
       }
       .ri-c-rating {
         font-weight: 700;
         white-space: nowrap;
-        font-size: 0.78rem;
+        font-size: calc(0.78rem * var(--ri-scale, 1));
       }
       .ri-placeholder {
         text-align: center;
@@ -412,6 +417,21 @@ export class ReportImageComponent {
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     return typeof nav.canShare === 'function';
   });
+
+  /**
+   * تحجيم تكيّفيّ (v1.26.3) — صفحة بعدد طلّاب قريب من الحدّ الأقصى (١٠) تبقى
+   * بحجمها الأصليّ (١) بلا أيّ تغيير، لكن صفحة بعدد طلّاب قليل (١–٣ مثلًا)
+   * كانت تبدو صورة نحيفة فيها جدول صغير تائه وسط مساحة فارغة كبيرة نسبيًّا —
+   * فتكبَّر الخطوط والحشو تدريجيًّا (حتى ×١.٦ لصفّ واحد) بدل أن يبقى الجدول
+   * بحجمه الصغير الثابت نفسه. العرض الكليّ للصورة يبقى ثابتًا (٧٦٠px) عمدًا —
+   * "الحجم" الذي يتغيّر هو نسب المحتوى داخلها، لا أبعاد الصورة نفسها.
+   */
+  rowScale(page: ReportImagePage): number {
+    const n = page.rows.length;
+    if (n >= 8) return 1;
+    if (n <= 1) return 1.6;
+    return 1.6 - ((n - 1) / 7) * 0.6;
+  }
 
   async generate(): Promise<void> {
     if (this.busy()) return;

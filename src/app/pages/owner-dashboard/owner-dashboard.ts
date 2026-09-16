@@ -12,8 +12,10 @@ const PLATFORM_LABELS: Record<string, string> = { android: 'أندرويد', web
   selector: 'app-owner-dashboard',
   imports: [RouterLink, PageHeaderComponent],
   template: `
-    <app-page-header title="لوحة المالك" [back]="false">
-      <button actions class="btn btn-ghost" type="button" (click)="logout()">خروج</button>
+    <app-page-header title="لوحة المالك" nav="none">
+      <button actions class="btn btn-ghost logout-btn" type="button" (click)="logout()">
+        خروج
+      </button>
     </app-page-header>
 
     <div class="page">
@@ -105,6 +107,19 @@ const PLATFORM_LABELS: Record<string, string> = { android: 'أندرويد', web
       .muted {
         color: var(--text-soft);
         font-size: 0.76rem;
+      }
+      .logout-btn {
+        font-size: 0.82rem;
+        padding: 6px 12px;
+      }
+      .stat {
+        transition: transform 0.15s ease;
+      }
+      .stat:active {
+        transform: scale(0.97);
+      }
+      .list-item {
+        transition: background-color 0.15s ease;
       }
     `,
   ],

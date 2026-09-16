@@ -54,6 +54,7 @@ import {
   type PlatformTeacherSummary,
   type PlatformMirrorItem,
   type PlatformStats,
+  isActualRecitation,
 } from './models';
 
 /** حقل + تسميته العربيّة — أساس بناء `ActivityFieldChange[]` بمقارنة مباشرة. */
@@ -246,6 +247,93 @@ export class DataService {
     }
     await this.auth.promoteToTenant();
     return migrated;
+  }
+
+  /**
+   * يملأ ملخّص لوحة المالك (v1.26.0) وقت أوّل دخول لحساب معلّم موجود مسبقًا
+   * (سجَّل قبل شحن الميزة، أو ببساطة لم يُنشئ/يحذف شيئًا منذئذٍ فيُحدَّث
+   * تلقائيًّا) — بدون هذا، `platformTeachers/{uid}` يبقى ناقصًا أو غائبًا كليًّا
+   * فتظهر لوحة المالك هذا المعلّم بعدّادات صفريّة/غائبة رغم أنّ لديه حلقات
+   * وطلّابًا حقيقيّين (v1.26.3، خلل مُبلَّغ: "بيانات قديمة لا تظهر").
+   * محميّة من إعادة العمل: تتوقّف فورًا إن وجدت الملخّص مكتملًا بالفعل
+   * (circleCount رقم حقيقيّ، لا `undefined`) — فلا تُعيد حساب كل شيء في كل
+   * دخول عاديّ. تُستدعى من DataService لا AuthService عمدًا (auth.service.ts
+   * لا يستطيع حقن DataService بلا حلقة اعتماديّة، وهذه العمليّة تحتاج
+   * `scopedCol()` وكل استعلامات هذا الملفّ).
+   */
+  async backfillPlatformTeacherSummary(): Promise<void> {
+    const uid = this.auth.user()?.uid;
+    if (!uid || this.auth.isOwnerAccount()) return;
+    try {
+      const existing = await getDoc(doc(db, PLATFORM_COL.teachers, uid));
+      const data = existing.exists() ? (existing.data() as Partial<PlatformTeacherSummary>) : null;
+      if (data && typeof data.circleCount === 'number') return; // مكتمل بالفعل
+
+      const [circles, students, recitations] = await Promise.all([
+        getDocs(this.scopedCol(COL.circles)),
+        getDocs(this.scopedCol(COL.students)),
+        getDocs(this.scopedCol(COL.recitations)),
+      ]);
+      const recitationCount = recitations.docs.filter((d) =>
+        isActualRecitation(d.data() as RecitationRecord),
+      ).length;
+      let memorizedCount = 0;
+      for (const d of students.docs) {
+        memorizedCount += ((d.data() as Student).memorizedSurahs ?? []).length;
+      }
+      const teacher = this.auth.teacher();
+      const wasNeverCounted = !data; // لم يوجد ملخّص إطلاقًا (لا حتى ناقص) — لم يُحتسَب بعدّادات platformStats من قبل
+      await setDoc(
+        doc(db, PLATFORM_COL.teachers, uid),
+        {
+          name: teacher?.name ?? '',
+          email: teacher?.email ?? '',
+          deviceId: teacher?.deviceId ?? data?.deviceId ?? '',
+          platform: teacher?.platform ?? data?.platform ?? '',
+          circleCount: circles.size,
+          studentCount: students.size,
+          recitationCount,
+          memorizedCount,
+          createdAt: teacher?.createdAt ?? data?.createdAt ?? Date.now(),
+          lastActiveAt: Date.now(),
+        },
+        { merge: true },
+      );
+      for (const c of circles.docs) {
+        const cd = c.data() as Circle;
+        await setDoc(doc(db, PLATFORM_COL.teachers, uid, 'circleMirror', c.id), {
+          id: c.id,
+          name: cd.name,
+          teacherId: uid,
+          teacherName: teacher?.name ?? '',
+          createdAt: cd.createdAt ?? Date.now(),
+        });
+      }
+      for (const s of students.docs) {
+        const sd = s.data() as Student;
+        await setDoc(doc(db, PLATFORM_COL.teachers, uid, 'studentMirror', s.id), {
+          id: s.id,
+          name: sd.name,
+          teacherId: uid,
+          teacherName: teacher?.name ?? '',
+          createdAt: sd.createdAt ?? Date.now(),
+        });
+      }
+      if (wasNeverCounted) {
+        await setDoc(
+          doc(db, PLATFORM_COL.statsDoc),
+          {
+            totalTeachers: increment(1),
+            totalCircles: increment(circles.size),
+            totalStudents: increment(students.size),
+            totalRecitations: increment(recitationCount),
+          },
+          { merge: true },
+        );
+      }
+    } catch {
+      // صامت عمدًا — يُعاد المحاولة تلقائيًّا في الدخول التالي (لم تُعلَّم مكتملة).
+    }
   }
 
   /**
