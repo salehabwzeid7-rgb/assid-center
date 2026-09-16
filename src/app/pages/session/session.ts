@@ -648,6 +648,21 @@ export class SessionPage {
     (this.recitations() ?? []).filter(isActualRecitation),
   );
   private readonly allSerds = this.data.allSerds(this.destroyRef);
+  private readonly allExams = this.data.allExams(this.destroyRef);
+
+  /** سرد/اختبار مسجَّل لهذا الطالب بنفس تاريخ الجلسة — ليُذكَر في التقرير حتى لو لم يُسمّع تسميعًا عاديًّا. */
+  private sameDayActivities(studentId: string, date: string): { label: string; score: number }[] {
+    const fmt = (juz: number, scope: string | undefined, juzList?: number[]) =>
+      scope === 'block' ? `كتلة ${(juzList ?? [juz]).join('،')}` : `الجزء ${juz}`;
+    const out: { label: string; score: number }[] = [];
+    for (const r of this.allSerds() ?? [])
+      if (r.studentId === studentId && r.date === date)
+        out.push({ label: `سرد: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
+    for (const r of this.allExams() ?? [])
+      if (r.studentId === studentId && r.date === date)
+        out.push({ label: `اختبار: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
+    return out;
+  }
 
   /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
   private readonly activeStudentId = signal<string | null>(null);
@@ -788,12 +803,17 @@ export class SessionPage {
           if (r.notes?.trim()) lines.push(`  ملاحظة: ${r.notes.trim()}`);
         }
       } else {
-        const notRecitedEntry = recs.find((r) => r.notRecited);
-        if (notRecitedEntry) {
-          const reason = notRecitedEntry.notes?.trim();
-          lines.push(`• التسميع: لم يسمّع${reason ? ' — ' + reason : ''}`);
+        const extra = this.sameDayActivities(st.id, s.date);
+        if (extra.length > 0) {
+          for (const e of extra) lines.push(`• ${e.label} — ${e.score}٪`);
         } else {
-          lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
+          const notRecitedEntry = recs.find((r) => r.notRecited);
+          if (notRecitedEntry) {
+            const reason = notRecitedEntry.notes?.trim();
+            lines.push(`• التسميع: لم يسمّع${reason ? ' — ' + reason : ''}`);
+          } else {
+            lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
+          }
         }
       }
     }
@@ -884,6 +904,11 @@ export class SessionPage {
               rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
             };
           });
+        } else if (this.sameDayActivities(st.id, s.date).length > 0) {
+          segments = this.sameDayActivities(st.id, s.date).map((e) => ({
+            detail: e.label,
+            rating: `${e.score}٪`,
+          }));
         } else if (a?.status === 'absent') {
           segments = [{ placeholderText: 'غائب', placeholderClass: 'absent' }];
         } else if (a?.status === 'present' || a?.status === 'late') {
