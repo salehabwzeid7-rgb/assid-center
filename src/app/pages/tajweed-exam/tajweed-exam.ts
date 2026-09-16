@@ -1,17 +1,19 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { dmy, weekdayAr } from '../../core/format';
 import { fmt12 } from '../../core/time';
-import { EXAM_PASS, circleLabel, clampScore, passLabel, type Student } from '../../core/models';
+import { circleLabel, tajweedExamVerdict, type Student } from '../../core/models';
 import { PageHeaderComponent } from '../../shared/page-header';
-import { ScoreInputComponent } from '../../shared/score-input';
 import {
   ReportImageComponent,
   type ReportImageMeta,
   type ReportImagePage,
 } from '../../shared/report-image';
+
+type Rating = 'very_good' | 'excellent';
 
 /**
  * تفاصيل اختبار تجويد واحد: قائمة الطلّاب المستهدَفين + إدخال درجة كلّ طالب
@@ -21,7 +23,7 @@ import {
  */
 @Component({
   selector: 'app-tajweed-exam',
-  imports: [PageHeaderComponent, ScoreInputComponent, ReportImageComponent],
+  imports: [FormsModule, PageHeaderComponent, ReportImageComponent],
   template: `
     <app-page-header [title]="exam()?.name || 'اختبار التجويد'" />
 
@@ -50,6 +52,9 @@ import {
               · {{ e.durationMin }} دقيقة
             }
           </p>
+          <p class="muted" style="margin:4px 0 0">
+            العلامة الكلّية: <b>{{ e.totalScore }}</b> · علامة النجاح: <b>{{ e.passScore }}</b>
+          </p>
         </div>
 
         <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr">
@@ -62,20 +67,52 @@ import {
             <div class="label">قُيِّموا</div>
           </div>
           <div class="stat">
-            <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
+            <div class="num">{{ avgScore() === null ? '—' : avgScore() + '/' + e.totalScore }}</div>
             <div class="label">متوسّط الدرجات</div>
           </div>
         </div>
 
         <div class="section-title">درجات الطلّاب</div>
         @for (row of roster(); track row.student.id) {
-          <div class="card" style="margin-bottom:10px">
+          <div class="card grade-card">
             <b>{{ row.student.name }}</b>
-            <app-score-input
-              [threshold]="examPass"
-              [value]="scores[row.student.id] ?? row.score ?? 90"
-              (valueChange)="scores[row.student.id] = $event"
-            />
+            <div class="grade-row">
+              <input
+                type="number"
+                inputmode="numeric"
+                min="0"
+                [max]="e.totalScore"
+                [ngModel]="scoreOf(row)"
+                (ngModelChange)="scores[row.student.id] = $event"
+                [ngModelOptions]="{ standalone: true }"
+                class="grade-num"
+                [attr.aria-label]="'درجة ' + row.student.name"
+              />
+              <span class="grade-total">/ {{ e.totalScore }}</span>
+              <span [class]="'badge ' + (scoreOf(row) < e.passScore ? 'b-absent' : 'b-present')">
+                {{ verdictLabel(scoreOf(row), e.passScore, ratingOf(row)) }}
+              </span>
+            </div>
+            @if (scoreOf(row) >= e.passScore) {
+              <div class="rating-choice">
+                <button
+                  type="button"
+                  class="rating-opt"
+                  [class.active]="(ratingOf(row) ?? 'very_good') === 'very_good'"
+                  (click)="setRating(row.student.id, 'very_good')"
+                >
+                  جيد جدًّا
+                </button>
+                <button
+                  type="button"
+                  class="rating-opt"
+                  [class.active]="ratingOf(row) === 'excellent'"
+                  (click)="setRating(row.student.id, 'excellent')"
+                >
+                  ممتاز
+                </button>
+              </div>
+            }
             <button
               class="btn btn-primary btn-block"
               type="button"
@@ -133,6 +170,47 @@ import {
         margin-top: 8px;
         flex-wrap: wrap;
       }
+      .grade-card {
+        margin-bottom: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .grade-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .grade-num {
+        width: 76px;
+        flex-shrink: 0;
+        text-align: center;
+        font-weight: 800;
+        padding: 8px 6px;
+      }
+      .grade-total {
+        color: var(--text-soft);
+        font-weight: 700;
+      }
+      .rating-choice {
+        display: flex;
+        gap: 8px;
+      }
+      .rating-opt {
+        flex: 1;
+        padding: 9px 6px;
+        border: 1px solid var(--green);
+        background: var(--surface);
+        color: var(--green);
+        border-radius: 9px;
+        font-size: 0.88rem;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .rating-opt.active {
+        background: var(--green);
+        color: #fff;
+      }
     `,
   ],
 })
@@ -145,7 +223,6 @@ export class TajweedExamPage {
 
   readonly circleId = this.route.snapshot.paramMap.get('id')!;
   readonly examId = this.route.snapshot.paramMap.get('examId')!;
-  readonly examPass = EXAM_PASS;
 
   readonly circle = this.data.circleLive(this.circleId, this.destroyRef);
   private readonly exams = this.data.tajweedExamsByCircle(this.circleId, this.destroyRef);
@@ -168,9 +245,23 @@ export class TajweedExamPage {
         const student = students.find((s) => s.id === sid);
         if (!student) return null;
         const r = results.find((x) => x.studentId === sid);
-        return { student, score: r?.score ?? null, hasResult: !!r };
+        return {
+          student,
+          score: r?.score ?? null,
+          rating: r?.rating,
+          hasResult: !!r,
+        };
       })
-      .filter((x): x is { student: Student; score: number | null; hasResult: boolean } => !!x)
+      .filter(
+        (
+          x,
+        ): x is {
+          student: Student;
+          score: number | null;
+          rating: Rating | undefined;
+          hasResult: boolean;
+        } => !!x,
+      )
       .sort((a, b) => a.student.name.localeCompare(b.student.name, 'ar'));
   });
 
@@ -181,30 +272,56 @@ export class TajweedExamPage {
     return Math.round(graded.reduce((sum, r) => sum + (r.score ?? 0), 0) / graded.length);
   });
 
-  /** درجات محرَّرة محليًّا قبل الحفظ — كائن عاديّ (لا إشارة) يكفي لأنّ الحفظ صريح بزرّ. */
+  /**
+   * الدرجات والتقييمات المحرَّرة محليًّا قبل الحفظ — كائنان عاديّان (لا
+   * إشارة) يكفيان لأنّ الحفظ صريح بزرّ لكلّ طالب على حدة، لا حفظًا تلقائيًّا
+   * فوريًّا يحتاج تفاعليّة `computed()`.
+   */
   scores: Record<string, number> = {};
+  private ratings: Record<string, Rating> = {};
   readonly saving = signal<string | null>(null);
 
   readonly circleLabel = circleLabel;
   readonly dmy = dmy;
   readonly weekdayAr = weekdayAr;
   readonly fmt12 = fmt12;
+  readonly verdictLabel = tajweedExamVerdict;
+
+  /** الدرجة الحاليّة المعروضة لهذا الصفّ — المُحرَّرة محليًّا، وإلا المحفوظة، وإلا صفر. */
+  scoreOf(row: { student: Student; score: number | null }): number {
+    return this.scores[row.student.id] ?? row.score ?? 0;
+  }
+
+  /** التقييم الحاليّ المعروض — المُختار محلّيًّا، وإلا المحفوظ. */
+  ratingOf(row: { student: Student; rating: Rating | undefined }): Rating | undefined {
+    return this.ratings[row.student.id] ?? row.rating;
+  }
+
+  setRating(studentId: string, rating: Rating): void {
+    this.ratings[studentId] = rating;
+  }
 
   async saveScore(studentId: string): Promise<void> {
     const e = this.exam();
     if (!e) return;
-    const score = clampScore(this.scores[studentId] ?? 90);
+    const row = this.roster().find((r) => r.student.id === studentId);
+    if (!row) return;
+    const score = Math.max(0, Math.min(e.totalScore, Math.round(this.scoreOf(row))));
+    const rating = score >= e.passScore ? (this.ratingOf(row) ?? 'very_good') : undefined;
     this.saving.set(studentId);
     await this.notify.run(
       () =>
-        this.data.upsertTajweedExamResult(
-          this.examId,
-          this.circleId,
+        this.data.upsertTajweedExamResult({
+          examId: this.examId,
+          circleId: this.circleId,
           studentId,
-          e.name,
-          e.date,
+          examName: e.name,
+          date: e.date,
+          totalScore: e.totalScore,
+          passScore: e.passScore,
           score,
-        ),
+          rating,
+        }),
       { success: 'حُفظت الدرجة', error: 'تعذّر حفظ الدرجة' },
     );
     this.saving.set(null);
@@ -229,14 +346,21 @@ export class TajweedExamPage {
   readonly reportText = computed<string>(() => {
     const e = this.exam();
     if (!e) return '';
-    const header = `📝 نتائج اختبار: ${e.name}\n${circleLabel(this.circle())} — ${weekdayAr(e.date)} ${dmy(e.date)}`;
+    const header = `📝 نتائج اختبار: ${e.name}\n${circleLabel(this.circle())} — ${weekdayAr(e.date)} ${dmy(e.date)}\nالعلامة الكلّية: ${e.totalScore} · علامة النجاح: ${e.passScore}`;
     const rows = this.roster();
     const lines = rows.map((r, i) => {
       if (!r.hasResult || r.score === null) return `${i + 1}. ${r.student.name} — لم يُقيَّم بعد`;
-      return `${i + 1}. ${r.student.name} — ${r.score}٪ (${passLabel(r.score, EXAM_PASS)})`;
+      return `${i + 1}. ${r.student.name} — ${r.score}/${e.totalScore} (${tajweedExamVerdict(r.score, e.passScore, r.rating)})`;
     });
     const rule = '━━━━━━━━━━━━';
-    return [header, rule, ...lines, rule, `متوسّط الدرجات: ${this.avgScore() ?? '—'}٪`].join('\n');
+    const avg = this.avgScore();
+    return [
+      header,
+      rule,
+      ...lines,
+      rule,
+      `متوسّط الدرجات: ${avg === null ? '—' : avg + '/' + e.totalScore}`,
+    ].join('\n');
   });
 
   shareWhatsApp(): void {
@@ -264,8 +388,9 @@ export class TajweedExamPage {
   });
 
   readonly reportImagePages = computed<ReportImagePage[]>(() => {
+    const e = this.exam();
     const rows = this.roster();
-    if (rows.length === 0) return [];
+    if (!e || rows.length === 0) return [];
     const size = 10;
     const chunks: ReportImagePage[] = [];
     for (let i = 0; i < rows.length; i += size) {
@@ -277,12 +402,12 @@ export class TajweedExamPage {
           const ungraded = !r.hasResult || r.score === null;
           const placeholderClass: 'absent' | 'neutral' | 'not-recited' = ungraded
             ? 'absent'
-            : (r.score as number) >= EXAM_PASS
+            : (r.score as number) >= e.passScore
               ? 'neutral'
               : 'not-recited';
           const placeholderText = ungraded
             ? 'لم يُقيَّم بعد'
-            : `${r.score}٪ (${passLabel(r.score as number, EXAM_PASS)})`;
+            : `${r.score}/${e.totalScore} (${tajweedExamVerdict(r.score as number, e.passScore, r.rating)})`;
           return {
             index: i + j + 1,
             name: r.student.name,

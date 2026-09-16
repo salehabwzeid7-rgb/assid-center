@@ -45,7 +45,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
                   @if (e.time) {
                     · {{ fmt12(e.time) }}
                   }
-                  · {{ e.studentIds.length }} طالبًا
+                  · {{ e.studentIds.length }} طالبًا · من {{ e.totalScore }} (نجاح
+                  {{ e.passScore }})
                 </span>
               </span>
               <span class="chevron">‹</span>
@@ -96,6 +97,41 @@ import { PageHeaderComponent } from '../../shared/page-header';
             />
           </div>
 
+          <div class="field-row">
+            <div class="field">
+              <label for="ex-total">العلامة الكلّية للاختبار *</label>
+              <input
+                id="ex-total"
+                name="ex-total"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                [(ngModel)]="m.totalScore"
+                placeholder="مثال: 20"
+                required
+              />
+            </div>
+            <div class="field">
+              <label for="ex-pass">علامة النجاح *</label>
+              <input
+                id="ex-pass"
+                name="ex-pass"
+                type="number"
+                inputmode="numeric"
+                min="0"
+                [max]="m.totalScore"
+                [(ngModel)]="m.passScore"
+                placeholder="مثال: 10"
+                required
+              />
+            </div>
+          </div>
+          @if (m.passScore > m.totalScore) {
+            <p class="hint" style="color:var(--danger)">
+              علامة النجاح يجب ألّا تتجاوز العلامة الكلّية للاختبار.
+            </p>
+          }
+
           <div class="field">
             <div class="row-between" style="margin-bottom:6px">
               <label style="margin:0">الطلّاب المستهدَفون *</label>
@@ -125,7 +161,15 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <button
               class="btn btn-primary"
               type="submit"
-              [disabled]="saving() || !m.name.trim() || m.studentIds.length === 0"
+              [disabled]="
+                saving() ||
+                !m.name.trim() ||
+                m.studentIds.length === 0 ||
+                !m.totalScore ||
+                m.totalScore <= 0 ||
+                m.passScore < 0 ||
+                m.passScore > m.totalScore
+              "
             >
               {{ saving() ? 'جارٍ الإنشاء…' : 'إنشاء الاختبار' }}
             </button>
@@ -190,6 +234,8 @@ export class TajweedExamsPage {
     time: '',
     durationMin: undefined as number | undefined,
     studentIds: [] as string[],
+    totalScore: 20,
+    passScore: 10,
   };
 
   readonly allSelected = computed(() => {
@@ -205,6 +251,8 @@ export class TajweedExamsPage {
       time: c?.fromTime ?? '',
       durationMin: undefined,
       studentIds: (this.students() ?? []).filter((s) => s.active).map((s) => s.id),
+      totalScore: 20,
+      passScore: 10,
     };
     this.creating.set(true);
   }
@@ -225,6 +273,8 @@ export class TajweedExamsPage {
 
   async submit(): Promise<void> {
     if (!this.m.name.trim() || this.m.studentIds.length === 0) return;
+    if (!this.m.totalScore || this.m.totalScore <= 0) return;
+    if (this.m.passScore < 0 || this.m.passScore > this.m.totalScore) return;
     this.saving.set(true);
     const examId = await this.notify.run(
       () =>
@@ -235,6 +285,8 @@ export class TajweedExamsPage {
           time: this.m.time || undefined,
           durationMin: this.m.durationMin || undefined,
           studentIds: [...this.m.studentIds],
+          totalScore: Number(this.m.totalScore),
+          passScore: Number(this.m.passScore),
         }),
       { success: 'أُنشئ الاختبار', error: 'تعذّر إنشاء الاختبار' },
     );

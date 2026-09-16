@@ -136,6 +136,20 @@ export function ratingLabel(score: number, rating?: 'very_good' | 'excellent'): 
   return rating === 'excellent' ? 'ممتاز' : 'جيد جدًّا';
 }
 
+/**
+ * نفس منطق `ratingLabel()` لكن بعتبة نجاح متغيّرة (لا ٩٠ ثابتة) — لاختبارات
+ * التجويد، حيث لكلّ اختبار علامته الكلّية وعلامة نجاحه الخاصّتين (وليست
+ * بالضرورة نسبة مئويّة من ١٠٠).
+ */
+export function tajweedExamVerdict(
+  score: number,
+  passScore: number,
+  rating?: 'very_good' | 'excellent',
+): ScoreRating {
+  if (score < passScore) return 'إعادة';
+  return rating === 'excellent' ? 'ممتاز' : 'جيد جدًّا';
+}
+
 /** تقديرات نصّيّة قديمة → نسبة تقريبيّة (لقراءة السجلّات المُنشأة قبل التحديث) */
 const LEGACY_GRADE_SCORE: Record<string, number> = {
   excellent: 98,
@@ -476,14 +490,18 @@ export interface TajweedExam extends Owned {
   durationMin?: number;
   /** الطلّاب المستهدَفون بهذا الاختبار (اختيار الكلّ أو فئة منهم) */
   studentIds: string[];
+  /** العلامة الكلّية للاختبار (مثال: ٢٠) — ليست بالضرورة ١٠٠، خاصّة بكلّ اختبار. */
+  totalScore: number;
+  /** علامة النجاح — يجب ألّا تتجاوز `totalScore`. */
+  passScore: number;
   createdAt: number;
 }
 
 /**
  * درجة طالب واحد ضمن اختبار تجويد — سجلّ واحد لكلّ (اختبار، طالب)، معرّفه
- * `{examId}_{studentId}`. `examName`/`date` منسوختان من `TajweedExam` وقت
- * الحفظ (تكرار متعمَّد) حتى تعرض صفحة ملفّ الطالب النتائج دون استعلام إضافيّ
- * عبر المجموعتين.
+ * `{examId}_{studentId}`. `examName`/`date`/`totalScore`/`passScore` منسوخة
+ * من `TajweedExam` وقت الحفظ (تكرار متعمَّد) حتى تعرض صفحة ملفّ الطالب
+ * النتائج (بما فيها حالة النجاح/الإعادة) دون استعلام إضافيّ عبر المجموعتين.
  */
 export interface TajweedExamResult extends Owned {
   id: string;
@@ -492,8 +510,15 @@ export interface TajweedExamResult extends Owned {
   studentId: string;
   examName: string;
   date: string;
-  /** درجة الاختبار ٠..١٠٠ */
+  totalScore: number;
+  passScore: number;
+  /** الدرجة الفعليّة المُحرَزة ٠..totalScore (وليست نسبة مئويّة). */
   score: number;
+  /**
+   * تقييم المعلّم اليدويّ — ذو معنى فقط عند `score >= passScore` (دون ذلك
+   * الحالة «إعادة» تلقائيًّا بلا حاجة لحقل). نفس مفهوم `RecitationRecord.rating`.
+   */
+  rating?: 'very_good' | 'excellent';
   notes?: string;
   createdAt: number;
 }

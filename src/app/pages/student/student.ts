@@ -3,13 +3,12 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import {
   ATTENDANCE_LABELS,
-  EXAM_PASS,
   SARD_PASS,
   circleTypeLabel,
   isActualRecitation,
-  passLabel,
   scoreOf,
   studentCircleIds,
+  tajweedExamVerdict,
   type Circle,
   type SerdRecord,
 } from '../../core/models';
@@ -174,8 +173,9 @@ import { PageHeaderComponent } from '../../shared/page-header';
                 <span class="primary">{{ r.examName }}</span>
                 <span class="secondary">{{ dmy(r.date) }}</span>
               </span>
-              <span [class]="'badge ' + (r.score >= examPass ? 'b-present' : 'b-absent')">
-                {{ r.score }}٪ — {{ passLabel(r.score, examPass) }}
+              <span [class]="'badge ' + (r.score >= r.passScore ? 'b-present' : 'b-absent')">
+                {{ r.score }}/{{ r.totalScore }} —
+                {{ tajweedExamVerdict(r.score, r.passScore, r.rating) }}
               </span>
             </div>
           }
@@ -353,8 +353,7 @@ export class StudentPage {
 
   readonly attLabels = ATTENDANCE_LABELS;
   readonly dmy = dmy;
-  readonly examPass = EXAM_PASS;
-  readonly passLabel = passLabel;
+  readonly tajweedExamVerdict = tajweedExamVerdict;
   readonly tajweedResults = this.data.studentTajweedExamResults(this.id, this.destroyRef);
 
   typeText(c: Circle): string {

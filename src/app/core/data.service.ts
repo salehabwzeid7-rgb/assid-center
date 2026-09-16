@@ -99,6 +99,7 @@ const CIRCLE_DIFF_FIELDS: DiffField[] = [
 ];
 const TAJWEED_EXAM_RESULT_DIFF_FIELDS: DiffField[] = [
   { key: 'score', label: 'الدرجة' },
+  { key: 'rating', label: 'التقييم' },
   { key: 'notes', label: 'ملاحظات' },
 ];
 
@@ -1366,6 +1367,8 @@ export class DataService {
     time?: string;
     durationMin?: number;
     studentIds: string[];
+    totalScore: number;
+    passScore: number;
   }): Promise<string> {
     const created = await addDoc(
       this.col(COL.tajweedExams),
@@ -1374,7 +1377,7 @@ export class DataService {
     await this.logActivity({
       action: 'create',
       target: 'tajweedExam',
-      summary: `إنشاء اختبار تجويد «${input.name}» (${input.studentIds.length} طالبًا)`,
+      summary: `إنشاء اختبار تجويد «${input.name}» (${input.studentIds.length} طالبًا، من ${input.totalScore} وعلامة نجاح ${input.passScore})`,
       sessionLabel: input.date,
     });
     return created.id;
@@ -1425,19 +1428,28 @@ export class DataService {
    * مع صفحة ملفّ الطالب عبر `studentTajweedExamResults()` (نفس المجموعة، بلا
    * أيّ خطوة نسخ إضافيّة).
    */
-  async upsertTajweedExamResult(
-    examId: string,
-    circleId: string,
-    studentId: string,
-    examName: string,
-    date: string,
-    score: number,
-    notes?: string,
-  ): Promise<void> {
+  async upsertTajweedExamResult(input: {
+    examId: string;
+    circleId: string;
+    studentId: string;
+    examName: string;
+    date: string;
+    totalScore: number;
+    passScore: number;
+    score: number;
+    /** ذو معنى فقط عند score >= passScore — يُهمَل (وليس يُرسَل) دون ذلك. */
+    rating?: 'very_good' | 'excellent';
+    notes?: string;
+  }): Promise<void> {
+    const { examId, studentId } = input;
     const id = `${examId}_${studentId}`;
     const before = await this.getOneForAudit<TajweedExamResult>(COL.tajweedExamResults, id);
     const payload = this.owned(
-      clean({ examId, circleId, studentId, examName, date, score, notes, createdAt: Date.now() }),
+      clean({
+        ...input,
+        rating: input.score >= input.passScore ? (input.rating ?? 'very_good') : undefined,
+        createdAt: Date.now(),
+      }),
     );
     await setDoc(this.ref(COL.tajweedExamResults, id), payload, { merge: true });
     const student = await this.getStudent(studentId).catch(() => null);
@@ -1467,7 +1479,7 @@ export class DataService {
       await this.logActivity({
         action: 'create',
         target: 'tajweedExam',
-        summary: `تسجيل درجة اختبار تجويد لـ${student?.name ?? ''} (${score}٪)`,
+        summary: `تسجيل درجة اختبار تجويد لـ${student?.name ?? ''} (${input.score}/${input.totalScore})`,
         studentName: student?.name,
       });
     }
