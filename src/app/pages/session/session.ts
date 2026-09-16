@@ -274,35 +274,44 @@ type Step = 'attendance' | 'summary' | 'serd';
                     </button>
                   </div>
                   @if (manualKind(); as mk) {
-                    <div class="field-row" style="margin-top:8px">
-                      <div class="field">
-                        <label>الجزء</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="30"
-                          [(ngModel)]="manualJuz"
-                          [ngModelOptions]="{ standalone: true }"
-                        />
+                    @if (manualJuzOptions().length === 0) {
+                      <p class="muted" style="margin:8px 0 0">
+                        {{
+                          mk === 'exam'
+                            ? 'لا يوجد جزء اجتاز السرد بعد ليُختبَر.'
+                            : 'لا يوجد جزء محفوظ بعد ليُسرَد.'
+                        }}
+                      </p>
+                    } @else {
+                      <div class="field-row" style="margin-top:8px">
+                        <div class="field">
+                          <label>الجزء</label>
+                          <select [(ngModel)]="manualJuz" [ngModelOptions]="{ standalone: true }">
+                            @for (j of manualJuzOptions(); track j) {
+                              <option [ngValue]="j">{{ j }}</option>
+                            }
+                          </select>
+                        </div>
+                        <div class="field">
+                          <label>الدرجة</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            [(ngModel)]="manualScore"
+                            [ngModelOptions]="{ standalone: true }"
+                          />
+                        </div>
                       </div>
-                      <div class="field">
-                        <label>الدرجة</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          [(ngModel)]="manualScore"
-                          [ngModelOptions]="{ standalone: true }"
-                        />
-                      </div>
-                    </div>
-                    <button
-                      class="btn btn-primary btn-block"
-                      type="button"
-                      (click)="saveManual(st.id)"
-                    >
-                      حفظ {{ mk === 'serd' ? 'السرد' : 'الاختبار' }}
-                    </button>
+                      <button
+                        class="btn btn-primary btn-block"
+                        type="button"
+                        [disabled]="manualSaving()"
+                        (click)="saveManual(st.id)"
+                      >
+                        حفظ {{ mk === 'serd' ? 'السرد' : 'الاختبار' }}
+                      </button>
+                    }
                   }
                 }
               </div>
@@ -699,47 +708,99 @@ export class SessionPage {
   private readonly allSerds = this.data.allSerds(this.destroyRef);
   private readonly allExams = this.data.allExams(this.destroyRef);
 
-  /** سرد/اختبار مسجَّل لهذا الطالب بنفس تاريخ الجلسة — ليُذكَر في التقرير حتى لو لم يُسمّع تسميعًا عاديًّا. */
-  private sameDayActivities(studentId: string, date: string): { label: string; score: number }[] {
+  /**
+   * سرد/اختبار مسجَّل لهذا الطالب **بنفس الحلقة والتاريخ** — مُقيَّد بالحلقة
+   * أيضًا (لا التاريخ وحده) حتى لا يظهر نشاط حلقة أخرى (لطالب مسجَّل بأكثر
+   * من حلقة) في تقرير هذه الجلسة. عدد النتائج يبقى صغيرًا دومًا (نشاط اليوم
+   * فقط) — لا سجلّ تاريخيّ طويل.
+   */
+  private sameDayActivities(
+    studentId: string,
+    date: string,
+    circleId: string,
+  ): { label: string; score: number }[] {
     const fmt = (juz: number, scope: string | undefined, juzList?: number[]) =>
       scope === 'block' ? `كتلة ${(juzList ?? [juz]).join('،')}` : `الجزء ${juz}`;
     const out: { label: string; score: number }[] = [];
     for (const r of this.allSerds() ?? [])
-      if (r.studentId === studentId && r.date === date)
+      if (r.studentId === studentId && r.date === date && r.circleId === circleId)
         out.push({ label: `سرد: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
     for (const r of this.allExams() ?? [])
-      if (r.studentId === studentId && r.date === date)
+      if (r.studentId === studentId && r.date === date && r.circleId === circleId)
         out.push({ label: `اختبار: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
     return out;
   }
 
-  /** تسجيل يدويّ لسرد/اختبار بدل التسميع العاديّ — من نافذة الطالب مباشرةً. */
+  /**
+   * تسجيل يدويّ لسرد/اختبار بدل التسميع العاديّ — من نافذة الطالب مباشرةً.
+   * يلتزم بنفس قواعد التقدّم المعتمَدة في صفحتَي السرد/الاختبار المستقلّتين:
+   * السرد يُقتصَر على أجزاء محفوظة فعليًّا، الاختبار يُقتصَر على أجزاء اجتازت
+   * السرد (عتبة SARD_PASS)، ورقم الدورة/المحاولة يُحتسَب تلقائيًّا (آخر رقم+١)
+   * لا ثابتًا على ١ — حتى لا تنكسر عدّادات التقدّم في بقيّة التطبيق.
+   */
   readonly manualKind = signal<'serd' | 'exam' | null>(null);
-  manualJuz = 1;
+  readonly manualSaving = signal(false);
+  manualJuz = 0;
   manualScore = 90;
+  private readonly memorizedJuz = computed(() =>
+    completedJuz(this.activeStudent()?.memorizedSurahs ?? []),
+  );
+  private readonly sardPassedJuzSet = computed(() => {
+    const sid = this.activeStudentId();
+    const set = new Set<number>();
+    for (const r of this.allSerds() ?? [])
+      if (r.studentId === sid && (r.scope ?? 'juz') === 'juz' && r.score >= SARD_PASS)
+        set.add(r.juz);
+    return set;
+  });
+  readonly manualJuzOptions = computed(() =>
+    this.manualKind() === 'exam'
+      ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
+      : this.memorizedJuz(),
+  );
   pickManualKind(k: 'serd' | 'exam'): void {
-    this.manualKind.set(this.manualKind() === k ? null : k);
+    const next = this.manualKind() === k ? null : k;
+    this.manualKind.set(next);
+    const opts =
+      next === 'exam'
+        ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
+        : this.memorizedJuz();
+    this.manualJuz = opts[0] ?? 0;
+  }
+  /** رقم الدورة (سرد) أو المحاولة (اختبار) التالي لهذا الجزء — يطابق منطق serd.ts/exam.ts. */
+  private nextSeq(studentId: string, juz: number, kind: 'serd' | 'exam'): number {
+    const list = (kind === 'serd' ? this.allSerds() : this.allExams()) ?? [];
+    return (
+      list.filter((r) => r.studentId === studentId && (r.scope ?? 'juz') === 'juz' && r.juz === juz)
+        .length + 1
+    );
   }
   async saveManual(studentId: string): Promise<void> {
     const kind = this.manualKind();
     const s = this.session();
-    if (!kind || !s) return;
+    const juz = this.manualJuz;
+    if (!kind || !s || !juz || this.manualSaving()) return;
+    this.manualSaving.set(true);
     const base = {
       studentId,
       circleId: s.circleId,
       scope: 'juz' as const,
-      juz: this.manualJuz,
+      juz,
       score: this.manualScore,
       date: s.date,
     };
-    await this.notify.run(
-      () =>
-        kind === 'serd'
-          ? this.data.addSerd({ ...base, cycle: 1 })
-          : this.data.addExam({ ...base, attempt: 1 }),
-      { success: kind === 'serd' ? 'سُجّل السرد' : 'سُجّل الاختبار', error: 'تعذّر الحفظ' },
-    );
-    this.manualKind.set(null);
+    try {
+      await this.notify.run(
+        () =>
+          kind === 'serd'
+            ? this.data.addSerd({ ...base, cycle: this.nextSeq(studentId, juz, 'serd') })
+            : this.data.addExam({ ...base, attempt: this.nextSeq(studentId, juz, 'exam') }),
+        { success: kind === 'serd' ? 'سُجّل السرد' : 'سُجّل الاختبار', error: 'تعذّر الحفظ' },
+      );
+      this.manualKind.set(null);
+    } finally {
+      this.manualSaving.set(false);
+    }
   }
 
   /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
@@ -881,7 +942,7 @@ export class SessionPage {
           if (r.notes?.trim()) lines.push(`  ملاحظة: ${r.notes.trim()}`);
         }
       } else {
-        const extra = this.sameDayActivities(st.id, s.date);
+        const extra = this.sameDayActivities(st.id, s.date, s.circleId);
         if (extra.length > 0) {
           for (const e of extra) lines.push(`• ${e.label} — ${e.score}٪`);
         } else {
@@ -982,8 +1043,8 @@ export class SessionPage {
               rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
             };
           });
-        } else if (this.sameDayActivities(st.id, s.date).length > 0) {
-          segments = this.sameDayActivities(st.id, s.date).map((e) => ({
+        } else if (this.sameDayActivities(st.id, s.date, s.circleId).length > 0) {
+          segments = this.sameDayActivities(st.id, s.date, s.circleId).map((e) => ({
             detail: e.label,
             rating: `${e.score}٪`,
           }));
