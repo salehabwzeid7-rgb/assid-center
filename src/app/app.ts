@@ -3,6 +3,9 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { Location } from '@angular/common';
 import { filter, take } from 'rxjs';
 import { App as CapApp } from '@capacitor/app';
+import { AuthService } from './core/auth.service';
+import { DataService } from './core/data.service';
+import { NotifyService } from './core/notify.service';
 import { ThemeService } from './core/theme.service';
 import { UpdateService } from './core/update.service';
 import { BottomNavComponent } from './shared/bottom-nav';
@@ -33,10 +36,14 @@ export class App {
   private theme = inject(ThemeService);
   // فحص التحديثات المباشرة (OTA) على أندرويد
   private update = inject(UpdateService);
+  private auth = inject(AuthService);
+  private data = inject(DataService);
+  private notify = inject(NotifyService);
 
   constructor() {
     this.update.init();
     this.hideSplashWhenReady();
+    this.autoUpgradeLegacyAccount();
 
     CapApp.addListener('backButton', ({ canGoBack }) => {
       if (canGoBack && history.length > 1) {
@@ -47,6 +54,37 @@ export class App {
     }).catch(() => {
       /* لا شيء على الويب */
     });
+  }
+
+  /**
+   * إصلاح تلقائيّ صامت لحساب قديم/مشترك (v1.25.6) — كان يدويًّا (زرّ في صفحة
+   * الحساب، v1.25.5) بطلب صريح من المستخدم بعد أن فهم ما تفعله العمليّة
+   * بالضبط. يعمل مرّة واحدة فقط تلقائيًّا: يتحقّق أنّ الحساب مسجَّل الدخول
+   * وليس تينانت بعد، يشغّل DataService.upgradeLegacyAccountToTenant() (يقرأ
+   * من الذاكرة المحليّة المخبَّأة على هذا الجهاز فقط، لا يلمس الخادم إطلاقًا
+   * حتى يكتب الترحيل)، ثمّ يُعيد تحميل الصفحة عند النجاح حتى تُعيد كل
+   * مستمعي onSnapshot الاشتراك بالاستعلامات المُقيَّدة الصحيحة الآن (Firestore
+   * لا يُعيد محاولة مستمع فشل بخطأ صلاحيّات تلقائيًّا، خلافًا لأخطاء الشبكة
+   * العابرة). زرّ «إصلاح الحساب الآن» في profile.ts يبقى موجودًا كمسار
+   * احتياطيّ يدويّ إن فشلت المحاولة التلقائيّة (مثلًا بلا اتصال عند الإقلاع).
+   * لا تكرار غير ضروريّ: بمجرّد نجاحها يصبح الحساب تينانت فلا يُستدعى الشرط
+   * مجدّدًا في أيّ إقلاع لاحق.
+   */
+  private autoUpgradeLegacyAccount(): void {
+    void (async () => {
+      await this.auth.readyPromise;
+      if (!this.auth.isLoggedIn() || this.auth.isTenant()) return;
+      try {
+        const migrated = await this.data.upgradeLegacyAccountToTenant();
+        if (migrated > 0) {
+          this.notify.success('تمّ إصلاح الحساب — يُعاد تحميل التطبيق الآن');
+          setTimeout(() => window.location.reload(), 1200);
+        }
+      } catch {
+        // فشل صامت — لا نزعج المستخدم بتوست خطأ عند كلّ إقلاع (قد يكون بلا
+        // اتصال مثلًا)؛ زرّ profile.ts اليدويّ يبقى متاحًا للمحاولة يدويًّا.
+      }
+    })();
   }
 
   /**
