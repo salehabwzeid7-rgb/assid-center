@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { UpdateService } from '../../core/update.service';
 import { DEFAULT_REPORT_INTRO, DEFAULT_REPORT_OUTRO } from '../../core/models';
@@ -132,6 +133,36 @@ import { PageHeaderComponent } from '../../shared/page-header';
         }
       </div>
 
+      @if (!auth.isTenant()) {
+        <div class="section-title">إصلاح الحساب</div>
+        <div class="card">
+          <p class="muted" style="margin-top:0;font-size:.86rem">
+            حسابك من نوع قديم لم يعد متوافقًا مع تحديث أمنيّ حديث، ما تسبّب بتوقّف مزامنة القوائم
+            (حلقاتك وطلّابك لا تظهر). اضغط الزرّ أدناه من هذا الجهاز تحديدًا (الجهاز الذي يستخدم
+            التطبيق عادة) لإصلاحه دفعة واحدة — لن تُحذف أو تُعدَّل أيّ بيانات، فقط تُوسَم بحسابك.
+            بعد انتهاء الإصلاح أعد فتح التطبيق.
+          </p>
+          <button
+            class="btn btn-primary btn-block"
+            type="button"
+            [disabled]="upgrading()"
+            (click)="upgradeAccount()"
+          >
+            {{ upgrading() ? upgradeStatus() || 'جارٍ الإصلاح…' : 'إصلاح الحساب الآن' }}
+          </button>
+          @if (upgradeDone(); as n) {
+            <p style="margin:10px 0 0;font-weight:700;font-size:.9rem;color:var(--green)">
+              ✅ تمّ ترحيل {{ n }} مستندًا وإصلاح الحساب. أغلق التطبيق وأعد فتحه الآن.
+            </p>
+          }
+          @if (upgradeError(); as e) {
+            <p style="margin:10px 0 0;font-weight:700;font-size:.9rem;color:var(--danger)">
+              ⚠️ {{ e }}
+            </p>
+          }
+        </div>
+      }
+
       <div class="section-title">سجل الحركات</div>
       <div class="card">
         <p class="muted" style="margin-top:0;font-size:.86rem">
@@ -238,6 +269,7 @@ export class ProfilePage {
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
   readonly notify = inject(NotifyService);
+  private data = inject(DataService);
   private update = inject(UpdateService);
   private router = inject(Router);
 
@@ -247,6 +279,29 @@ export class ProfilePage {
   readonly checkingUpdate = signal(false);
   readonly checkingSync = signal(false);
   readonly syncResult = signal<'synced' | 'timeout' | null>(null);
+  readonly upgrading = signal(false);
+  readonly upgradeStatus = signal('');
+  readonly upgradeDone = signal<number | null>(null);
+  readonly upgradeError = signal('');
+
+  /** إصلاح حساب قديم/مشترك مكسور بسبب قاعدة list الصارمة — راجع DataService.upgradeLegacyAccountToTenant. */
+  async upgradeAccount(): Promise<void> {
+    this.upgrading.set(true);
+    this.upgradeError.set('');
+    this.upgradeDone.set(null);
+    try {
+      const total = await this.data.upgradeLegacyAccountToTenant((name, count) => {
+        this.upgradeStatus.set(`جارٍ الإصلاح… (${name}: ${count})`);
+      });
+      this.upgradeDone.set(total);
+    } catch (e: unknown) {
+      this.upgradeError.set(
+        'تعذّر إتمام الإصلاح: ' + ((e as { message?: string })?.message ?? 'خطأ غير معروف'),
+      );
+    } finally {
+      this.upgrading.set(false);
+    }
+  }
 
   /** تحقّق يدويّ من وجود تحديث مباشر (OTA). */
   async checkUpdate(): Promise<void> {

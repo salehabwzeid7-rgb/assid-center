@@ -8,6 +8,7 @@ import {
   deleteDoc,
   getDoc,
   getDocs,
+  getDocsFromCache,
   onSnapshot,
   query,
   where,
@@ -200,6 +201,45 @@ export class DataService {
     return uid
       ? query(this.col(name), where('ownerId', '==', uid), ...constraints)
       : query(this.col(name), ...constraints);
+  }
+
+  /**
+   * ترقية حساب قديم/مشترك إلى حساب معزول (tenant) — إصلاح لانكسار حقيقيّ
+   * سبّبته قاعدة `list` الصارمة الجديدة (v1.25.4): أصبحت تشترط تطابق ownerId
+   * تمامًا، فحسابٌ قديم (بلا ownerId على مستنداته) توقّف عن رؤية أيّ قائمة
+   * بيانات كليًّا. الحلّ الآمن الوحيد المتاح بلا هجرة عبر بيانات اعتماد
+   * إداريّة: تشغيل الترحيل من **نفس الجهاز الذي زامن هذه البيانات من قبل** —
+   * `getDocsFromCache()` يقرأ من الذاكرة المحليّة المخبَّأة على هذا الجهاز
+   * فقط (IndexedDB)، بلا لمس الخادم إطلاقًا، فلا يصطدم بقاعدة list الجديدة
+   * أبدًا (القراءة محليّة بحتة). لكل مستند بلا ownerId هناك، تُكتب `ownerId
+   * = uid` هذا الحساب (كتابة عاديّة تمرّ قواعد update الحاليّة بلا أيّ تغيير
+   * فيها: isOwnerOrMissing(resource) صحيح لمستند بلا ownerId، وisOwner
+   * للبيانات الجديدة صحيح لأنّ ownerId الجديد يساوي uid كاتبه بالضبط).
+   * تحويل tenantId يحدث أخيرًا فقط، بعد نجاح ترحيل كل شيء.
+   *
+   * **لا تُشغَّل تلقائيًّا** — فقط من زرّ صريح في صفحة الحساب، ولمرّة واحدة.
+   * إن كان الجهاز لم يفتح صفحات كافية من قبل ليُزامن كل البيانات محليًّا،
+   * سيُرحِّل فقط ما هو موجود في الكاش — الأصحّ تشغيلها من الجهاز/الحساب
+   * الأكثر استخدامًا للتطبيق (الأرجح مزامَن بالكامل).
+   */
+  async upgradeLegacyAccountToTenant(
+    onProgress?: (collectionName: string, migratedCount: number) => void,
+  ): Promise<number> {
+    if (this.auth.isTenant()) return 0;
+    const uid = this.auth.user()?.uid;
+    if (!uid) throw new Error('غير مسجَّل الدخول');
+    let migrated = 0;
+    for (const name of Object.values(COL)) {
+      const snap = await getDocsFromCache(query(this.col(name)));
+      const targets = snap.docs.filter((d) => !('ownerId' in (d.data() as object)));
+      for (const d of targets) {
+        await updateDoc(d.ref, { ownerId: uid });
+        migrated++;
+      }
+      onProgress?.(name, targets.length);
+    }
+    await this.auth.promoteToTenant();
+    return migrated;
   }
 
   /**

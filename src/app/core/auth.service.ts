@@ -151,4 +151,20 @@ export class AuthService {
     }
     this.teacher.set({ ...current, ...patch });
   }
+
+  /**
+   * يحوّل حسابًا قديمًا/مشتركًا إلى حساب معزول (tenant) دفعة واحدة — خطوة
+   * أخيرة في DataService.upgradeLegacyAccountToTenant() (v1.25.5)، تُستدعى
+   * فقط بعد ترحيل كل مستندات الحساب بنجاح (وسمها بـ ownerId=uid)؛ لو نُفِّذت
+   * قبل ذلك ستظهر بيانات لم تُرحَّل بعد كأنّها غير موجودة. لا رجوع عنها من
+   * داخل التطبيق — تُكتب مباشرة في ملفّ المعلّم وتُحدَّث الإشارة المحليّة فورًا
+   * حتى يعمل scopeUid() الجديد في نفس الجلسة بلا حاجة لإعادة تحميل الصفحة.
+   */
+  async promoteToTenant(): Promise<void> {
+    const u = this.user();
+    const current = this.teacher();
+    if (!u || !current) return;
+    await updateDoc(doc(db, TEACHERS, u.uid), { tenantId: u.uid });
+    this.teacher.set({ ...current, tenantId: u.uid });
+  }
 }
