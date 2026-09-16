@@ -39,66 +39,102 @@ service cloud.firestore {
     }
 
     /**
-     * مجموعات البيانات التعليميّة: قراءة/تعديل/حذف تتطلّب ملكية المستند
-     * الحاليّ (أو كونه مشتركًا قديمًا)، والتعديل يتطلّب أيضًا ألّا تنقل
-     * الكتابة الجديدة المستند لملكيّة معلّم آخر (لا يمكن تحويل ownerId
+     * ثغرة أمنيّة حقيقيّة مكتشفة ومؤكَّدة (مراجعة أمنيّة + اختبار اختراق مباشر
+     * ضدّ الإنتاج الحقيقيّ، v1.25.4): `allow read` (يغطّي get المفرد وlist
+     * الجماعيّ معًا) بشرط isOwnerOrMissing يحمي get/update/delete المفرد
+     * فعليًّا (مؤكَّد)، لكن استعلام قائمة (list) بلا where كان يُرجع فعليًّا
+     * مستندات مملوكة لحساب آخر تمامًا. أيّ شرط فيه OR (سواء || داخل تعبير
+     * واحد، أو سطرا allow منفصلان، أو in بقيمتين) يُبطل قدرة Firestore على
+     * «إثبات» أنّ استعلام القائمة آمن فيسمح به فعليًّا بدل رفضه كما يُفترض.
+     * الشرط الوحيد المُثبَت آمنًا تجريبيًّا: مساواة واحدة بسيطة بلا أيّ OR.
+     *
+     * لذلك list قاعدة منفصلة عن get: تشترط مطابقة تامّة لـ ownerId — تعمل
+     * تلقائيًّا مع DataService.scopedCol() (where('ownerId','==',uid) لكلّ
+     * حساب معزول). **قرار متعمَّد بموافقة المستخدم: لا تدعم هذه القاعدة
+     * الحسابات القديمة/المشتركة (بلا ownerId) في list** — إصلاح ذلك يتطلّب
+     * هجرة بيانات (وسم كلّ مستند قديم بـ ownerId='SHARED') رُفضت الآن عمدًا
+     * حفاظًا على البيانات كما هي. حساب قديم سيرى قائمة فارغة/توست «تعذّرت
+     * المزامنة» (v1.19.2) بدل بياناته — تبقى بياناته سليمة في Firestore، فقط
+     * list تُرفَض إلى أن تُنجَز الهجرة لاحقًا إن احتاج الأمر. get/update/
+     * delete/create المفردة غير متأثّرة (نفس منطق isOwnerOrMissing الأصليّ).
+     */
+    function isListOwner(res) {
+      return res.data.ownerId == request.auth.uid;
+    }
+
+    /**
+     * مجموعات البيانات التعليميّة: قراءة مستند مفرد/تعديل/حذف تتطلّب ملكية
+     * المستند الحاليّ (أو كونه مشتركًا قديمًا)، والتعديل يتطلّب أيضًا ألّا
+     * تنقل الكتابة الجديدة المستند لملكيّة معلّم آخر (لا يمكن تحويل ownerId
      * لحساب غيرك). الإنشاء يتطلّب أن يكون المستند الجديد بلا ownerId
      * (حساب قديم) أو بـ ownerId يساوي كاتبه بالضبط (لا يمكن انتحال حساب آخر).
+     * القوائم (list) مقيَّدة بقاعدة isListOwner المنفصلة أعلاه.
      */
     match /circles/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /students/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /sessions/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /attendance/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /recitations/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /evaluations/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /serd/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /exams/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /tajweedExams/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
     match /tajweedExamResults/{id} {
-      allow read, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow get, delete: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
     }
 
     /** سجل الحركات (v1.21.0) — دائم لا يُحذف أبدًا، حتى من صاحبه (يُستعاد بتعليمه restoredAt فقط، لا بالحذف). */
     match /activityLog/{id} {
-      allow read: if signedIn() && isOwnerOrMissing(resource);
+      allow get: if signedIn() && isOwnerOrMissing(resource);
+      allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
       allow create: if signedIn() && isOwner(request.resource.data);
       allow delete: if false;
