@@ -255,6 +255,55 @@ type Step = 'attendance' | 'summary' | 'serd';
                     [date]="s.date"
                     [existingEntries]="recsOf(st.id)"
                   />
+                  <div class="row-between" style="margin-top:10px;gap:8px">
+                    <button
+                      type="button"
+                      class="chip"
+                      [class.active]="manualKind() === 'serd'"
+                      (click)="pickManualKind('serd')"
+                    >
+                      + سرد بدل التسميع
+                    </button>
+                    <button
+                      type="button"
+                      class="chip"
+                      [class.active]="manualKind() === 'exam'"
+                      (click)="pickManualKind('exam')"
+                    >
+                      + اختبار بدل التسميع
+                    </button>
+                  </div>
+                  @if (manualKind(); as mk) {
+                    <div class="field-row" style="margin-top:8px">
+                      <div class="field">
+                        <label>الجزء</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="30"
+                          [(ngModel)]="manualJuz"
+                          [ngModelOptions]="{ standalone: true }"
+                        />
+                      </div>
+                      <div class="field">
+                        <label>الدرجة</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          [(ngModel)]="manualScore"
+                          [ngModelOptions]="{ standalone: true }"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      class="btn btn-primary btn-block"
+                      type="button"
+                      (click)="saveManual(st.id)"
+                    >
+                      حفظ {{ mk === 'serd' ? 'السرد' : 'الاختبار' }}
+                    </button>
+                  }
                 }
               </div>
             </div>
@@ -662,6 +711,35 @@ export class SessionPage {
       if (r.studentId === studentId && r.date === date)
         out.push({ label: `اختبار: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
     return out;
+  }
+
+  /** تسجيل يدويّ لسرد/اختبار بدل التسميع العاديّ — من نافذة الطالب مباشرةً. */
+  readonly manualKind = signal<'serd' | 'exam' | null>(null);
+  manualJuz = 1;
+  manualScore = 90;
+  pickManualKind(k: 'serd' | 'exam'): void {
+    this.manualKind.set(this.manualKind() === k ? null : k);
+  }
+  async saveManual(studentId: string): Promise<void> {
+    const kind = this.manualKind();
+    const s = this.session();
+    if (!kind || !s) return;
+    const base = {
+      studentId,
+      circleId: s.circleId,
+      scope: 'juz' as const,
+      juz: this.manualJuz,
+      score: this.manualScore,
+      date: s.date,
+    };
+    await this.notify.run(
+      () =>
+        kind === 'serd'
+          ? this.data.addSerd({ ...base, cycle: 1 })
+          : this.data.addExam({ ...base, attempt: 1 }),
+      { success: kind === 'serd' ? 'سُجّل السرد' : 'سُجّل الاختبار', error: 'تعذّر الحفظ' },
+    );
+    this.manualKind.set(null);
   }
 
   /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
