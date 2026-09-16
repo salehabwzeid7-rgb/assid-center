@@ -3,15 +3,9 @@ import { Capacitor } from '@capacitor/core';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
-  signInWithRedirect,
-  signInWithCredential,
-  getRedirectResult,
-  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   updateProfile,
-  sendPasswordResetEmail,
   type User,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -42,9 +36,6 @@ export class AuthService {
   readonly isTenant = computed(() => !!this.teacher()?.tenantId);
 
   constructor() {
-    // التقاط نتيجة دخول Google عبر إعادة التوجيه (المسار الاحتياطيّ للنافذة) — غير حاجب.
-    getRedirectResult(auth).catch((e) => console.warn('getRedirectResult:', e));
-
     onAuthStateChanged(auth, async (u) => {
       this.user.set(u);
       if (u) {
@@ -95,56 +86,10 @@ export class AuthService {
     this.teacher.set({ id: cred.user.uid, ...fresh });
   }
 
-  /**
-   * دخول عبر حساب Google — بديل لاسم المستخدم/كلمة المرور.
-   *   • على أندرويد (Capacitor): تسجيل الدخول الأصليّ عبر
-   *     `FirebaseAuthentication.signInWithGoogle()` ثمّ جسر البيان إلى SDK
-   *     الويب بـ `signInWithCredential` حتى تعرف بقيّة الواجهة أنّه مسجَّل.
-   *   • على الويب: `signInWithPopup`، ومع تعذّر النافذة يُلجَأ لإعادة التوجيه.
-   * أوّل دخول ينشئ ملفّ معلّم جديدًا بمساحة عمل معزولة (عبر loadOrCreateTeacher).
-   * لا يمسّ حالة أيّ حساب آخر.
-   */
-  async loginWithGoogle(): Promise<void> {
-    if (Capacitor.isNativePlatform()) {
-      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
-      const result = await FirebaseAuthentication.signInWithGoogle();
-      const idToken = result.credential?.idToken;
-      const accessToken = result.credential?.accessToken;
-      if (!idToken) {
-        throw { code: 'auth/no-google-credential' };
-      }
-      const cred = GoogleAuthProvider.credential(idToken, accessToken);
-      const userCred = await signInWithCredential(auth, cred);
-      await this.loadOrCreateTeacher(userCred.user);
-      return;
-    }
-
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    try {
-      const cred = await signInWithPopup(auth, provider);
-      await this.loadOrCreateTeacher(cred.user);
-    } catch (e: unknown) {
-      const code = (e as { code?: string }).code ?? '';
-      if (
-        code === 'auth/popup-blocked' ||
-        code === 'auth/cancelled-popup-request' ||
-        code === 'auth/operation-not-supported-in-this-environment'
-      ) {
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-      throw e;
-    }
-  }
-
-  /** إرسال رابط إعادة تعيين كلمة المرور */
-  async resetPassword(identifier: string): Promise<void> {
-    await sendPasswordResetEmail(auth, this.identifierToEmail(identifier));
-  }
-
   async logout(): Promise<void> {
-    // على أندرويد نُنهي الجلسة الأصليّة للإضافة أيضًا (بمحاولة صامتة) قبل جلسة الويب.
+    // على أندرويد: إنهاء أيّ جلسة Google أصليّة متبقّية من إصدار سابق كان يدعم
+    // الدخول بحساب Google (الميزة أُزيلت، لكن أجهزة قديمة قد لا تزال تحمل جلسة
+    // من الإضافة الأصليّة) — محاولة صامتة، لا تُوقف إنهاء جلسة SDK الويب أدناه.
     if (Capacitor.isNativePlatform()) {
       try {
         const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
@@ -160,7 +105,7 @@ export class AuthService {
   /**
    * يقرأ ملف المعلّم، وينشئه تلقائيًا إن لم يكن موجودًا.
    * الملفّ الموجود يُحمَّل كما هو (حساب قديم يبقى في المساحة المشتركة بلا مساس).
-   * الملفّ المُنشَأ حديثًا (أوّل دخول Google مثلًا) يحصل على مساحة معزولة.
+   * الملفّ المُنشَأ حديثًا يحصل على مساحة معزولة.
    */
   private async loadOrCreateTeacher(u: User): Promise<void> {
     const ref = doc(db, TEACHERS, u.uid);
