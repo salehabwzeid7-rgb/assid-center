@@ -709,10 +709,11 @@ export class SessionPage {
   private readonly allExams = this.data.allExams(this.destroyRef);
 
   /**
-   * سرد/اختبار مسجَّل لهذا الطالب **بنفس الحلقة والتاريخ** — مُقيَّد بالحلقة
-   * أيضًا (لا التاريخ وحده) حتى لا يظهر نشاط حلقة أخرى (لطالب مسجَّل بأكثر
-   * من حلقة) في تقرير هذه الجلسة. عدد النتائج يبقى صغيرًا دومًا (نشاط اليوم
-   * فقط) — لا سجلّ تاريخيّ طويل.
+   * نتيجة سرد/اختبار **اليوم فقط** لهذه الجلسة (حلقة+تاريخ) — سطر واحد
+   * كحدّ أقصى لكلّ نوع (سرد/اختبار)، الأحدث (createdAt) إن وُجد أكثر من
+   * سجلّ. جلسة واحدة = نتيجة واحدة لكلّ نوع، لا قائمة بكلّ الأجزاء التي
+   * جرى سردها/اختبارها يومًا ما — كان الخلل السابق يجمع سطرًا لكلّ جزء
+   * مختلف بدل الاكتفاء بأحدث نتيجة، فيظهر «تاريخ» طويل بدل نتيجة الجلسة.
    */
   private sameDayActivities(
     studentId: string,
@@ -721,21 +722,22 @@ export class SessionPage {
   ): { label: string; score: number }[] {
     const fmt = (juz: number, scope: string | undefined, juzList?: number[]) =>
       scope === 'block' ? `كتلة ${(juzList ?? [juz]).join('،')}` : `الجزء ${juz}`;
-    // مفتاح فريد لكلّ (نوع النشاط، الجزء/الكتلة) — لو وُجد أكثر من سجلّ لنفس
-    // الجزء بنفس اليوم (مثلًا تسجيل مزدوج بالخطأ) يبقى الأحدث فقط (createdAt)
-    // فلا يتكرّر نفس الجزء بأكثر من سطر في التقرير.
-    const latest = new Map<string, { label: string; score: number; createdAt: number }>();
-    const add = (key: string, label: string, score: number, createdAt: number) => {
-      const prev = latest.get(key);
-      if (!prev || createdAt > prev.createdAt) latest.set(key, { label, score, createdAt });
-    };
-    for (const r of this.allSerds() ?? [])
-      if (r.studentId === studentId && r.date === date && r.circleId === circleId)
-        add(`serd_${r.juz}`, `سرد: ${fmt(r.juz, r.scope, r.juzList)}`, r.score, r.createdAt);
-    for (const r of this.allExams() ?? [])
-      if (r.studentId === studentId && r.date === date && r.circleId === circleId)
-        add(`exam_${r.juz}`, `اختبار: ${fmt(r.juz, r.scope, r.juzList)}`, r.score, r.createdAt);
-    return [...latest.values()].map(({ label, score }) => ({ label, score }));
+    const latest = <T extends { createdAt: number }>(list: T[]): T | null =>
+      list.reduce<T | null>((best, r) => (!best || r.createdAt > best.createdAt ? r : best), null);
+    const sameDay = <T extends { studentId: string; date: string; circleId: string }>(
+      list: T[] | undefined,
+    ) =>
+      (list ?? []).filter(
+        (r) => r.studentId === studentId && r.date === date && r.circleId === circleId,
+      );
+    const serd = latest(sameDay(this.allSerds()));
+    const exam = latest(sameDay(this.allExams()));
+    const out: { label: string; score: number }[] = [];
+    if (serd)
+      out.push({ label: `سرد: ${fmt(serd.juz, serd.scope, serd.juzList)}`, score: serd.score });
+    if (exam)
+      out.push({ label: `اختبار: ${fmt(exam.juz, exam.scope, exam.juzList)}`, score: exam.score });
+    return out;
   }
 
   /**
