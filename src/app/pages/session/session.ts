@@ -721,14 +721,21 @@ export class SessionPage {
   ): { label: string; score: number }[] {
     const fmt = (juz: number, scope: string | undefined, juzList?: number[]) =>
       scope === 'block' ? `كتلة ${(juzList ?? [juz]).join('،')}` : `الجزء ${juz}`;
-    const out: { label: string; score: number }[] = [];
+    // مفتاح فريد لكلّ (نوع النشاط، الجزء/الكتلة) — لو وُجد أكثر من سجلّ لنفس
+    // الجزء بنفس اليوم (مثلًا تسجيل مزدوج بالخطأ) يبقى الأحدث فقط (createdAt)
+    // فلا يتكرّر نفس الجزء بأكثر من سطر في التقرير.
+    const latest = new Map<string, { label: string; score: number; createdAt: number }>();
+    const add = (key: string, label: string, score: number, createdAt: number) => {
+      const prev = latest.get(key);
+      if (!prev || createdAt > prev.createdAt) latest.set(key, { label, score, createdAt });
+    };
     for (const r of this.allSerds() ?? [])
       if (r.studentId === studentId && r.date === date && r.circleId === circleId)
-        out.push({ label: `سرد: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
+        add(`serd_${r.juz}`, `سرد: ${fmt(r.juz, r.scope, r.juzList)}`, r.score, r.createdAt);
     for (const r of this.allExams() ?? [])
       if (r.studentId === studentId && r.date === date && r.circleId === circleId)
-        out.push({ label: `اختبار: ${fmt(r.juz, r.scope, r.juzList)}`, score: r.score });
-    return out;
+        add(`exam_${r.juz}`, `اختبار: ${fmt(r.juz, r.scope, r.juzList)}`, r.score, r.createdAt);
+    return [...latest.values()].map(({ label, score }) => ({ label, score }));
   }
 
   /**
@@ -968,10 +975,12 @@ export class SessionPage {
    * حيّةً أثناء التحضير، فقط ترتيب التقرير النهائيّ المُولَّد للمشاركة.
    */
   private readonly reportStudentsOrder = computed(() => {
+    const s = this.session();
     const rank = (st: Student): 0 | 1 | 2 => {
       if (this.recsOf(st.id).some(isActualRecitation)) return 0; // سمّعوا
+      if (s && this.sameDayActivities(st.id, s.date, s.circleId).length > 0) return 0; // سرد/اختبار اليوم — يُعامَل كمُنجَز
       if (this.attOf(st.id)?.status === 'absent') return 2; // غائبون
-      return 1; // لم يسمّعوا (حاضر/متأخر/مأذون بلا تسميع فعليّ)
+      return 1; // لم يسمّعوا (حاضر/متأخر/مأذون بلا تسميع فعليّ ولا سرد/اختبار)
     };
     return [...(this.students() ?? [])].sort(
       (a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'ar'),
