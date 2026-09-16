@@ -74,61 +74,65 @@ service cloud.firestore {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      // isPlatformOwner() هنا آمن بلا أيّ تحفّظ: create/update عمليّات مستند
+      // واحد محدَّد (لا list)، مُثبَتة آمنة مع أيّ تعقيد OR طوال هذا اليوم —
+      // يتيح للمالك استعادة بيانات محذوفة من platformDeletedItems بـ ownerId
+      // الأصليّ الصحيح (لا يمكنه انتحال حساب آخر بأيّ طريقة أخرى).
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /students/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /sessions/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /attendance/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /recitations/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /evaluations/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /serd/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /exams/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /tajweedExams/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
     match /tajweedExamResults/{id} {
       allow get, delete: if signedIn() && isOwnerOrMissing(resource);
       allow list: if signedIn() && isListOwner(resource);
       allow update: if signedIn() && isOwnerOrMissing(resource) && isOwner(request.resource.data);
-      allow create: if signedIn() && isOwner(request.resource.data);
+      allow create: if signedIn() && (isOwner(request.resource.data) || isPlatformOwner());
     }
 
     /** سجل الحركات (v1.21.0) — دائم لا يُحذف أبدًا، حتى من صاحبه (يُستعاد بتعليمه restoredAt فقط، لا بالحذف). */
@@ -149,6 +153,65 @@ service cloud.firestore {
     // مكتشفة في مراجعة أمنيّة، أُغلقت هنا (لا تغيير سلوكيّ على التطبيق).
     match /teachers/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    /**
+     * لوحة المالك (v1.26.0) — طبقة مراقبة منفصلة تمامًا عن كل ما سبق، لا تلمس
+     * قواعد circles/students/... الحاليّة إطلاقًا (قرار معماريّ متعمَّد، راجع
+     * التعليق أعلى isListOwner: أيّ إضافة شرط OR جديد على قاعدة list قائمة
+     * تُبطل إثباتها، حتى لو كان الشرط الجديد بمفرده آمنًا). بدلًا من ذلك:
+     * مجموعات جديدة بالكامل، مملوكة فقط لهذه الميزة، كل قاعدة list فيها شرط
+     * واحد بسيط بلا OR (isPlatformOwner() فقط) — بنفس شكل isListOwner المُثبَت
+     * آمنًا تجريبيًّا. البريد أدناه يجب أن يطابق models.ts::OWNER_EMAIL تمامًا.
+     */
+    function isPlatformOwner() {
+      return signedIn() && request.auth.token.email == 'samaster@assid.local';
+    }
+
+    // ملخّص كل معلّم (اسم/بريد/عدّادات) — يكتبه المعلّم نفسه فقط (uid مطابق)،
+    // يقرأه المالك فقط. الحلقات/الطلّاب الفرعيّة نسخ خفيفة بنفس المنطق.
+    match /platformTeachers/{uid} {
+      allow get, list: if isPlatformOwner();
+      allow write: if signedIn() && request.auth.uid == uid;
+
+      match /circleMirror/{id} {
+        allow get, list: if isPlatformOwner();
+        allow write: if signedIn() && request.auth.uid == uid;
+      }
+      match /studentMirror/{id} {
+        allow get, list: if isPlatformOwner();
+        allow write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // استعلام جماعيّ (collectionGroup) عبر كل studentMirror الفرعيّة — بحث عن
+    // طالب عبر كل المعلّمين دفعة واحدة. الاسم studentMirror (لا "students")
+    // متعمَّد وضروريّ للأمان: {path=**} يطابق حتى صفر مقاطع سابقة (مؤكَّد
+    // تجريبيًّا على بيئة معزولة) — لو استُخدم اسم مطابق لمجموعة جذريّة حقيقيّة
+    // موجودة (مثل "students")، هذه القاعدة كانت ستمنح المالك list غير مقيَّد
+    // على تلك المجموعة الحقيقيّة مباشرة، بلا أيّ علاقة بالتصميم المقصود.
+    match /{path=**}/studentMirror/{id} {
+      allow list: if isPlatformOwner();
+    }
+
+    // عدّادات عامّة على مستوى المنصّة (مستند واحد ثابت: platformStats/global)
+    // — أيّ معلّم مسجَّل الدخول يزيدها بـ increment() عند إضافة/حذف بياناته،
+    // لا بيانات حسّاسة هنا (أرقام فقط)، فلا داعٍ لتقييد الكتابة على صاحبها.
+    match /platformStats/{doc} {
+      allow get: if isPlatformOwner();
+      allow write: if signedIn();
+    }
+
+    // نسخة من كل حركة حذف حقيقيّة (مرآة عن activityLog وقت الحذف) — دائمة
+    // لا تُحذف أبدًا، حتى من كاتبها، بنفس فلسفة activityLog الأصليّة.
+    match /platformDeletedItems/{id} {
+      allow get, list: if isPlatformOwner();
+      allow create: if signedIn();
+      // تعليم restoredAt بعد استعادة ناجحة — المالك فقط يقوم بهذا (المعلّم
+      // لا يقرأ هذه المجموعة أصلًا فلن يحتاجها). كانت غائبة سهوًا فسبَّبت
+      // فشل خطوة أخيرة من كل استعادة رغم نجاح استعادة البيانات نفسها فعليًّا.
+      allow update: if isPlatformOwner();
+      allow delete: if false;
     }
 
     // عمدًا بلا قاعدة عامّة شاملة (`match /{document=**}`) في آخر الملفّ:

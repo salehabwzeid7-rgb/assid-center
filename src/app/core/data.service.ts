@@ -15,7 +15,9 @@ import {
   writeBatch,
   deleteField,
   arrayUnion,
+  increment,
   runTransaction,
+  collectionGroup,
   type CollectionReference,
   type DocumentReference,
   type Query,
@@ -28,6 +30,7 @@ import { NotifyService } from './notify.service';
 import { completedJuz } from './quran-data';
 import {
   COL,
+  PLATFORM_COL,
   ATTENDANCE_LABELS,
   type Circle,
   type CircleType,
@@ -48,6 +51,9 @@ import {
   type ActivityFieldChange,
   type ActivitySnapshot,
   type ActivityLogEntry,
+  type PlatformTeacherSummary,
+  type PlatformMirrorItem,
+  type PlatformStats,
 } from './models';
 
 /** حقل + تسميته العربيّة — أساس بناء `ActivityFieldChange[]` بمقارنة مباشرة. */
@@ -278,19 +284,98 @@ export class DataService {
     entry: Omit<ActivityLogEntry, 'id' | 'createdAt' | 'ownerId' | 'actorName' | 'restoredAt'>,
   ): Promise<void> {
     try {
-      await addDoc(
-        this.col(COL.activityLog),
-        this.owned(
-          clean({
-            ...entry,
-            actorName: this.auth.teacher()?.name ?? '',
-            createdAt: Date.now(),
-            restoredAt: null,
-          }),
-        ),
+      const payload = this.owned(
+        clean({
+          ...entry,
+          actorName: this.auth.teacher()?.name ?? '',
+          createdAt: Date.now(),
+          restoredAt: null,
+        }),
       );
+      const created = await addDoc(this.col(COL.activityLog), payload);
+      // مرآة لوحة المالك (v1.26.0): نسخة من كل حركة حذف حقيقيّة فقط، بنفس
+      // المعرّف، حتى يقدر المالك يراجعها/يستعيدها بمعزل تامّ عن activityLog
+      // الأصليّ (قواعد منفصلة بالكامل — راجع التعليق في firestore.rules).
+      if (entry.action === 'delete') {
+        await this.writePlatformDeletedItem(created.id, payload);
+      }
     } catch (e) {
       console.error('تعذّر تسجيل الحركة في سجل التدقيق:', e);
+    }
+  }
+
+  // ======================================================================
+  //  لوحة المالك (v1.26.0) — كتابة المرايا الخفيفة فقط، بلا أيّ تأثير على
+  //  المسارات الأصليّة إن فشلت (كل الاستدعاءات هنا مُغلَّفة try/catch صامتة).
+  // ======================================================================
+
+  private async writePlatformDeletedItem(
+    logId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await setDoc(doc(db, PLATFORM_COL.deletedItems, logId), payload);
+    } catch (e) {
+      console.warn('تعذّرت كتابة مرآة سجلّ المحذوفات للوحة المالك (غير حرج):', e);
+    }
+  }
+
+  /** يزيد عدّاد حقل واحد على ملخّص المعلّم + العدّاد المطابق على مستوى المنصّة كلّها. */
+  private async bumpPlatformStat(
+    teacherField: 'circleCount' | 'studentCount' | 'recitationCount' | 'memorizedCount',
+    globalField: 'totalCircles' | 'totalStudents' | 'totalRecitations' | null,
+    delta: number,
+  ): Promise<void> {
+    try {
+      const uid = this.auth.user()?.uid;
+      if (!uid) return;
+      await updateDoc(doc(db, PLATFORM_COL.teachers, uid), {
+        [teacherField]: increment(delta),
+        lastActiveAt: Date.now(),
+      });
+      if (globalField) {
+        await setDoc(
+          doc(db, PLATFORM_COL.statsDoc),
+          { [globalField]: increment(delta) },
+          { merge: true },
+        );
+      }
+    } catch (e) {
+      console.warn('تعذّر تحديث عدّادات لوحة المالك (غير حرج):', e);
+    }
+  }
+
+  private async writePlatformMirror(
+    kind: 'circleMirror' | 'studentMirror',
+    id: string,
+    name: string,
+  ): Promise<void> {
+    try {
+      const uid = this.auth.user()?.uid;
+      const teacherName = this.auth.teacher()?.name ?? '';
+      if (!uid) return;
+      await setDoc(doc(db, PLATFORM_COL.teachers, uid, kind, id), {
+        id,
+        name,
+        teacherId: uid,
+        teacherName,
+        createdAt: Date.now(),
+      });
+    } catch (e) {
+      console.warn('تعذّرت كتابة مرآة لوحة المالك (غير حرج):', e);
+    }
+  }
+
+  private async deletePlatformMirror(
+    kind: 'circleMirror' | 'studentMirror',
+    id: string,
+  ): Promise<void> {
+    try {
+      const uid = this.auth.user()?.uid;
+      if (!uid) return;
+      await deleteDoc(doc(db, PLATFORM_COL.teachers, uid, kind, id));
+    } catch (e) {
+      console.warn('تعذّر حذف مرآة لوحة المالك (غير حرج):', e);
     }
   }
 
@@ -694,6 +779,11 @@ export class DataService {
       }
     }
 
+    // عدّاد لوحة المالك: تسميع جديد فعليًّا فقط (لا تعديل، لا هجرة سجلّ قديم).
+    if (!before) {
+      void this.bumpPlatformStat('recitationCount', 'totalRecitations', 1);
+    }
+
     // سجلّ التدقيق — فشل أيّ خطوة هنا (قراءة اسم الطالب بلا اتصال مثلًا) يجب
     // ألّا يظهر للمعلّم كفشل في حفظ التسميع نفسه، فهو محفوظ فعلًا في هذه اللحظة.
     if (before) {
@@ -878,6 +968,8 @@ export class DataService {
       summary: `إضافة حلقة «${input.name.trim()}»`,
       circleName: input.name.trim(),
     });
+    void this.bumpPlatformStat('circleCount', 'totalCircles', 1);
+    void this.writePlatformMirror('circleMirror', created.id, input.name.trim());
     return created.id;
   }
 
@@ -932,7 +1024,7 @@ export class DataService {
       getDocs(this.scopedCol(COL.recitations, where('circleId', '==', id))),
       getDocs(this.scopedCol(COL.tajweedExams, where('circleId', '==', id))),
       getDocs(this.scopedCol(COL.tajweedExamResults, where('circleId', '==', id))),
-      getDocs(this.col(COL.students)),
+      getDocs(this.scopedCol(COL.students)),
     ]);
 
     const snapshots: ActivitySnapshot[] = [];
@@ -983,6 +1075,8 @@ export class DataService {
       snapshots,
       circleName: name,
     });
+    void this.bumpPlatformStat('circleCount', 'totalCircles', -1);
+    void this.deletePlatformMirror('circleMirror', id);
   }
 
   /**
@@ -1101,6 +1195,8 @@ export class DataService {
       summary: `إضافة الطالب «${input.name.trim()}»`,
       studentName: input.name.trim(),
     });
+    void this.bumpPlatformStat('studentCount', 'totalStudents', 1);
+    void this.writePlatformMirror('studentMirror', created.id, input.name.trim());
     return created.id;
   }
 
@@ -1193,6 +1289,8 @@ export class DataService {
       snapshots,
       studentName: name,
     });
+    void this.bumpPlatformStat('studentCount', 'totalStudents', -1);
+    void this.deletePlatformMirror('studentMirror', id);
   }
 
   /**
@@ -1220,6 +1318,7 @@ export class DataService {
     const newOnes = valid.filter((n) => !prevSet.has(n));
     await updateDoc(this.ref(COL.students, studentId), { memorizedSurahs: arrayUnion(...valid) });
     if (newOnes.length === 0) return { added: 0, completedJuz: [] };
+    void this.bumpPlatformStat('memorizedCount', null, newOnes.length);
     const next = [...new Set([...prev, ...newOnes])];
     const wasComplete = new Set(completedJuz(prev));
     const newlyComplete = completedJuz(next).filter((j) => !wasComplete.has(j));
@@ -1550,6 +1649,124 @@ export class DataService {
         studentName: student?.name,
       });
     }
+  }
+
+  // ======================================================================
+  //  لوحة المالك (v1.26.0) — قراءة فقط، لا يصل لها إلّا حساب المالك (البريد
+  //  المطابق لـ OWNER_EMAIL) بفضل isPlatformOwner() في firestore.rules.
+  //  استخدام هذه الدوال من حساب غير المالك يُرجع قائمة فارغة/رفض صلاحيّات،
+  //  لا خطأ — الحارس ownerGuard يمنع الوصول لصفحات المالك أصلًا قبل ذلك.
+  // ======================================================================
+
+  /** عدّادات المنصّة العامّة (مستند واحد). */
+  platformStats(destroyRef?: DestroyRef): Signal<PlatformStats | undefined> {
+    const out = signal<PlatformStats | undefined>(undefined);
+    const unsub = onSnapshot(doc(db, PLATFORM_COL.statsDoc), (snap) => {
+      out.set(
+        (snap.data() as PlatformStats | undefined) ?? {
+          totalTeachers: 0,
+          totalCircles: 0,
+          totalStudents: 0,
+          totalRecitations: 0,
+          uniqueDevices: 0,
+        },
+      );
+    });
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /** قائمة كل المعلّمين المسجَّلين — للوحة المالك فقط. */
+  platformTeachers(destroyRef?: DestroyRef): Signal<PlatformTeacherSummary[] | undefined> {
+    const out = signal<PlatformTeacherSummary[] | undefined>(undefined);
+    const unsub = onSnapshot(collection(db, PLATFORM_COL.teachers), (snap) => {
+      out.set(
+        snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as object) }) as PlatformTeacherSummary)
+          .sort((a, b) => b.lastActiveAt - a.lastActiveAt),
+      );
+    });
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /** حلقات معلّم محدَّد (نسخة خفيفة) — لتصفّح المالك التفصيليّ. */
+  platformTeacherCircles(
+    uid: string,
+    destroyRef?: DestroyRef,
+  ): Signal<PlatformMirrorItem[] | undefined> {
+    const out = signal<PlatformMirrorItem[] | undefined>(undefined);
+    const unsub = onSnapshot(collection(db, PLATFORM_COL.teachers, uid, 'circleMirror'), (snap) => {
+      out.set(snap.docs.map((d) => d.data() as PlatformMirrorItem));
+    });
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /** طلّاب معلّم محدَّد (نسخة خفيفة) — لتصفّح المالك التفصيليّ. */
+  platformTeacherStudents(
+    uid: string,
+    destroyRef?: DestroyRef,
+  ): Signal<PlatformMirrorItem[] | undefined> {
+    const out = signal<PlatformMirrorItem[] | undefined>(undefined);
+    const unsub = onSnapshot(
+      collection(db, PLATFORM_COL.teachers, uid, 'studentMirror'),
+      (snap) => {
+        out.set(snap.docs.map((d) => d.data() as PlatformMirrorItem));
+      },
+    );
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /**
+   * بحث/عرض فقط عن طالب بالاسم عبر كل المعلّمين دفعة واحدة (collectionGroup)
+   * — **بلا أيّ دمج أو محاولة مطابقة** بين نتائج معلّمين مختلفين (قرار متعمَّد
+   * بموافقة المستخدم: لا يوجد معرّف فريد حقيقيّ للطالب في هذا التطبيق، فتشابه
+   * الاسم لا يعني بالضرورة نفس الطفل — كل نتيجة سجلّ طالب مستقلّ تمامًا تحت
+   * معلّمه). مطابقة جزئيّة بسيطة من جهة العميل (Firestore لا يدعم بحث نصّيّ).
+   */
+  async searchPlatformStudents(nameQuery: string): Promise<PlatformMirrorItem[]> {
+    const q = nameQuery.trim();
+    if (!q) return [];
+    const snap = await getDocs(collectionGroup(db, 'studentMirror'));
+    const norm = (s: string) => s.trim();
+    return snap.docs
+      .map((d) => d.data() as PlatformMirrorItem)
+      .filter((s) => norm(s.name).includes(norm(q)));
+  }
+
+  /** سجلّ كل حركات الحذف عبر كل المعلّمين — للوحة المالك فقط. */
+  platformDeletedItems(destroyRef?: DestroyRef): Signal<ActivityLogEntry[] | undefined> {
+    const out = signal<ActivityLogEntry[] | undefined>(undefined);
+    const unsub = onSnapshot(query(collection(db, PLATFORM_COL.deletedItems)), (snap) => {
+      out.set(
+        snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as object) }) as ActivityLogEntry)
+          .sort((a, b) => b.createdAt - a.createdAt),
+      );
+    });
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /**
+   * يستعيد حركة حذف من منظور المالك — نفس منطق `restoreActivity()` بالضبط،
+   * لكن مصدرها `platformDeletedItems` (يقرؤها المالك) لا `activityLog`
+   * (لا يقرؤه المالك). الكتابة تمرّ لأنّ كل مستند مُستعاد يحمل ownerId
+   * الأصليّ الصحيح (المعلّم الحقيقيّ صاحب البيانات)، وقواعد create/update
+   * تسمح صراحة لحساب المالك بهذا تحديدًا (`isPlatformOwner()` — راجع
+   * firestore.rules، عمليّات مستند واحد آمنة مع OR، لا علاقة بثغرة list).
+   */
+  async restorePlatformDeletedItem(logId: string): Promise<void> {
+    const snap = await getDoc(doc(db, PLATFORM_COL.deletedItems, logId));
+    if (!snap.exists()) throw new Error('لم يُعثر على سجلّ هذه الحركة');
+    const entry = snap.data() as ActivityLogEntry;
+    if (!entry.snapshots?.length) throw new Error('لا توجد بيانات محفوظة لاستعادتها لهذه الحركة');
+    for (const s of entry.snapshots) {
+      await setDoc(this.ref(s.collectionName, s.id), s.data);
+    }
+    await updateDoc(doc(db, PLATFORM_COL.deletedItems, logId), { restoredAt: Date.now() });
   }
 }
 

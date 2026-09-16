@@ -195,6 +195,10 @@ export interface Teacher {
   reportIntro?: string;
   /** خاتمة رسالة تقرير الجلسة للأهالي (وإلّا `DEFAULT_REPORT_OUTRO`) */
   reportOutro?: string;
+  /** معرّف جهاز ثابت (يُولَّد محليًّا مرّة واحدة) — لأغراض لوحة المالك فقط، راجع v1.26.0 أسفل الملفّ. */
+  deviceId?: string;
+  /** المنصّة وقت التسجيل: 'android' أو 'web' (Capacitor.getPlatform()). */
+  platform?: string;
   createdAt: number;
 }
 
@@ -616,4 +620,66 @@ export interface ActivityLogEntry extends Owned {
   /** وقت الاستعادة إن استُعيدت هذه الحركة (null/غائب = لم تُستعَد بعد). */
   restoredAt?: number | null;
   createdAt: number;
+}
+
+/* ==========================================================================
+   لوحة المالك (v1.26.0) — طبقة مراقبة منفصلة تمامًا عن بيانات المعلّمين
+   المعزولة (circles/students/...). لا تُقرأ هذه المجموعات إلّا من حساب
+   المالك (request.auth.token.email == OWNER_EMAIL في firestore.rules)،
+   وتُكتَب من كل معلّم لبياناته الخاصّة فقط (نفس نمط ownerId=uid المعتاد).
+
+   قرار معماريّ متعمَّد: بدل إضافة قراءة المالك على قواعد المجموعات
+   القائمة (circles/students/...) — وهذا كان سيعيد فتح ثغرة قوائم Firestore
+   الحقيقيّة المُصلَحة للتوّ (v1.25.4، راجع الذاكرة الدائمة: أيّ شرط OR إضافيّ
+   على قاعدة list يُبطل إثبات الأمان، حتى لو كان الشرط الجديد نفسه آمنًا
+   بمفرده) — بُنيت مجموعات منفصلة تمامًا، كل قاعدة list فيها شرط واحد بسيط
+   بلا أيّ OR (isPlatformOwner() فقط)، بنفس الشكل المُثبَت آمنًا تجريبيًّا.
+   الثمن: نسخ خفيفة (اسم فقط تقريبًا) تُكتَب من جانب التطبيق عند كل إنشاء/
+   حذف حلقة أو طالب أو تسميع، لا مصدر بيانات إضافيّ حقيقيّ.
+   ========================================================================== */
+
+/** بريد حساب المالك الوحيد المسموح له بلوحة المراقبة — راجع firestore.rules أيضًا (يجب أن يطابق تمامًا). */
+export const OWNER_EMAIL = 'samaster@assid.local';
+
+/** أسماء مجموعات لوحة المالك. */
+export const PLATFORM_COL = {
+  /** ملخّص لكلّ معلّم — مستند واحد بمعرّف uid المعلّم نفسه. */
+  teachers: 'platformTeachers',
+  /** عدّادات عامّة على مستوى المنصّة كلّها — مستند واحد ثابت المعرّف 'global'. */
+  statsDoc: 'platformStats/global',
+  /** نسخة من كل حركة حذف حقيقيّة (activityLog) — يقرؤها المالك فقط، بنفس آليّة الاستعادة. */
+  deletedItems: 'platformDeletedItems',
+} as const;
+
+/** ملخّص معلّم واحد — يُكتَب/يُحدَّث من جهاز المعلّم نفسه فقط، يقرؤه المالك فقط. */
+export interface PlatformTeacherSummary {
+  id: string;
+  name: string;
+  email: string;
+  deviceId?: string;
+  platform?: string;
+  circleCount: number;
+  studentCount: number;
+  recitationCount: number;
+  memorizedCount: number;
+  createdAt: number;
+  lastActiveAt: number;
+}
+
+/** نسخة خفيفة لحلقة/طالب ضمن ملخّص معلّم — للتصفّح والبحث من لوحة المالك فقط. */
+export interface PlatformMirrorItem {
+  id: string;
+  name: string;
+  teacherId: string;
+  teacherName: string;
+  createdAt: number;
+}
+
+/** عدّادات عامّة على مستوى المنصّة — مستند واحد، يُحدَّث بـ increment() من كل الأجهزة. */
+export interface PlatformStats {
+  totalTeachers: number;
+  totalCircles: number;
+  totalStudents: number;
+  totalRecitations: number;
+  uniqueDevices: number;
 }

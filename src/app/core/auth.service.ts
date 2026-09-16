@@ -8,9 +8,9 @@ import {
   updateProfile,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { TEACHERS, type Teacher } from './models';
+import { TEACHERS, PLATFORM_COL, OWNER_EMAIL, type Teacher } from './models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -34,6 +34,10 @@ export class AuthService {
   readonly tenantId = computed(() => this.teacher()?.tenantId ?? null);
   /** هل هذا الحساب في مساحة معزولة خاصّة به؟ */
   readonly isTenant = computed(() => !!this.teacher()?.tenantId);
+  /** هل هذا الحساب هو حساب المالك (لوحة المراقبة، v1.26.0)؟ مطابقة بريد تامّة فقط. */
+  readonly isOwnerAccount = computed(
+    () => (this.user()?.email ?? '').toLowerCase() === OWNER_EMAIL,
+  );
 
   constructor() {
     onAuthStateChanged(auth, async (u) => {
@@ -75,15 +79,20 @@ export class AuthService {
     const email = this.identifierToEmail(identifier);
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name.trim() });
+    const deviceId = this.getOrCreateDeviceId();
+    const platform = Capacitor.getPlatform();
     const fresh: Omit<Teacher, 'id'> = {
       name: name.trim(),
       email: cred.user.email ?? email,
       phone: '',
       tenantId: cred.user.uid,
+      deviceId,
+      platform,
       createdAt: Date.now(),
     };
     await setDoc(doc(db, TEACHERS, cred.user.uid), fresh);
     this.teacher.set({ id: cred.user.uid, ...fresh });
+    void this.recordNewPlatformTeacher(cred.user.uid, fresh.name, fresh.email, deviceId, platform);
   }
 
   async logout(): Promise<void> {
@@ -112,17 +121,108 @@ export class AuthService {
     const snap = await getDoc(ref);
     if (snap.exists()) {
       this.teacher.set({ id: u.uid, ...(snap.data() as Omit<Teacher, 'id'>) });
+      void this.touchPlatformTeacher(u.uid);
       return;
     }
+    const deviceId = this.getOrCreateDeviceId();
+    const platform = Capacitor.getPlatform();
     const fresh: Omit<Teacher, 'id'> = {
       name: u.displayName || (u.email ? u.email.split('@')[0] : 'معلّم جديد'),
       email: u.email ?? '',
       phone: u.phoneNumber ?? '',
       tenantId: u.uid,
+      deviceId,
+      platform,
       createdAt: Date.now(),
     };
     await setDoc(ref, fresh);
     this.teacher.set({ id: u.uid, ...fresh });
+    void this.recordNewPlatformTeacher(u.uid, fresh.name, fresh.email, deviceId, platform);
+  }
+
+  /**
+   * معرّف جهاز ثابت (UUID مُولَّد محليًّا مرّة واحدة، مخزَّن في localStorage) —
+   * لأغراض لوحة المالك فقط (v1.26.0): عدّ الأجهزة الفريدة وربط الحسابات
+   * المتعدّدة على نفس الجهاز. ليس معرّف جهاز حقيقيًّا على مستوى النظام (يُفقَد
+   * لو مُسحت بيانات المتصفّح/التطبيق) — أقرب تقدير ممكن بلا Cloud Functions
+   * ولا نشر على متجر يوفّر رقم تثبيت حقيقيًّا.
+   */
+  private getOrCreateDeviceId(): string {
+    const KEY = 'almaher_device_id';
+    try {
+      let id = localStorage.getItem(KEY);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(KEY, id);
+      }
+      return id;
+    } catch {
+      return 'unknown-device';
+    }
+  }
+
+  /** true فقط أوّل مرّة يُسجَّل فيها أيّ حساب من هذا الجهاز إطلاقًا (لعدّاد uniqueDevices). */
+  private isFirstEverDeviceUse(): boolean {
+    const KEY = 'almaher_device_counted';
+    try {
+      if (localStorage.getItem(KEY)) return false;
+      localStorage.setItem(KEY, '1');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** يُسجَّل عند إنشاء حساب معلّم جديد (تسجيل أو أوّل دخول بلا ملفّ سابق) — يزيد عدّادات المنصّة. */
+  private async recordNewPlatformTeacher(
+    uid: string,
+    name: string,
+    email: string,
+    deviceId: string,
+    platform: string,
+  ): Promise<void> {
+    try {
+      const isNewDevice = this.isFirstEverDeviceUse();
+      await setDoc(doc(db, PLATFORM_COL.teachers, uid), {
+        name,
+        email,
+        deviceId,
+        platform,
+        circleCount: 0,
+        studentCount: 0,
+        recitationCount: 0,
+        memorizedCount: 0,
+        createdAt: Date.now(),
+        lastActiveAt: Date.now(),
+      });
+      await setDoc(
+        doc(db, PLATFORM_COL.statsDoc),
+        {
+          totalTeachers: increment(1),
+          ...(isNewDevice ? { uniqueDevices: increment(1) } : {}),
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      console.warn('تعذّر تسجيل حساب المعلّم الجديد للوحة المالك (غير حرج):', e);
+    }
+  }
+
+  /** يُحدِّث آخر نشاط + الجهاز/المنصّة عند كل دخول عاديّ لحساب موجود مسبقًا. */
+  private async touchPlatformTeacher(uid: string): Promise<void> {
+    try {
+      await setDoc(
+        doc(db, PLATFORM_COL.teachers, uid),
+        {
+          deviceId: this.getOrCreateDeviceId(),
+          platform: Capacitor.getPlatform(),
+          lastActiveAt: Date.now(),
+        },
+        { merge: true },
+      );
+    } catch (e) {
+      console.warn('تعذّر تحديث آخر نشاط للوحة المالك (غير حرج):', e);
+    }
   }
 
   /**

@@ -1,11 +1,48 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/auth.guard';
+import { authGuard, guestGuard, ownerGuard } from './core/auth.guard';
 
 export const routes: Routes = [
   {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./pages/login/login').then((m) => m.LoginPage),
+  },
+  {
+    // بوّابة دخول المالك (v1.26.0) — مستقلّة تمامًا، بلا رابط ظاهر من أيّ تنقّل.
+    path: 'owner-login',
+    loadComponent: () => import('./pages/owner-login/owner-login').then((m) => m.OwnerLoginPage),
+  },
+  {
+    path: 'owner',
+    canActivate: [ownerGuard],
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./pages/owner-dashboard/owner-dashboard').then((m) => m.OwnerDashboardPage),
+      },
+      {
+        path: 'search',
+        loadComponent: () =>
+          import('./pages/owner-student-search/owner-student-search').then(
+            (m) => m.OwnerStudentSearchPage,
+          ),
+      },
+      {
+        path: 'deleted',
+        loadComponent: () =>
+          import('./pages/owner-deleted-items/owner-deleted-items').then(
+            (m) => m.OwnerDeletedItemsPage,
+          ),
+      },
+      {
+        path: 'teacher/:uid',
+        loadComponent: () =>
+          import('./pages/owner-teacher-detail/owner-teacher-detail').then(
+            (m) => m.OwnerTeacherDetailPage,
+          ),
+      },
+    ],
   },
   {
     path: '',
