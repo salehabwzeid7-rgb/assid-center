@@ -367,13 +367,19 @@ export interface RecitationRecord extends Owned {
    * والصفحات ونسبة النجاح — راجع `isActualRecitation()` أدناه.
    */
   notRecited?: boolean;
+  /**
+   * ملاحظة/تأجيل — بديل لطيف عن «لم يسمّع» (v1.26.9): نفس فكرة `notRecited`
+   * (لا مقطع فعليّ) لكن بلا الصياغة السلبيّة في التقرير؛ `notes` هنا تُطبَع
+   * كما هي مباشرةً («أُجِّل التسميع ليوم الأحد» مثلًا) بدل «لم يسمّع».
+   */
+  postponed?: boolean;
   notes?: string;
   createdAt: number;
 }
 
-/** سجلّ تسميع فعليّ (وليس مجرّد علامة «لم يسمّع») — للاستخدام في كل حسابات المتوسّط/الصفحات/النجاح. */
+/** سجلّ تسميع فعليّ (وليس مجرّد علامة «لم يسمّع»/«ملاحظة»‎) — للاستخدام في كل حسابات المتوسّط/الصفحات/النجاح. */
 export function isActualRecitation(r: RecitationRecord): boolean {
-  return !r.notRecited;
+  return !r.notRecited && !r.postponed;
 }
 
 /** المعيار الزمنيّ للتسميع: ٤ دقائق (٢٤٠ ثانية) لكلّ وجه. */

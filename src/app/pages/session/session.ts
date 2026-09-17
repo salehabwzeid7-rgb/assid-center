@@ -39,6 +39,8 @@ import {
 } from '../../shared/report-image';
 
 type Step = 'attendance' | 'summary' | 'serd';
+/** نتيجة الحصّة للطالب — خيارات متبادلة الإقصاء (تبويب واحد نشط فقط). */
+type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
 
 @Component({
   selector: 'app-session',
@@ -166,6 +168,14 @@ type Step = 'attendance' | 'summary' | 'serd';
                         >
                           ⭕ لم يسمّع — تعديل ›
                         </button>
+                      } @else if (r.postponed) {
+                        <button
+                          type="button"
+                          class="muted rp-done rp-done-btn rp-not-recited"
+                          (click)="openStudentModal(st.id)"
+                        >
+                          📝 {{ r.notes?.trim() || 'ملاحظة/تأجيل' }} — تعديل ›
+                        </button>
                       } @else {
                         <button
                           type="button"
@@ -192,6 +202,10 @@ type Step = 'attendance' | 'summary' | 'serd';
                     @for (r of recsOf(st.id); track r.kind) {
                       @if (r.notRecited) {
                         <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
+                      } @else if (r.postponed) {
+                        <div class="muted rp-done rp-not-recited">
+                          📝 {{ r.notes?.trim() || 'ملاحظة/تأجيل' }}
+                        </div>
                       } @else {
                         <div class="muted rp-done">
                           سُجّل تسميع سابق ({{ kindLabels[r.kind] }}): {{ surahName(r.fromSurah) }}
@@ -248,69 +262,111 @@ type Step = 'attendance' | 'summary' | 'serd';
                   </label>
                 </div>
                 @if (!isTajweed()) {
-                  <app-recitation-panel
-                    [sessionId]="id"
-                    [studentId]="st.id"
-                    [circleId]="s.circleId"
-                    [date]="s.date"
-                    [existingEntries]="recsOf(st.id)"
-                  />
-                  <div class="row-between" style="margin-top:10px;gap:8px">
-                    <button
-                      type="button"
-                      class="chip"
-                      [class.active]="manualKind() === 'serd'"
-                      (click)="pickManualKind('serd')"
-                    >
-                      + سرد بدل التسميع
-                    </button>
-                    <button
-                      type="button"
-                      class="chip"
-                      [class.active]="manualKind() === 'exam'"
-                      (click)="pickManualKind('exam')"
-                    >
-                      + اختبار بدل التسميع
-                    </button>
+                  <!-- نتيجة الحصّة — خيارات متبادلة الإقصاء، تبويب واحد فقط نشط لكلّ طالب -->
+                  <div class="outcome-tabs">
+                    @for (o of outcomeOrder; track o) {
+                      <button
+                        type="button"
+                        class="chip"
+                        [class.active]="currentOutcome() === o"
+                        (click)="setOutcome(o)"
+                      >
+                        {{ outcomeLabels[o] }}
+                      </button>
+                    }
                   </div>
-                  @if (manualKind(); as mk) {
-                    @if (manualJuzOptions().length === 0) {
-                      <p class="muted" style="margin:8px 0 0">
-                        {{
-                          mk === 'exam'
-                            ? 'لا يوجد جزء اجتاز السرد بعد ليُختبَر.'
-                            : 'لا يوجد جزء محفوظ بعد ليُسرَد.'
-                        }}
-                      </p>
-                    } @else {
-                      <div class="field-row" style="margin-top:8px">
-                        <div class="field">
-                          <label>الجزء</label>
-                          <select [(ngModel)]="manualJuz" [ngModelOptions]="{ standalone: true }">
-                            @for (j of manualJuzOptions(); track j) {
-                              <option [ngValue]="j">{{ j }}</option>
-                            }
-                          </select>
-                        </div>
-                        <div class="field">
-                          <label>الدرجة</label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            [(ngModel)]="manualScore"
-                            [ngModelOptions]="{ standalone: true }"
-                          />
-                        </div>
+
+                  @switch (currentOutcome()) {
+                    @case ('recite') {
+                      <app-recitation-panel
+                        [sessionId]="id"
+                        [studentId]="st.id"
+                        [circleId]="s.circleId"
+                        [date]="s.date"
+                        [existingEntries]="recsOf(st.id)"
+                      />
+                    }
+                    @case ('notrecited') {
+                      <div class="field" style="margin-top:8px">
+                        <label>السبب (اختياري)</label>
+                        <textarea
+                          rows="2"
+                          [(ngModel)]="notRecitedNote"
+                          [ngModelOptions]="{ standalone: true }"
+                          placeholder="مثال: تأخّر الطالب، انتهى وقت الحصّة…"
+                        ></textarea>
                       </div>
                       <button
                         class="btn btn-primary btn-block"
                         type="button"
-                        [disabled]="manualSaving()"
-                        (click)="saveManual(st.id)"
+                        style="margin-top:8px"
+                        [disabled]="outcomeSaving()"
+                        (click)="saveNotRecited(st.id)"
                       >
-                        حفظ {{ mk === 'serd' ? 'السرد' : 'الاختبار' }}
+                        حفظ الحالة
                       </button>
+                    }
+                    @case ('postponed') {
+                      <div class="field" style="margin-top:8px">
+                        <label>الملاحظة</label>
+                        <textarea
+                          rows="2"
+                          [(ngModel)]="postponedNote"
+                          [ngModelOptions]="{ standalone: true }"
+                          placeholder="مثال: أُجِّل التسميع ليوم الأحد"
+                        ></textarea>
+                      </div>
+                      <button
+                        class="btn btn-primary btn-block"
+                        type="button"
+                        style="margin-top:8px"
+                        [disabled]="outcomeSaving()"
+                        (click)="savePostponed(st.id)"
+                      >
+                        حفظ الملاحظة
+                      </button>
+                    }
+                    @default {
+                      <!-- سرد أو اختبار -->
+                      @if (manualJuzOptions().length === 0) {
+                        <p class="muted" style="margin:8px 0 0">
+                          {{
+                            currentOutcome() === 'exam'
+                              ? 'لا يوجد جزء اجتاز السرد بعد ليُختبَر.'
+                              : 'لا يوجد جزء محفوظ بعد ليُسرَد.'
+                          }}
+                        </p>
+                      } @else {
+                        <div class="field-row" style="margin-top:8px">
+                          <div class="field">
+                            <label>الجزء</label>
+                            <select [(ngModel)]="manualJuz" [ngModelOptions]="{ standalone: true }">
+                              @for (j of manualJuzOptions(); track j) {
+                                <option [ngValue]="j">{{ j }}</option>
+                              }
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label>الدرجة</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              [(ngModel)]="manualScore"
+                              [ngModelOptions]="{ standalone: true }"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          class="btn btn-primary btn-block"
+                          type="button"
+                          style="margin-top:8px"
+                          [disabled]="outcomeSaving()"
+                          (click)="saveManual(st.id)"
+                        >
+                          حفظ {{ currentOutcome() === 'serd' ? 'السرد' : 'الاختبار' }}
+                        </button>
+                      }
                     }
                   }
                 }
@@ -514,6 +570,14 @@ type Step = 'attendance' | 'summary' | 'serd';
   `,
   styles: [
     `
+      .outcome-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border);
+      }
       .edit-banner {
         margin-top: 10px;
         padding: 10px 12px;
@@ -740,17 +804,34 @@ export class SessionPage {
     return out;
   }
 
+  /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
+  private readonly activeStudentId = signal<string | null>(null);
+  readonly activeStudent = computed(
+    () => this.students()?.find((s) => s.id === this.activeStudentId()) ?? null,
+  );
+
   /**
-   * تسجيل يدويّ لسرد/اختبار بدل التسميع العاديّ — من نافذة الطالب مباشرةً.
-   * يلتزم بنفس قواعد التقدّم المعتمَدة في صفحتَي السرد/الاختبار المستقلّتين:
-   * السرد يُقتصَر على أجزاء محفوظة فعليًّا، الاختبار يُقتصَر على أجزاء اجتازت
-   * السرد (عتبة SARD_PASS)، ورقم الدورة/المحاولة يُحتسَب تلقائيًّا (آخر رقم+١)
-   * لا ثابتًا على ١ — حتى لا تنكسر عدّادات التقدّم في بقيّة التطبيق.
+   * نتيجة الحصّة — تبويبات متبادلة الإقصاء بدل عرض مسطّح واحد (v1.26.9):
+   * تسميع عاديّ / لم يسمّع (مع ملاحظة تظهر في التقرير) / سرد / اختبار /
+   * ملاحظة عامّة-تأجيل (تُطبَع كما هي في التقرير بلا صياغة سلبيّة). التبويب
+   * الافتراضيّ عند فتح النافذة يُستنتَج من البيانات الفعليّة الموجودة لهذا
+   * الطالب في هذه الجلسة، ثم يبقى قابلًا للتبديل يدويًّا أثناء الجلسة.
    */
-  readonly manualKind = signal<'serd' | 'exam' | null>(null);
-  readonly manualSaving = signal(false);
+  readonly outcomeOrder: Outcome[] = ['recite', 'notrecited', 'serd', 'exam', 'postponed'];
+  readonly outcomeLabels: Record<Outcome, string> = {
+    recite: 'تسميع',
+    notrecited: 'لم يسمّع',
+    serd: 'سرد',
+    exam: 'اختبار',
+    postponed: 'ملاحظات/تأجيل',
+  };
+  readonly currentOutcome = signal<Outcome>('recite');
+  readonly outcomeSaving = signal(false);
+  notRecitedNote = '';
+  postponedNote = '';
   manualJuz = 0;
   manualScore = 90;
+
   private readonly memorizedJuz = computed(() =>
     completedJuz(this.activeStudent()?.memorizedSurahs ?? []),
   );
@@ -763,19 +844,45 @@ export class SessionPage {
     return set;
   });
   readonly manualJuzOptions = computed(() =>
-    this.manualKind() === 'exam'
+    this.currentOutcome() === 'exam'
       ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
       : this.memorizedJuz(),
   );
-  pickManualKind(k: 'serd' | 'exam'): void {
-    const next = this.manualKind() === k ? null : k;
-    this.manualKind.set(next);
-    const opts =
-      next === 'exam'
-        ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
-        : this.memorizedJuz();
-    this.manualJuz = opts[0] ?? 0;
+
+  /** يستنتج تبويب النتيجة الحاليّ من بيانات هذا الطالب الفعليّة في هذه الجلسة. */
+  private deriveOutcome(studentId: string): Outcome {
+    const recs = this.recsOf(studentId);
+    if (recs.some(isActualRecitation)) return 'recite';
+    if (recs.some((r) => r.postponed)) return 'postponed';
+    if (recs.some((r) => r.notRecited)) return 'notrecited';
+    const s = this.session();
+    if (s) {
+      const sameDay = (list: { studentId: string; date: string; circleId: string }[] | undefined) =>
+        (list ?? []).some(
+          (r) => r.studentId === studentId && r.date === s.date && r.circleId === s.circleId,
+        );
+      if (sameDay(this.allSerds())) return 'serd';
+      if (sameDay(this.allExams())) return 'exam';
+    }
+    return 'recite';
   }
+
+  openStudentModal(studentId: string): void {
+    this.activeStudentId.set(studentId);
+    const recs = this.recsOf(studentId);
+    this.notRecitedNote = recs.find((r) => r.notRecited)?.notes ?? '';
+    this.postponedNote = recs.find((r) => r.postponed)?.notes ?? '';
+    this.currentOutcome.set(this.deriveOutcome(studentId));
+    this.manualJuz = this.manualJuzOptions()[0] ?? 0;
+  }
+  closeStudentModal(): void {
+    this.activeStudentId.set(null);
+  }
+  setOutcome(o: Outcome): void {
+    this.currentOutcome.set(o);
+    if (o === 'serd' || o === 'exam') this.manualJuz = this.manualJuzOptions()[0] ?? 0;
+  }
+
   /** رقم الدورة (سرد) أو المحاولة (اختبار) التالي لهذا الجزء — يطابق منطق serd.ts/exam.ts. */
   private nextSeq(studentId: string, juz: number, kind: 'serd' | 'exam'): number {
     const list = (kind === 'serd' ? this.allSerds() : this.allExams()) ?? [];
@@ -784,12 +891,18 @@ export class SessionPage {
         .length + 1
     );
   }
+  /**
+   * تسجيل يدويّ لسرد/اختبار بدل التسميع العاديّ. يلتزم بنفس قواعد التقدّم
+   * المعتمَدة في صفحتَي السرد/الاختبار المستقلّتين: السرد يُقتصَر على أجزاء
+   * محفوظة فعليًّا، الاختبار يُقتصَر على أجزاء اجتازت السرد (عتبة SARD_PASS)،
+   * ورقم الدورة/المحاولة يُحتسَب تلقائيًّا (آخر رقم+١) لا ثابتًا على ١.
+   */
   async saveManual(studentId: string): Promise<void> {
-    const kind = this.manualKind();
+    const kind = this.currentOutcome();
     const s = this.session();
     const juz = this.manualJuz;
-    if (!kind || !s || !juz || this.manualSaving()) return;
-    this.manualSaving.set(true);
+    if ((kind !== 'serd' && kind !== 'exam') || !s || !juz || this.outcomeSaving()) return;
+    this.outcomeSaving.set(true);
     const base = {
       studentId,
       circleId: s.circleId,
@@ -806,22 +919,75 @@ export class SessionPage {
             : this.data.addExam({ ...base, attempt: this.nextSeq(studentId, juz, 'exam') }),
         { success: kind === 'serd' ? 'سُجّل السرد' : 'سُجّل الاختبار', error: 'تعذّر الحفظ' },
       );
-      this.manualKind.set(null);
     } finally {
-      this.manualSaving.set(false);
+      this.outcomeSaving.set(false);
     }
   }
 
-  /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
-  private readonly activeStudentId = signal<string | null>(null);
-  readonly activeStudent = computed(
-    () => this.students()?.find((s) => s.id === this.activeStudentId()) ?? null,
-  );
-  openStudentModal(studentId: string): void {
-    this.activeStudentId.set(studentId);
+  /** يحفظ حالة «لم يسمّع» — نفس شريحة الحفظ الجديد («new»)، لا تتكرّر لكلّ نوع تسميع. */
+  async saveNotRecited(studentId: string): Promise<void> {
+    const s = this.session();
+    if (!s || this.outcomeSaving()) return;
+    this.outcomeSaving.set(true);
+    try {
+      await this.notify.run(
+        () =>
+          this.data.upsertSessionRecitation(this.id, studentId, {
+            studentId,
+            circleId: s.circleId,
+            sessionId: this.id,
+            date: s.date,
+            kind: 'new',
+            fromSurah: 0,
+            fromAyah: 0,
+            toSurah: 0,
+            toAyah: 0,
+            pages: 0,
+            score: 0,
+            hifzErrors: 0,
+            tajweedErrors: 0,
+            promptCount: 0,
+            notRecited: true,
+            notes: this.notRecitedNote.trim() || undefined,
+          }),
+        { success: 'سُجّلت الحالة: لم يسمّع', error: 'تعذّر الحفظ' },
+      );
+    } finally {
+      this.outcomeSaving.set(false);
+    }
   }
-  closeStudentModal(): void {
-    this.activeStudentId.set(null);
+
+  /** ملاحظة/تأجيل — نفس آليّة «لم يسمّع» لكن بلا الصياغة السلبيّة في التقرير. */
+  async savePostponed(studentId: string): Promise<void> {
+    const s = this.session();
+    if (!s || this.outcomeSaving()) return;
+    this.outcomeSaving.set(true);
+    try {
+      await this.notify.run(
+        () =>
+          this.data.upsertSessionRecitation(this.id, studentId, {
+            studentId,
+            circleId: s.circleId,
+            sessionId: this.id,
+            date: s.date,
+            kind: 'new',
+            fromSurah: 0,
+            fromAyah: 0,
+            toSurah: 0,
+            toAyah: 0,
+            pages: 0,
+            score: 0,
+            hifzErrors: 0,
+            tajweedErrors: 0,
+            promptCount: 0,
+            postponed: true,
+            notes: this.postponedNote.trim() || undefined,
+          }),
+        { success: 'حُفظت الملاحظة', error: 'تعذّر الحفظ' },
+      );
+    } finally {
+      this.outcomeSaving.set(false);
+    }
   }
 
   readonly dateLabel = computed(() => dmy(this.session()?.date));
@@ -952,8 +1118,12 @@ export class SessionPage {
         }
       } else {
         const extra = this.sameDayActivities(st.id, s.date, s.circleId);
+        const postponedEntry = recs.find((r) => r.postponed);
         if (extra.length > 0) {
           for (const e of extra) lines.push(`• ${e.label} — ${e.score}٪`);
+        } else if (postponedEntry) {
+          // ملاحظة/تأجيل — تُطبَع كما هي، بلا صياغة سلبيّة («لم يسمّع»).
+          lines.push(`• ${postponedEntry.notes?.trim() || 'مؤجَّل'}`);
         } else {
           const notRecitedEntry = recs.find((r) => r.notRecited);
           if (notRecitedEntry) {
@@ -1059,6 +1229,11 @@ export class SessionPage {
             detail: e.label,
             rating: `${e.score}٪`,
           }));
+        } else if (this.recsOf(st.id).some((r) => r.postponed)) {
+          const note = this.recsOf(st.id)
+            .find((r) => r.postponed)
+            ?.notes?.trim();
+          segments = [{ placeholderText: note || 'مؤجَّل', placeholderClass: 'neutral' }];
         } else if (a?.status === 'absent') {
           segments = [{ placeholderText: 'غائب', placeholderClass: 'absent' }];
         } else if (a?.status === 'present' || a?.status === 'late') {

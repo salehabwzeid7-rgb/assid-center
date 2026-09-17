@@ -65,298 +65,274 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
   imports: [FormsModule, RouterLink, ScoreInputComponent, SurahPickerComponent],
   template: `
     <div class="rp">
-      <!-- الطالب حاضر لكن لم يسمّع — حالة صريحة تُغني عن كامل نموذج التسميع -->
-      <button
-        type="button"
-        class="chip rp-not-recited-chip"
-        [class.active]="notRecited()"
-        (click)="toggleNotRecited()"
-      >
-        {{ notRecited() ? '✓ لم يسمّع اليوم' : '⭕ تعليم: لم يسمّع اليوم' }}
-      </button>
+      <!-- المؤقّت الدائريّ -->
+      <div class="rp-timer">
+        <svg viewBox="0 0 120 120" class="rp-ring" [class.over]="overtime()">
+          <circle cx="60" cy="60" r="52" class="rp-track" />
+          <circle
+            cx="60"
+            cy="60"
+            r="52"
+            class="rp-fill"
+            [attr.stroke-dasharray]="circ"
+            [attr.stroke-dashoffset]="circ * (1 - fraction())"
+            transform="rotate(-90 60 60)"
+          />
+          <text x="60" y="55" class="rp-time" [class.over]="overtime()">{{ centerLabel() }}</text>
+          <text x="60" y="76" class="rp-sub">{{ subLabel() }}</text>
+        </svg>
 
-      @if (notRecited()) {
-        <div class="rp-field">
-          <label>سبب عدم التسميع (اختياري)</label>
-          <textarea
-            rows="2"
-            [(ngModel)]="m.notes"
-            [ngModelOptions]="{ standalone: true }"
-            placeholder="مثال: انتهى وقت الحصّة، تأخّر الطالب، ظرف صحّيّ…"
-          ></textarea>
-        </div>
-      } @else {
-        <!-- المؤقّت الدائريّ -->
-        <div class="rp-timer">
-          <svg viewBox="0 0 120 120" class="rp-ring" [class.over]="overtime()">
-            <circle cx="60" cy="60" r="52" class="rp-track" />
-            <circle
-              cx="60"
-              cy="60"
-              r="52"
-              class="rp-fill"
-              [attr.stroke-dasharray]="circ"
-              [attr.stroke-dashoffset]="circ * (1 - fraction())"
-              transform="rotate(-90 60 60)"
+        <div class="rp-timer-side">
+          <!-- عدد الأوجه — كلّما زاد زاد زمن المؤقّت (٤ د/وجه) -->
+          <div class="rp-pages">
+            <span class="rp-pages-lbl">الأوجه</span>
+            <button
+              type="button"
+              class="rp-step"
+              (click)="bumpPages(-0.5)"
+              [disabled]="plannedPages() <= 0"
+              aria-label="إنقاص وجه"
+            >
+              −
+            </button>
+            <input
+              class="rp-pages-in"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              step="0.5"
+              [ngModel]="pages()"
+              (ngModelChange)="pages.set(clampPages($event))"
+              [ngModelOptions]="{ standalone: true }"
+              aria-label="عدد الأوجه"
             />
-            <text x="60" y="55" class="rp-time" [class.over]="overtime()">{{ centerLabel() }}</text>
-            <text x="60" y="76" class="rp-sub">{{ subLabel() }}</text>
-          </svg>
+            <button type="button" class="rp-step" (click)="bumpPages(0.5)" aria-label="زيادة وجه">
+              +
+            </button>
+          </div>
 
-          <div class="rp-timer-side">
-            <!-- عدد الأوجه — كلّما زاد زاد زمن المؤقّت (٤ د/وجه) -->
-            <div class="rp-pages">
-              <span class="rp-pages-lbl">الأوجه</span>
-              <button
-                type="button"
-                class="rp-step"
-                (click)="bumpPages(-0.5)"
-                [disabled]="plannedPages() <= 0"
-                aria-label="إنقاص وجه"
-              >
-                −
-              </button>
-              <input
-                class="rp-pages-in"
-                type="number"
-                inputmode="decimal"
-                min="0"
-                step="0.5"
-                [ngModel]="pages()"
-                (ngModelChange)="pages.set(clampPages($event))"
-                [ngModelOptions]="{ standalone: true }"
-                aria-label="عدد الأوجه"
-              />
-              <button type="button" class="rp-step" (click)="bumpPages(0.5)" aria-label="زيادة وجه">
-                +
-              </button>
-            </div>
-
-            <p class="rp-expect" [class.over]="overtime()">
-              المتوقّع: <b>{{ fmtClock(expectedSec()) }}</b>
-              <span class="rp-perpage">= {{ plannedPages() || 0 }} وجه × ٤ د</span>
+          <p class="rp-expect" [class.over]="overtime()">
+            المتوقّع: <b>{{ fmtClock(expectedSec()) }}</b>
+            <span class="rp-perpage">= {{ plannedPages() || 0 }} وجه × ٤ د</span>
+          </p>
+          @if (elapsedSec() > 0) {
+            <p class="rp-actual" [class.over]="overtime()">
+              الفعليّ: {{ fmtClock(elapsedSec()) }}
+              @if (overtime()) {
+                · تجاوز المعيار بـ {{ fmtClock(elapsedSec() - expectedSec()) }} ⏱
+              }
             </p>
-            @if (elapsedSec() > 0) {
-              <p class="rp-actual" [class.over]="overtime()">
-                الفعليّ: {{ fmtClock(elapsedSec()) }}
-                @if (overtime()) {
-                  · تجاوز المعيار بـ {{ fmtClock(elapsedSec() - expectedSec()) }} ⏱
-                }
-              </p>
-            }
-            <div class="rp-timer-btns">
-              @if (!running()) {
-                <button class="btn btn-primary" type="button" (click)="start()">
-                  {{ elapsedSec() > 0 ? 'متابعة' : '▶ بدء التسميع' }}
-                </button>
-              } @else {
-                <button class="btn btn-danger" type="button" (click)="stop()">
-                  ■ إنهاء التسميع
-                </button>
-              }
-              @if (elapsedSec() > 0 && !running()) {
-                <button class="btn btn-ghost" type="button" (click)="resetTimer()">تصفير</button>
-              }
-            </div>
-          </div>
-        </div>
-
-        <!-- نموذج الملخّص -->
-        <div class="rp-field">
-          <label>نوع التسميع</label>
-          <div class="chips">
-            @for (k of kinds; track k) {
-              <button
-                type="button"
-                class="chip"
-                [class.active]="m.kind === k"
-                [class.has-entry]="!!entryForKind(k)"
-                (click)="selectKind(k)"
-              >
-                {{ kindLabels[k] }}
-                @if (entryForKind(k)) {
-                  <span class="rp-kind-dot">●</span>
-                }
+          }
+          <div class="rp-timer-btns">
+            @if (!running()) {
+              <button class="btn btn-primary" type="button" (click)="start()">
+                {{ elapsedSec() > 0 ? 'متابعة' : '▶ بدء التسميع' }}
               </button>
+            } @else {
+              <button class="btn btn-danger" type="button" (click)="stop()">■ إنهاء التسميع</button>
+            }
+            @if (elapsedSec() > 0 && !running()) {
+              <button class="btn btn-ghost" type="button" (click)="resetTimer()">تصفير</button>
             }
           </div>
         </div>
+      </div>
 
-        @if (smartHint(); as hint) {
-          <p class="rp-hint">💡 {{ hint }}</p>
-        }
-
-        <div class="rp-row">
-          <div class="rp-field">
-            <label>من سورة</label>
-            <app-surah-picker [(value)]="m.fromSurah" label="من سورة" />
-          </div>
-          <div class="rp-field rp-ayah">
-            <label>آية</label>
-            <input
-              type="number"
-              inputmode="numeric"
-              min="1"
-              [max]="maxAyah(m.fromSurah)"
-              [(ngModel)]="m.fromAyah"
-              [ngModelOptions]="{ standalone: true }"
-            />
-          </div>
+      <!-- نموذج الملخّص -->
+      <div class="rp-field">
+        <label>نوع التسميع</label>
+        <div class="chips">
+          @for (k of kinds; track k) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="m.kind === k"
+              [class.has-entry]="!!entryForKind(k)"
+              (click)="selectKind(k)"
+            >
+              {{ kindLabels[k] }}
+              @if (entryForKind(k)) {
+                <span class="rp-kind-dot">●</span>
+              }
+            </button>
+          }
         </div>
-        <div class="rp-row">
-          <div class="rp-field">
-            <label>إلى سورة</label>
-            <app-surah-picker [(value)]="m.toSurah" label="إلى سورة" />
-          </div>
-          <div class="rp-field rp-ayah">
-            <label>آية</label>
-            <input
-              type="number"
-              inputmode="numeric"
-              min="1"
-              [max]="maxAyah(m.toSurah)"
-              [(ngModel)]="m.toAyah"
-              [ngModelOptions]="{ standalone: true }"
-            />
-          </div>
-        </div>
+      </div>
 
-        <app-score-input
-          label="نسبة التسميع (٪)"
-          [threshold]="tasmiePass"
-          [value]="score()"
-          (valueChange)="score.set($event)"
-        />
+      @if (smartHint(); as hint) {
+        <p class="rp-hint">💡 {{ hint }}</p>
+      }
 
+      <div class="rp-row">
         <div class="rp-field">
-          <label>أخطاء الحفظ</label>
-          <div class="err-tally">
-            <button
-              type="button"
-              class="rp-step"
-              (click)="bumpHifz(-1)"
-              [disabled]="m.hifzErrors <= 0"
-              aria-label="إنقاص خطأ حفظ"
-            >
-              −
-            </button>
-            <input
-              class="err-count-in"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              [(ngModel)]="m.hifzErrors"
-              [ngModelOptions]="{ standalone: true }"
-              aria-label="عدد أخطاء الحفظ"
-            />
-            <button
-              type="button"
-              class="rp-step err-tap"
-              (click)="bumpHifz(1)"
-              aria-label="تسجيل خطأ حفظ"
-            >
-              +1
-            </button>
-          </div>
+          <label>من سورة</label>
+          <app-surah-picker [(value)]="m.fromSurah" label="من سورة" />
         </div>
-        <div class="rp-field">
-          <label>أخطاء التجويد</label>
-          <div class="err-tally">
-            <button
-              type="button"
-              class="rp-step"
-              (click)="bumpTajweed(-1)"
-              [disabled]="m.tajweedErrors <= 0"
-              aria-label="إنقاص خطأ تجويد"
-            >
-              −
-            </button>
-            <input
-              class="err-count-in"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              [(ngModel)]="m.tajweedErrors"
-              [ngModelOptions]="{ standalone: true }"
-              aria-label="عدد أخطاء التجويد"
-            />
-            <button
-              type="button"
-              class="rp-step err-tap"
-              (click)="bumpTajweed(1)"
-              aria-label="تسجيل خطأ تجويد"
-            >
-              +1
-            </button>
-          </div>
-        </div>
-
-        <div class="rp-field">
-          <label>التردّد (التلقين على الطالب)</label>
-          <div class="err-tally">
-            <button
-              type="button"
-              class="rp-step"
-              (click)="bumpPrompt(-1)"
-              [disabled]="m.promptCount <= 0"
-              aria-label="إنقاص تردّد"
-            >
-              −
-            </button>
-            <input
-              class="err-count-in"
-              type="number"
-              inputmode="numeric"
-              min="0"
-              [(ngModel)]="m.promptCount"
-              [ngModelOptions]="{ standalone: true }"
-              aria-label="عدد مرّات التردّد"
-            />
-            <button
-              type="button"
-              class="rp-step err-tap"
-              (click)="bumpPrompt(1)"
-              aria-label="تسجيل تردّد"
-            >
-              +1
-            </button>
-          </div>
-        </div>
-
-        @if (showRatingChoice()) {
-          <div class="rp-field">
-            <label>التقييم</label>
-            <div class="rating-choice">
-              <button
-                type="button"
-                class="rating-opt"
-                [class.active]="(m.rating ?? 'very_good') === 'very_good'"
-                (click)="setRating('very_good')"
-              >
-                جيد جدًّا
-              </button>
-              <button
-                type="button"
-                class="rating-opt"
-                [class.active]="m.rating === 'excellent'"
-                (click)="setRating('excellent')"
-              >
-                ممتاز
-              </button>
-            </div>
-          </div>
-        }
-
-        <div class="rp-field">
-          <label>ملاحظات المعلّم</label>
-          <textarea
-            rows="2"
-            [(ngModel)]="m.notes"
+        <div class="rp-field rp-ayah">
+          <label>آية</label>
+          <input
+            type="number"
+            inputmode="numeric"
+            min="1"
+            [max]="maxAyah(m.fromSurah)"
+            [(ngModel)]="m.fromAyah"
             [ngModelOptions]="{ standalone: true }"
-            placeholder="ملاحظات حول الأداء والتجويد…"
-          ></textarea>
+          />
+        </div>
+      </div>
+      <div class="rp-row">
+        <div class="rp-field">
+          <label>إلى سورة</label>
+          <app-surah-picker [(value)]="m.toSurah" label="إلى سورة" />
+        </div>
+        <div class="rp-field rp-ayah">
+          <label>آية</label>
+          <input
+            type="number"
+            inputmode="numeric"
+            min="1"
+            [max]="maxAyah(m.toSurah)"
+            [(ngModel)]="m.toAyah"
+            [ngModelOptions]="{ standalone: true }"
+          />
+        </div>
+      </div>
+
+      <app-score-input
+        label="نسبة التسميع (٪)"
+        [threshold]="tasmiePass"
+        [value]="score()"
+        (valueChange)="score.set($event)"
+      />
+
+      <div class="rp-field">
+        <label>أخطاء الحفظ</label>
+        <div class="err-tally">
+          <button
+            type="button"
+            class="rp-step"
+            (click)="bumpHifz(-1)"
+            [disabled]="m.hifzErrors <= 0"
+            aria-label="إنقاص خطأ حفظ"
+          >
+            −
+          </button>
+          <input
+            class="err-count-in"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            [(ngModel)]="m.hifzErrors"
+            [ngModelOptions]="{ standalone: true }"
+            aria-label="عدد أخطاء الحفظ"
+          />
+          <button
+            type="button"
+            class="rp-step err-tap"
+            (click)="bumpHifz(1)"
+            aria-label="تسجيل خطأ حفظ"
+          >
+            +1
+          </button>
+        </div>
+      </div>
+      <div class="rp-field">
+        <label>أخطاء التجويد</label>
+        <div class="err-tally">
+          <button
+            type="button"
+            class="rp-step"
+            (click)="bumpTajweed(-1)"
+            [disabled]="m.tajweedErrors <= 0"
+            aria-label="إنقاص خطأ تجويد"
+          >
+            −
+          </button>
+          <input
+            class="err-count-in"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            [(ngModel)]="m.tajweedErrors"
+            [ngModelOptions]="{ standalone: true }"
+            aria-label="عدد أخطاء التجويد"
+          />
+          <button
+            type="button"
+            class="rp-step err-tap"
+            (click)="bumpTajweed(1)"
+            aria-label="تسجيل خطأ تجويد"
+          >
+            +1
+          </button>
+        </div>
+      </div>
+
+      <div class="rp-field">
+        <label>التردّد (التلقين على الطالب)</label>
+        <div class="err-tally">
+          <button
+            type="button"
+            class="rp-step"
+            (click)="bumpPrompt(-1)"
+            [disabled]="m.promptCount <= 0"
+            aria-label="إنقاص تردّد"
+          >
+            −
+          </button>
+          <input
+            class="err-count-in"
+            type="number"
+            inputmode="numeric"
+            min="0"
+            [(ngModel)]="m.promptCount"
+            [ngModelOptions]="{ standalone: true }"
+            aria-label="عدد مرّات التردّد"
+          />
+          <button
+            type="button"
+            class="rp-step err-tap"
+            (click)="bumpPrompt(1)"
+            aria-label="تسجيل تردّد"
+          >
+            +1
+          </button>
+        </div>
+      </div>
+
+      @if (showRatingChoice()) {
+        <div class="rp-field">
+          <label>التقييم</label>
+          <div class="rating-choice">
+            <button
+              type="button"
+              class="rating-opt"
+              [class.active]="(m.rating ?? 'very_good') === 'very_good'"
+              (click)="setRating('very_good')"
+            >
+              جيد جدًّا
+            </button>
+            <button
+              type="button"
+              class="rating-opt"
+              [class.active]="m.rating === 'excellent'"
+              (click)="setRating('excellent')"
+            >
+              ممتاز
+            </button>
+          </div>
         </div>
       }
+
+      <div class="rp-field">
+        <label>ملاحظات المعلّم</label>
+        <textarea
+          rows="2"
+          [(ngModel)]="m.notes"
+          [ngModelOptions]="{ standalone: true }"
+          placeholder="ملاحظات حول الأداء والتجويد…"
+        ></textarea>
+      </div>
 
       <div class="rp-actions">
         <a class="btn btn-ghost" [routerLink]="['/session', sessionId(), 'evaluate', studentId()]">
@@ -364,13 +340,7 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
         </a>
         <button class="btn btn-primary" type="button" [disabled]="saving()" (click)="save()">
           {{
-            saving()
-              ? 'جارٍ الحفظ…'
-              : notRecited()
-                ? 'حفظ الحالة'
-                : entryForKind(m.kind)
-                  ? 'حفظ تعديل التسميع'
-                  : 'حفظ التسميع'
+            saving() ? 'جارٍ الحفظ…' : entryForKind(m.kind) ? 'حفظ تعديل التسميع' : 'حفظ التسميع'
           }}
         </button>
       </div>
@@ -385,14 +355,6 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
         display: flex;
         flex-direction: column;
         gap: 10px;
-      }
-      .rp-not-recited-chip {
-        align-self: flex-start;
-      }
-      .rp-not-recited-chip.active {
-        background: var(--gold-tint2, #faf4e4);
-        border-color: var(--gold-deep, #a07030);
-        color: var(--gold-deep, #a07030);
       }
       .rp-timer {
         display: flex;
@@ -626,8 +588,6 @@ export class RecitationPanelComponent implements OnInit {
 
   readonly score = signal(TASMIE_PASS);
   readonly saving = signal(false);
-  /** الطالب حاضر لكنّه لم يسمّع في هذه الجلسة — حالة صريحة مستقلّة عن نموذج التسميع. */
-  readonly notRecited = signal(false);
 
   m = {
     kind: 'new' as RecitationKind,
@@ -781,8 +741,7 @@ export class RecitationPanelComponent implements OnInit {
    * الوقت الجاري مستقلًّا عن نوع التسميع المعروض).
    */
   private hydrateFrom(r: RecitationRecord | null): void {
-    if (!r) {
-      this.notRecited.set(false);
+    if (!r || !isActualRecitation(r)) {
       this.m.fromSurah = 78;
       this.m.fromAyah = 1;
       this.m.toSurah = 78;
@@ -796,24 +755,18 @@ export class RecitationPanelComponent implements OnInit {
       this.score.set(TASMIE_PASS);
       return;
     }
-    this.notRecited.set(!!r.notRecited);
-    if (isActualRecitation(r)) {
-      this.m.fromSurah = r.fromSurah;
-      this.m.fromAyah = r.fromAyah;
-      this.m.toSurah = r.toSurah;
-      this.m.toAyah = r.toAyah;
-      this.m.hifzErrors = r.hifzErrors;
-      this.m.tajweedErrors = r.tajweedErrors;
-      this.m.promptCount = r.promptCount;
-      this.m.rating = r.rating;
-      this.m.notes = r.notes ?? '';
-      this.pages.set(r.pages);
-      this.score.set(scoreOf(r));
-      if (r.durationSec) this.elapsedSec.set(r.durationSec);
-    } else {
-      // سجلّ «لم يسمّع» — لا معنى لاستعادة حقول مقطع صفريّة، فقط الملاحظة.
-      this.m.notes = r.notes ?? '';
-    }
+    this.m.fromSurah = r.fromSurah;
+    this.m.fromAyah = r.fromAyah;
+    this.m.toSurah = r.toSurah;
+    this.m.toAyah = r.toAyah;
+    this.m.hifzErrors = r.hifzErrors;
+    this.m.tajweedErrors = r.tajweedErrors;
+    this.m.promptCount = r.promptCount;
+    this.m.rating = r.rating;
+    this.m.notes = r.notes ?? '';
+    this.pages.set(r.pages);
+    this.score.set(scoreOf(r));
+    if (r.durationSec) this.elapsedSec.set(r.durationSec);
   }
 
   /** تبديل نوع التسميع المعروض داخل اللوحة — يحمّل سجلّ هذا النوع إن وُجد، وإلا نموذجًا فارغًا. */
@@ -824,10 +777,6 @@ export class RecitationPanelComponent implements OnInit {
 
   maxAyah(n: number | string): number {
     return surah(Number(n))?.ayahs ?? 286;
-  }
-
-  toggleNotRecited(): void {
-    this.notRecited.set(!this.notRecited());
   }
 
   /** يقرّب عدد الأوجه إلى أقرب نصف وجه ولا يسمح بالسالب. */
@@ -919,38 +868,6 @@ export class RecitationPanelComponent implements OnInit {
   }
 
   async save(): Promise<void> {
-    if (this.notRecited()) {
-      if (this.running()) this.stop();
-      this.saving.set(true);
-      await this.notify.run(
-        () =>
-          this.data.upsertSessionRecitation(this.sessionId(), this.studentId(), {
-            studentId: this.studentId(),
-            circleId: this.circleId(),
-            sessionId: this.sessionId(),
-            date: this.date(),
-            // تُحفَظ «لم يسمّع» دائمًا تحت نوع «حفظ جديد» بصرف النظر عن شريحة
-            // النوع المختارة حاليًّا — حالة واحدة تخصّ الجلسة كلّها للطالب، لا
-            // نوعًا بعينه، فلا تتكرّر لكلّ نوع.
-            kind: 'new',
-            fromSurah: 0,
-            fromAyah: 0,
-            toSurah: 0,
-            toAyah: 0,
-            pages: 0,
-            score: 0,
-            hifzErrors: 0,
-            tajweedErrors: 0,
-            promptCount: 0,
-            notRecited: true,
-            notes: this.m.notes.trim() || undefined,
-          }),
-        { success: 'سُجّلت الحالة: لم يسمّع', error: 'تعذّر حفظ الحالة' },
-      );
-      this.saving.set(false);
-      return;
-    }
-
     const fromSurah = Number(this.m.fromSurah);
     const toSurah = Number(this.m.toSurah);
     const fromAyah = Number(this.m.fromAyah);
