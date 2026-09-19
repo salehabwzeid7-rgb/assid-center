@@ -167,6 +167,16 @@ interface CircleCard {
           </span>
         </div>
       </div>
+
+      <!-- التقارير — المدخل المركزيّ: مدًى زمنيّ مرن، حلقة واحدة أو عدّة حلقات،
+           وفرعان بجمهورين (الأهالي / أرشيف مرجعيّ). -->
+      <section class="ops-card" style="margin-top:14px">
+        <p class="kicker">التقارير</p>
+        <p class="ops-meta" style="margin-bottom:0">
+          تقارير الحلقات والطلّاب لأيّ مدّة — يوم أو أسبوع أو شهر أو سنة.
+        </p>
+        <a class="ops-btn" routerLink="/reports" style="margin-top:14px">فتح التقارير ‹</a>
+      </section>
     </div>
   `,
 })

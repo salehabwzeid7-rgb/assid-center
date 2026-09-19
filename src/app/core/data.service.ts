@@ -982,6 +982,11 @@ export class DataService {
     return this.live<RecitationRecord>(q, destroyRef);
   }
 
+  /** كلّ سجلّات التسميع — للتقارير التي تغطّي أكثر من حلقة أو مدًى زمنيًّا مفتوحًا. */
+  allRecitations(destroyRef?: DestroyRef): Signal<RecitationRecord[] | undefined> {
+    return this.live<RecitationRecord>(this.scopedCol(COL.recitations), destroyRef);
+  }
+
   // ---------- للوحة الرئيسية ----------
 
   /** كالسابقة — مقعد واحد لكلّ طالب في هذا التاريخ لنفس السبب الموثَّق في `studentAttendance`. */
@@ -1613,6 +1618,20 @@ export class DataService {
   ): Signal<TajweedExamResult[] | undefined> {
     const q = this.scopedCol(COL.tajweedExamResults, where('studentId', '==', studentId));
     return this.live<TajweedExamResult>(q, destroyRef, (a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** كلّ اختبارات التجويد — للتقارير التي تغطّي أكثر من حلقة تجويد. */
+  allTajweedExams(destroyRef?: DestroyRef): Signal<TajweedExam[] | undefined> {
+    return this.live<TajweedExam>(this.scopedCol(COL.tajweedExams), destroyRef, this.byDateDesc);
+  }
+
+  /** كلّ نتائج اختبارات التجويد — تُربَط باختباراتها داخل طبقة حساب التقارير. */
+  allTajweedExamResults(destroyRef?: DestroyRef): Signal<TajweedExamResult[] | undefined> {
+    return this.live<TajweedExamResult>(
+      this.scopedCol(COL.tajweedExamResults),
+      destroyRef,
+      this.byDateDesc,
+    );
   }
 
   async addTajweedExam(input: {

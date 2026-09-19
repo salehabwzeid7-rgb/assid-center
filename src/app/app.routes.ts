@@ -69,6 +69,10 @@ export const routes: Routes = [
           import('./pages/sard-dashboard/sard-dashboard').then((m) => m.SardDashboardPage),
       },
       {
+        path: 'reports',
+        loadComponent: () => import('./pages/reports/reports').then((m) => m.ReportsPage),
+      },
+      {
         path: 'profile',
         loadComponent: () => import('./pages/profile/profile').then((m) => m.ProfilePage),
       },
