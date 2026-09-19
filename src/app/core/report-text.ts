@@ -36,6 +36,7 @@ import {
   type HifzStudentRow,
   type OverviewReport,
   type StudentTimeline,
+  type StudentsReport,
   type TajweedCircleReport,
   type TajweedStudentRow,
 } from './reports';
@@ -322,5 +323,51 @@ export function overviewReportText(ov: OverviewReport, meta: ReportTextMeta): st
   }
 
   if (ov.hifz.length === 0 && ov.tajweed.length === 0) lines.push('لم تُختَر أيّ حلقة.');
+  return join(lines);
+}
+
+/* --------------------------------------------------------------------------
+   تقرير عدّة طلّاب
+   -------------------------------------------------------------------------- */
+
+/**
+ * تقرير مجموعة طلّاب نصًّا — ملخّص جماعيّ ثمّ سِجلّ كلّ طالب.
+ * لطالب واحد يُختصَر إلى `studentTimelineText` مباشرةً بلا ترويسة جماعيّة
+ * زائدة، فالملخّص الجماعيّ لشخص واحد تكرار بلا فائدة.
+ */
+export function studentsReportText(
+  rep: StudentsReport,
+  meta: ReportTextMeta,
+  audience: ReportAudience = 'parents',
+): string {
+  if (rep.students.length === 1) return studentTimelineText(rep.students[0], meta, audience);
+
+  const parents = audience === 'parents';
+  const t = rep.totals;
+  const lines: string[] = [];
+
+  if (parents && meta.intro?.trim()) lines.push(meta.intro.trim(), '');
+  lines.push(`📋 تقرير ${t.students} طلّاب`, periodLabel(rep.period));
+  if (meta.teacherName) lines.push(`المعلّم: ${meta.teacherName}`);
+  lines.push(RULE);
+
+  lines.push(`الحضور العامّ: ${t.att.rate === null ? '—' : t.att.rate + '٪'}`);
+  if (t.pages > 0 || t.avgScore !== null) {
+    lines.push(`مجموع الأوجه: ${t.pages}${t.newPages ? ` (حفظ جديد ${t.newPages})` : ''}`);
+    if (t.avgScore !== null) lines.push(`متوسّط التسميع: ${t.avgScore}٪`);
+  }
+  if (t.sardCount) lines.push(`السرد: ${t.sardCount}`);
+  if (t.examCount) lines.push(`اختبارات الأجزاء: ${t.examCount}`);
+  if (t.tajweedCount) {
+    lines.push(`اختبارات التجويد: ${t.tajweedCount} — ${t.tajweedAchieved} / ${t.tajweedMax}`);
+  }
+  lines.push(RULE, '');
+
+  for (const tl of rep.students) {
+    // ترويسة المعلّم وخاتمته مرّة واحدة في الأعلى/الأسفل، لا مع كلّ طالب.
+    lines.push(studentTimelineText(tl, { teacherName: '' }, audience), '', RULE, '');
+  }
+
+  if (parents && meta.outro?.trim()) lines.push(meta.outro.trim());
   return join(lines);
 }

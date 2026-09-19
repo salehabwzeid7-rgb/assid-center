@@ -798,3 +798,70 @@ export function buildOverviewReport(
     },
   };
 }
+
+/* --------------------------------------------------------------------------
+   تقرير عدّة طلّاب — يغطّي كلّ أنشطتهم عبر كلّ حلقاتهم
+   -------------------------------------------------------------------------- */
+
+/** إجماليّات مجموعة طلّاب — التحفيظ والتجويد مفصولان كالعادة. */
+export interface StudentsTotals {
+  students: number;
+  att: AttendanceTally;
+  pages: number;
+  newPages: number;
+  avgScore: number | null;
+  sardCount: number;
+  examCount: number;
+  /** اختبارات التجويد: مجموع خام لا نسبة. */
+  tajweedCount: number;
+  tajweedAchieved: number;
+  tajweedMax: number;
+}
+
+export interface StudentsReport {
+  period: Period;
+  /** سِجلّ كلّ طالب مرتّبًا أبجديًّا. */
+  students: StudentTimeline[];
+  totals: StudentsTotals;
+}
+
+/**
+ * تقرير مجموعة طلّاب (واحد أو اثنان أو كلّهم) عبر **كلّ** حلقاتهم معًا —
+ * تحفيظًا وتجويدًا في آنٍ واحد. الطالب المسجَّل في النوعين تقريره واحد يجمع
+ * تسميعه وسرده واختبارات أجزائه واختبارات تجويده، وإلّا كان ناقصًا.
+ *
+ * الإجماليّات تُبقي التجويد مفصولًا (مجموع خام) عن التحفيظ (أوجه ومتوسّط
+ * مئويّ) — جمعهما في رقم واحد بلا معنى.
+ */
+export function buildStudentsReport(
+  src: ReportSource,
+  studentIds: readonly string[],
+  period: Period,
+): StudentsReport {
+  const wanted = new Set(studentIds);
+  const chosen = src.students
+    .filter((s) => wanted.has(s.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+  const students = chosen.map((st) => buildStudentTimeline(src, st, period));
+
+  const scores = students.flatMap((t) => (t.avgScore === null ? [] : [t.avgScore]));
+  const tajweedCells = students.flatMap((t) => t.tajweed.filter((c) => c.score !== null));
+
+  return {
+    period,
+    students,
+    totals: {
+      students: students.length,
+      att: sumTallies(students.map((t) => t.att)),
+      pages: students.reduce((a, t) => a + t.pages, 0),
+      newPages: students.reduce((a, t) => a + t.newPages, 0),
+      avgScore: avg(scores),
+      sardCount: students.reduce((a, t) => a + t.serd.length, 0),
+      examCount: students.reduce((a, t) => a + t.exams.length, 0),
+      tajweedCount: tajweedCells.length,
+      tajweedAchieved: tajweedCells.reduce((a, c) => a + (c.score ?? 0), 0),
+      tajweedMax: tajweedCells.reduce((a, c) => a + c.totalScore, 0),
+    },
+  };
+}

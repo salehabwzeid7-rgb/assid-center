@@ -16,9 +16,17 @@ import { NotifyService } from '../core/notify.service';
        بعض متصفّحات الجوّال/WebView (خلل تركيب طبقات GPU).
      • انتظار جولتَي رسم كاملتَين (`requestAnimationFrame` مزدوج) بدل مهلة
        زمنيّة ثابتة — أوثق عبر الأجهزة المختلفة.
-     • سلسلة الحفظ على أندرويد: المعرض (`@capacitor-community/media`) ثمّ
-       صفحة مشاركة النظام، وعند فشلهما تُعرَض رسالة الخطأ **الفعليّة** لا نصّ
-       عامّ (الفجوة التشخيصيّة التي أُصلحت في v1.23.4).
+     • عند الفشل تُعرَض رسالة الخطأ **الفعليّة** لا نصّ عامّ (الفجوة
+       التشخيصيّة التي أُصلحت في v1.23.4).
+
+   سلسلة الحفظ على أندرويد، ثلاث محاولات مستقلّة لا تعتمد إحداها على الأخرى:
+     ١) للصور فقط: حفظ مباشر في المعرض (`@capacitor-community/media`).
+     ٢) كتابة أصليّة (`@capacitor/filesystem`) ثمّ مشاركة أصليّة
+        (`@capacitor/share`) — **المسار الأساسيّ لملفّ PDF**.
+     ٣) واجهة المشاركة الوِبّيّة (`navigator.share`) كمحاولة أخيرة.
+
+   الترتيب مقصود: كان المسار (٣) وحده هو المستعمَل لملفّ PDF في v1.28.0، وهو
+   غير مدعوم بشكل موثوق داخل WebView على أندرويد، فكان الحفظ يفشل دائمًا.
 
    ملفّ PDF: تُبنى صفحاته من صور PNG نفسها، لا من نصّ. هذا مقصود — مكتبات PDF
    لا تُشكّل العربيّة ولا تعالج الاتّجاه ثنائيّ المسار بشكل صحيح، فتخرج الحروف
@@ -247,7 +255,14 @@ export class ReportExportComponent {
   readonly saving = signal<number | null>(null);
   readonly lightboxImg = signal<{ pageNumber: number; dataUrl: string } | null>(null);
 
+  /**
+   * هل تُعرَض أزرار المشاركة؟ على الجوّال **دائمًا** — المشاركة هناك تمرّ عبر
+   * إضافة Capacitor الأصليّة ولا تحتاج دعم WebView لواجهة المشاركة الوِبّيّة.
+   * كان الشرط سابقًا `navigator.canShare` وحده، فكانت الأزرار تختفي على
+   * الأجهزة التي لا تدعمها رغم أنّ المشاركة الأصليّة تعمل عليها.
+   */
   readonly canShareFiles = computed(() => {
+    if (Capacitor.isNativePlatform()) return true;
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     return typeof nav.canShare === 'function';
   });
@@ -321,19 +336,87 @@ export class ReportExportComponent {
     return (await fetch(dataUrl)).blob();
   }
 
-  /** يُشارِك ملفًّا عبر واجهة المشاركة القياسيّة. يُعيد نجاح/فشل بلا رمي استثناء. */
+  /** Blob → base64 خالص (بلا بادئة `data:`) — الصيغة التي يطلبها Filesystem. */
+  private blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(fr.error ?? new Error('تعذّرت قراءة الملفّ'));
+      fr.onload = () => {
+        const s = String(fr.result);
+        const comma = s.indexOf(',');
+        resolve(comma >= 0 ? s.slice(comma + 1) : s);
+      };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  /** يُشارِك ملفًّا عبر واجهة المشاركة الوِبّيّة. يُعيد نجاح/فشل بلا رمي استثناء. */
   private async webShareFile(file: File): Promise<boolean> {
     try {
       const nav = navigator as Navigator & {
         canShare?: (d?: ShareData) => boolean;
-        share: (d: ShareData) => Promise<void>;
+        share?: (d: ShareData) => Promise<void>;
       };
-      if (!nav.canShare?.({ files: [file] })) return false;
+      if (!nav.share || !nav.canShare?.({ files: [file] })) return false;
       await nav.share({ files: [file], title: this.shareTitle() });
       return true;
     } catch (e) {
-      console.error('[report-export] فشلت المشاركة:', e);
+      // إلغاء المستخدم للمشاركة ليس خطأً — لا نُكمِل إلى بدائل بعده.
+      if (this.isAbort(e)) return true;
+      console.error('[report-export] فشلت المشاركة الوِبّيّة:', e);
       return false;
+    }
+  }
+
+  private isAbort(e: unknown): boolean {
+    const name = (e as { name?: string } | null)?.name ?? '';
+    const msg = this.errText(e).toLowerCase();
+    return name === 'AbortError' || msg.includes('abort') || msg.includes('cancel');
+  }
+
+  /**
+   * حفظ/مشاركة ملفّ على أندرويد — **المسار الأصليّ الموثوق**.
+   *
+   * سبب وجوده: واجهة المشاركة الوِبّيّة (`navigator.share` بالملفّات) غير
+   * مدعومة بشكل موثوق داخل WebView على أندرويد، فكانت تُرجع `canShare=false`
+   * أو ترمي، فيفشل حفظ PDF كلّيًّا («تعذّر حفظ ملفّ PDF…») — وهو الخلل الذي
+   * ظهر في v1.28.0. الحلّ: كتابة الملفّ فعليًّا عبر `@capacitor/filesystem`
+   * ثمّ مشاركته بمُعرّفه عبر `@capacitor/share` (إضافتان أصليّتان لا تعتمدان
+   * على دعم WebView لواجهة المشاركة الوِبّيّة إطلاقًا).
+   *
+   * يُكتَب الملفّ في `Cache` لأنّه لا يحتاج أذونات تخزين، ويتولّى النظام
+   * تنظيفه لاحقًا — والنسخة الدائمة تُحفَظ من داخل تطبيق الوجهة (Drive،
+   * الملفّات، واتساب) الذي يختاره المستخدم.
+   */
+  private async nativeSaveAndShare(
+    blob: Blob,
+    fileName: string,
+  ): Promise<{ ok: boolean; uri?: string; error?: string }> {
+    let uri = '';
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const data = await this.blobToBase64(blob);
+      const written = await Filesystem.writeFile({
+        path: fileName,
+        data,
+        directory: Directory.Cache,
+        recursive: true,
+      });
+      uri = written.uri;
+    } catch (e) {
+      console.error('[report-export] فشلت كتابة الملفّ:', e);
+      return { ok: false, error: this.errText(e) };
+    }
+
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({ title: this.shareTitle(), files: [uri] });
+      return { ok: true, uri };
+    } catch (e) {
+      if (this.isAbort(e)) return { ok: true, uri };
+      console.error('[report-export] فشلت المشاركة الأصليّة:', e);
+      // الملفّ مكتوب فعلًا وإن تعذّرت المشاركة — نُعيد مساره ليُذكَر للمستخدم.
+      return { ok: false, uri, error: this.errText(e) };
     }
   }
 
@@ -391,20 +474,34 @@ export class ReportExportComponent {
       console.error('[report-export] فشل الحفظ المباشر في المعرض:', e);
     }
 
+    // محاولة ثانية: كتابة أصليّة + مشاركة أصليّة (لا تعتمد على دعم WebView
+    // لواجهة المشاركة الوِبّيّة)، ثمّ الوِبّيّة كمحاولة ثالثة مستقلّة.
     const blob = await this.blobOf(img.dataUrl);
-    const ok = await this.webShareFile(new File([blob], name + '.png', { type: 'image/png' }));
+    const res = await this.nativeSaveAndShare(blob, name + '.png');
+    if (res.ok) {
+      this.saving.set(null);
+      return;
+    }
+    const shared = await this.webShareFile(new File([blob], name + '.png', { type: 'image/png' }));
     this.saving.set(null);
-    if (ok) return;
+    if (shared) return;
     this.notify.error(
-      `تعذّر حفظ الصورة تلقائيًّا (${primaryErr || 'خطأ غير معروف'}). افتح الصورة بالضغط عليها واحفظها يدويًّا (ضغط مطوَّل ← حفظ الصورة).`,
+      `تعذّر حفظ الصورة تلقائيًّا (${primaryErr || res.error || 'خطأ غير معروف'}). افتح الصورة بالضغط عليها واحفظها يدويًّا (ضغط مطوَّل ← حفظ الصورة).`,
     );
   }
 
   async shareImage(img: { pageNumber: number; dataUrl: string }): Promise<void> {
     const blob = await this.blobOf(img.dataUrl);
     const name = `${this.fileName()}-${img.pageNumber}.png`;
-    const ok = await this.webShareFile(new File([blob], name, { type: 'image/png' }));
-    if (!ok && !Capacitor.isNativePlatform()) this.anchorDownload(img.dataUrl, name);
+    if (!Capacitor.isNativePlatform()) {
+      const ok = await this.webShareFile(new File([blob], name, { type: 'image/png' }));
+      if (!ok) this.anchorDownload(img.dataUrl, name);
+      return;
+    }
+    const res = await this.nativeSaveAndShare(blob, name);
+    if (res.ok) return;
+    const shared = await this.webShareFile(new File([blob], name, { type: 'image/png' }));
+    if (!shared) this.notify.error(`تعذّرت المشاركة (${res.error || 'سبب غير معروف'})`);
   }
 
   /* ---------- PDF ---------- */
@@ -436,28 +533,49 @@ export class ReportExportComponent {
     return pdf.output('blob');
   }
 
+  /**
+   * حفظ/مشاركة ملفّ PDF.
+   *
+   * على الويب: تنزيل مباشر — أوضح وأسرع.
+   *
+   * على أندرويد: **كتابة أصليّة ثمّ مشاركة أصليّة** (Filesystem + Share). كان
+   * المسار السابق يعتمد على `navigator.share` بالملفّات وحدها، وهي غير مدعومة
+   * بشكل موثوق في WebView، فكان الحفظ يفشل دائمًا برسالة «تعذّر حفظ ملفّ PDF».
+   * وإن تعذّرت المشاركة بعد نجاح الكتابة، لا نقول «فشل» — الملفّ موجود فعلًا،
+   * فنُخبِر المستخدم بمكانه بدل أن نُوهمه بضياعه.
+   */
   async savePdf(): Promise<void> {
     if (this.pdfBusy() || this.images().length === 0) return;
     this.pdfBusy.set(true);
     try {
       const blob = await this.buildPdfBlob();
       const name = `${this.fileName()}.pdf`;
-      // على الجوّال لا يوجد «مجلّد تنزيلات» يصل إليه المستخدم بسهولة من داخل
-      // التطبيق، فصفحة المشاركة هي الطريق العمليّ للحفظ (Drive، الملفّات،
-      // واتساب). وعلى الويب التنزيل المباشر أوضح وأسرع.
-      if (Capacitor.isNativePlatform()) {
-        const ok = await this.webShareFile(new File([blob], name, { type: 'application/pdf' }));
-        if (!ok) {
-          this.notify.error('تعذّر حفظ ملفّ PDF — جرّب حفظ الصورة بدلًا منه.');
-          return;
-        }
-        this.notify.success('جاهز — اختر أين تحفظ الملفّ أو لمن ترسله.');
-      } else {
+
+      if (!Capacitor.isNativePlatform()) {
         const url = URL.createObjectURL(blob);
         this.anchorDownload(url, name);
         // تحرير الرابط بعد أن يلتقطه المتصفّح فعليًّا.
         setTimeout(() => URL.revokeObjectURL(url), 10000);
         this.notify.success('نُزّل ملفّ PDF');
+        return;
+      }
+
+      const res = await this.nativeSaveAndShare(blob, name);
+      if (res.ok) {
+        this.notify.success('جاهز — اختر أين تحفظ الملفّ أو لمن ترسله.');
+        return;
+      }
+
+      // مسار احتياطيّ مستقلّ تمامًا: واجهة المشاركة الوِبّيّة، لعلّها مدعومة هنا.
+      const shared = await this.webShareFile(new File([blob], name, { type: 'application/pdf' }));
+      if (shared) return;
+
+      if (res.uri) {
+        this.notify.error(
+          `حُفظ ملفّ PDF لكن تعذّر فتح المشاركة (${res.error || 'سبب غير معروف'}). الملفّ في: ${res.uri}`,
+        );
+      } else {
+        this.notify.error(`تعذّر حفظ ملفّ PDF (${res.error || 'سبب غير معروف'}).`);
       }
     } catch (e) {
       console.error('[report-export] فشل توليد PDF:', e);
@@ -467,19 +585,8 @@ export class ReportExportComponent {
     }
   }
 
+  /** مشاركة PDF — نفس مسار الحفظ تمامًا على الجوّال، وتنزيل على الويب. */
   async sharePdf(): Promise<void> {
-    if (this.pdfBusy() || this.images().length === 0) return;
-    this.pdfBusy.set(true);
-    try {
-      const blob = await this.buildPdfBlob();
-      const file = new File([blob], `${this.fileName()}.pdf`, { type: 'application/pdf' });
-      const ok = await this.webShareFile(file);
-      if (!ok) await this.savePdf();
-    } catch (e) {
-      console.error('[report-export] فشلت مشاركة PDF:', e);
-      this.notify.error(`تعذّرت المشاركة (${this.errText(e)})`);
-    } finally {
-      this.pdfBusy.set(false);
-    }
+    await this.savePdf();
   }
 }
