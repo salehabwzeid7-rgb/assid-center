@@ -14,6 +14,13 @@ import {
   studentsReportText,
   type ReportAudience,
 } from '../core/report-text';
+import {
+  buildCirclePdf,
+  buildOverviewPdf,
+  buildStudentsPdf,
+  type PdfMeta,
+} from '../core/report-pdf-build';
+import type { PdfDoc } from '../core/report-pdf';
 import { OverviewReportCardComponent } from './overview-report-card';
 import { PeriodPickerComponent, PeriodState } from './period-picker';
 import { ReportCardComponent } from './report-card';
@@ -208,7 +215,11 @@ type Subject = 'circle' | 'students';
 
           <section class="rd-sec">
             <h3>صورة وملفّ PDF</h3>
-            <app-report-export [fileName]="fileName()" [shareTitle]="shareTitle()">
+            <app-report-export
+              [fileName]="fileName()"
+              [shareTitle]="shareTitle()"
+              [pdfModel]="pdfModel()"
+            >
               @if (subject() === 'students') {
                 @for (tl of studentsReport().students; track tl.studentId) {
                   <app-student-report-card
@@ -523,6 +534,19 @@ export class ReportDialogComponent {
       return n === 1 ? (this.studentsReport().students[0]?.name ?? 'تقرير') : `تقرير ${n} طلّاب`;
     }
     return this.singleCircle()?.circleTitle ?? 'تقرير عامّ';
+  });
+
+  /**
+   * نموذج مستند PDF النصّيّ — يُبنى من نفس الكائنات المحسوبة التي بُني منها
+   * النصّ والصورة، فالأرقام واحدة في المخرَجات الثلاثة.
+   */
+  readonly pdfModel = computed<PdfDoc | null>(() => {
+    if (!this.ready()) return null;
+    const meta: PdfMeta = { teacherName: this.teacherName(), audience: this.audience() };
+    if (this.subject() === 'students') return buildStudentsPdf(this.studentsReport(), meta);
+    const single = this.singleCircle();
+    if (single) return buildCirclePdf(single, meta);
+    return buildOverviewPdf(this.overviewReport(), meta);
   });
 
   readonly fileName = computed(() => {

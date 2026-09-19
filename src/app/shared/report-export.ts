@@ -1,6 +1,7 @@
 import { Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { NotifyService } from '../core/notify.service';
+import { renderPdf, type PdfDoc } from '../core/report-pdf';
 
 /* ==========================================================================
    آليّة تصدير التقارير — صورة PNG وملفّ PDF.
@@ -28,10 +29,13 @@ import { NotifyService } from '../core/notify.service';
    الترتيب مقصود: كان المسار (٣) وحده هو المستعمَل لملفّ PDF في v1.28.0، وهو
    غير مدعوم بشكل موثوق داخل WebView على أندرويد، فكان الحفظ يفشل دائمًا.
 
-   ملفّ PDF: تُبنى صفحاته من صور PNG نفسها، لا من نصّ. هذا مقصود — مكتبات PDF
-   لا تُشكّل العربيّة ولا تعالج الاتّجاه ثنائيّ المسار بشكل صحيح، فتخرج الحروف
-   مفكّكة معكوسة. الصورة تضمن عربيّة سليمة تمامًا على كلّ جهاز، مقابل أنّ نصّ
-   الملفّ غير قابل للتحديد — وهو ثمن مقبول لنسخة أرشيفيّة مقصودها الحفظ والطباعة.
+   ملفّ PDF **نصّيّ** يُبنى في `core/report-pdf.ts` من نموذج المستند مباشرةً،
+   لا من الصور. النصّ قابل للتحديد والبحث، والجداول خطوط متجهيّة تُطبع حادّة
+   على الورق. (كان سابقًا صورًا داخل PDF لأنّ تشكيل العربيّة لم يكن محلولًا؛
+   حُلّ بخطّ يحوي صور الحروف العربيّة — راجع report-pdf.ts.)
+
+   الصورة تبقى مسارًا مستقلًّا للمشاركة السريعة في تطبيقات المراسلة، ولا يعتمد
+   أحدهما على الآخر: يُمكن حفظ PDF دون توليد أيّ صورة.
    ========================================================================== */
 
 @Component({
@@ -64,12 +68,16 @@ import { NotifyService } from '../core/notify.service';
         <ng-content />
       </div>
 
-      @if (generated() && images().length > 0) {
+      <!-- PDF مستقلّ: نصّيّ ولا يحتاج توليد صور مسبقًا. -->
+      @if (canPdf()) {
         <div class="rx-pdf-bar">
           <button type="button" class="btn btn-primary" (click)="savePdf()" [disabled]="pdfBusy()">
-            {{ pdfBusy() ? 'جارٍ التحضير…' : '📄 حفظ PDF' }}
+            {{ pdfBusy() ? 'جارٍ تحضير الملفّ…' : '📄 حفظ PDF (نصّ قابل للطباعة)' }}
           </button>
         </div>
+      }
+
+      @if (generated() && images().length > 0) {
         @if (needsApk()) {
           <!-- لا تظهر إلّا بعد محاولة فاشلة فعليّة: القشرة الأصليّة أقدم من
                حزمة الويب (وصلت عبر OTA وحدها). -->
@@ -257,6 +265,11 @@ export class ReportExportComponent {
   readonly fileName = input<string>('تقرير');
   /** عنوان يظهر في صفحة مشاركة النظام. */
   readonly shareTitle = input<string>('تقرير');
+  /**
+   * نموذج المستند النصّيّ. عند وجوده يُبنى PDF نصًّا حقيقيًّا؛ وعند غيابه
+   * يُرتدّ إلى بناء PDF من الصور (مسار قديم يبقى للتوافق).
+   */
+  readonly pdfModel = input<PdfDoc | null>(null);
 
   readonly busy = signal(false);
   readonly pdfBusy = signal(false);
@@ -281,6 +294,9 @@ export class ReportExportComponent {
    * الآن: نُحاول فعلًا، ونشرح عند الفشل — لا نمنع المستخدم بناءً على تخمين.
    */
   readonly needsApk = signal(false);
+
+  /** PDF متاح متى وُجد نموذج نصّيّ، أو صور مولَّدة (المسار القديم). */
+  readonly canPdf = computed(() => this.pdfModel() !== null || this.images().length > 0);
 
   readonly canShareFiles = computed(() => {
     if (Capacitor.isNativePlatform()) return true;
@@ -570,6 +586,11 @@ export class ReportExportComponent {
    * حتى لا تدخل الحزمة الرئيسيّة إطلاقًا (تُحمَّل فقط عند أوّل ضغطة على «PDF»).
    */
   private async buildPdfBlob(): Promise<Blob> {
+    // المسار الأساسيّ: مستند نصّيّ حقيقيّ بجداول متجهيّة.
+    const model = this.pdfModel();
+    if (model) return renderPdf(model);
+
+    // مسار احتياطيّ: صور داخل PDF (يبقى لمن لا يمرّر نموذجًا).
     const { jsPDF } = await import('jspdf');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
     const pw = pdf.internal.pageSize.getWidth();
@@ -603,7 +624,7 @@ export class ReportExportComponent {
    * فنُخبِر المستخدم بمكانه بدل أن نُوهمه بضياعه.
    */
   async savePdf(): Promise<void> {
-    if (this.pdfBusy() || this.images().length === 0) return;
+    if (this.pdfBusy() || !this.canPdf()) return;
     this.pdfBusy.set(true);
     try {
       const blob = await this.buildPdfBlob();
