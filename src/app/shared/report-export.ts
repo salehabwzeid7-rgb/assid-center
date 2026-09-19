@@ -65,20 +65,14 @@ import { NotifyService } from '../core/notify.service';
       </div>
 
       @if (generated() && images().length > 0) {
-        @if (pdfSupported()) {
-          <div class="rx-pdf-bar">
-            <button
-              type="button"
-              class="btn btn-primary"
-              (click)="savePdf()"
-              [disabled]="pdfBusy()"
-            >
-              {{ pdfBusy() ? 'جارٍ التحضير…' : '📄 حفظ PDF' }}
-            </button>
-          </div>
-        } @else {
-          <!-- القشرة الأصليّة أقدم من حزمة الويب (وصلت عبر OTA). نُخبِر المستخدم
-               مسبقًا بدل أن يضغط زرًّا يفشل حتمًا. -->
+        <div class="rx-pdf-bar">
+          <button type="button" class="btn btn-primary" (click)="savePdf()" [disabled]="pdfBusy()">
+            {{ pdfBusy() ? 'جارٍ التحضير…' : '📄 حفظ PDF' }}
+          </button>
+        </div>
+        @if (needsApk()) {
+          <!-- لا تظهر إلّا بعد محاولة فاشلة فعليّة: القشرة الأصليّة أقدم من
+               حزمة الويب (وصلت عبر OTA وحدها). -->
           <p class="rx-note">📄 {{ NEEDS_APK }}</p>
         }
 
@@ -278,12 +272,15 @@ export class ReportExportComponent {
    * الأجهزة التي لا تدعمها رغم أنّ المشاركة الأصليّة تعمل عليها.
    */
   /**
-   * هل يمكن إخراج ملفّ PDF على هذا الجهاز؟ على الويب دائمًا، وعلى الجوّال
-   * فقط إن كانت القشرة الأصليّة تحمل إضافتَي الملفّات والمشاركة.
+   * تُرفَع بعد محاولة فاشلة سببها غياب الإضافات الأصليّة — لا قبلها.
+   *
+   * كان الزرّ سابقًا مشروطًا بكشفٍ مسبق عبر `Capacitor.isPluginAvailable`،
+   * وهو كشف هشّ: الدالّة تقرأ سجلّ الإضافات المسجَّلة، والسجلّ لا يمتلئ إلّا
+   * عند **استيراد** الإضافة — ونحن نستوردها ديناميكيًّا بعد الفحص. فكان
+   * الفحص يقع على سجلّ فارغ ويُخفي الزرّ حتى على النسخة التي تعمل. القاعدة
+   * الآن: نُحاول فعلًا، ونشرح عند الفشل — لا نمنع المستخدم بناءً على تخمين.
    */
-  readonly pdfSupported = computed(
-    () => !Capacitor.isNativePlatform() || this.nativeFilesAvailable(),
-  );
+  readonly needsApk = signal(false);
 
   readonly canShareFiles = computed(() => {
     if (Capacitor.isNativePlatform()) return true;
@@ -410,12 +407,9 @@ export class ReportExportComponent {
    * إصدار الويب يساوي إصدار القشرة. هذه القاعدة تسري على أيّ إضافة أصليّة
    * تُضاف مستقبلًا: تُضاف مع حارس، وإلّا انكسر التطبيق عند أوّل OTA.
    */
-  private nativeFilesAvailable(): boolean {
-    return (
-      Capacitor.isNativePlatform() &&
-      Capacitor.isPluginAvailable('Filesystem') &&
-      Capacitor.isPluginAvailable('Share')
-    );
+  private isNotImplemented(e: unknown): boolean {
+    const msg = this.errText(e).toLowerCase();
+    return msg.includes('not implemented') || msg.includes('unimplemented');
   }
 
   /** رسالة موحّدة حين تكون القشرة أقدم من حزمة الويب (تُقرأ من القالب أيضًا). */
@@ -442,9 +436,8 @@ export class ReportExportComponent {
     blob: Blob,
     fileName: string,
   ): Promise<{ ok: boolean; uri?: string; error?: string; unavailable?: boolean }> {
-    if (!this.nativeFilesAvailable()) {
-      return { ok: false, unavailable: true, error: 'الإضافات الأصليّة غير متاحة في هذه النسخة' };
-    }
+    if (!Capacitor.isNativePlatform()) return { ok: false, error: 'ليست منصّة أصليّة' };
+
     let uri = '';
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
@@ -458,6 +451,11 @@ export class ReportExportComponent {
       uri = written.uri;
     } catch (e) {
       console.error('[report-export] فشلت كتابة الملفّ:', e);
+      // «not implemented» تعني قشرة أصليّة أقدم من حزمة الويب، لا عطلًا عابرًا.
+      if (this.isNotImplemented(e)) {
+        this.needsApk.set(true);
+        return { ok: false, unavailable: true, error: this.errText(e) };
+      }
       return { ok: false, error: this.errText(e) };
     }
 
@@ -468,6 +466,10 @@ export class ReportExportComponent {
     } catch (e) {
       if (this.isAbort(e)) return { ok: true, uri };
       console.error('[report-export] فشلت المشاركة الأصليّة:', e);
+      if (this.isNotImplemented(e)) {
+        this.needsApk.set(true);
+        return { ok: false, uri, unavailable: true, error: this.errText(e) };
+      }
       // الملفّ مكتوب فعلًا وإن تعذّرت المشاركة — نُعيد مساره ليُذكَر للمستخدم.
       return { ok: false, uri, error: this.errText(e) };
     }
