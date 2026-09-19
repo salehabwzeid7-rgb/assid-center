@@ -44,6 +44,10 @@
   --ring: 0 0 0 3px rgba(201, 161, 74, 0.25);
 
   --header-h: 58px;
+  /* ارتفاع الشريط السفليّ دون المنطقة الآمنة. مصدر واحد يستعمله الشريط نفسه
+     وكلّ ما يُرسى فوقه (شريط إنشاء التقرير مثلًا) — بدل أرقام سحريّة متفرّقة
+     تتباين عن ارتفاعه الحقيقيّ فيظهر فراغ غير متّسق بين جهاز وآخر. */
+  --nav-h: 72px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
@@ -1467,6 +1471,9 @@ a.ops-card:active {
   display: flex;
   justify-content: space-around;
   gap: 2px;
+  box-sizing: border-box;
+  /* يُربَط ارتفاعه بالمتغيّر نفسه الذي يرتكز عليه ما فوقه، فلا يتباعدان. */
+  min-height: calc(var(--nav-h) + var(--safe-bottom));
   padding: 8px 4px calc(8px + var(--safe-bottom));
   background: var(--surface);
   border-top: 2px solid var(--border);

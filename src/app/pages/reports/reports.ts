@@ -289,9 +289,13 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
       }
     </div>
 
-    <!-- زرّ إنشاء التقرير — عائم فوق كلّ شيء، في متناول الإبهام -->
+    <!-- شريط إنشاء التقرير — مُرسى مباشرةً فوق الشريط السفليّ بلا فراغ -->
     @if (!loading()) {
-      <button type="button" class="fab" (click)="dialogOpen.set(true)">🖨️ إنشاء تقرير</button>
+      <div class="report-bar">
+        <button type="button" class="btn btn-primary btn-block" (click)="dialogOpen.set(true)">
+          🖨️ إنشاء تقرير
+        </button>
+      </div>
     }
 
     @if (dialogOpen()) {
@@ -310,7 +314,8 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
     `
       .page {
         padding: 12px;
-        padding-bottom: 150px;
+        /* يكفي لتمرير آخر صفّ فوق شريط الإنشاء بلا حجب. */
+        padding-bottom: calc(var(--safe-bottom) + 92px);
       }
       .sec-title {
         margin: 0 0 10px;
@@ -425,26 +430,26 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
         font-size: 0.78rem;
         color: var(--danger);
       }
-      /* زرّ مُدمَج في الزاوية بدل شريط بعرض الشاشة — الشريط كان يحجب صفًّا
-         كاملًا من الجدول خلفه في كلّ وضع تمرير. */
-      .fab {
+      /*
+        شريط ملتصق بحافّة الشاشة السفلى.
+
+        الشريط السفليّ للتطبيق **لا يظهر في هذا المسار** — bottom-nav يعرضه في
+        خمسة مسارات فقط و/reports ليس منها. فأيّ ارتفاع فوق الصفر هنا يترك
+        فراغًا ميّتًا تحت الشريط (كان 78px سابقًا)، وهو ما بدا كزرّ معلّق في
+        الهواء. الحشو السفليّ يحترم المنطقة الآمنة وحدها (شريط الإيماءات).
+      */
+      .report-bar {
         position: fixed;
-        inset-inline-end: 16px;
-        bottom: 78px;
-        z-index: 40;
-        padding: 12px 16px;
-        border: none;
-        border-radius: 14px;
-        background: linear-gradient(135deg, #0d5c3f, #083f2b);
-        color: #fff;
-        font-family: inherit;
-        font-size: 0.96rem;
-        font-weight: 800;
-        cursor: pointer;
-        box-shadow: 0 6px 18px rgba(13, 92, 63, 0.35);
+        inset-inline: 0;
+        bottom: 0;
+        z-index: 50;
+        padding: 10px 12px calc(10px + var(--safe-bottom));
+        background: var(--surface);
+        border-top: 1px solid var(--border);
+        box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.07);
       }
-      .fab:active {
-        transform: translateY(1px);
+      .report-bar .btn {
+        margin: 0;
       }
     `,
   ],

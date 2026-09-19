@@ -65,16 +65,22 @@ import { NotifyService } from '../core/notify.service';
       </div>
 
       @if (generated() && images().length > 0) {
-        <div class="rx-pdf-bar">
-          <button type="button" class="btn btn-primary" (click)="savePdf()" [disabled]="pdfBusy()">
-            {{ pdfBusy() ? 'جارٍ التحضير…' : '📄 حفظ PDF' }}
-          </button>
-          @if (canShareFiles()) {
-            <button type="button" class="btn btn-ghost" (click)="sharePdf()" [disabled]="pdfBusy()">
-              ↗ مشاركة PDF
+        @if (pdfSupported()) {
+          <div class="rx-pdf-bar">
+            <button
+              type="button"
+              class="btn btn-primary"
+              (click)="savePdf()"
+              [disabled]="pdfBusy()"
+            >
+              {{ pdfBusy() ? 'جارٍ التحضير…' : '📄 حفظ PDF' }}
             </button>
-          }
-        </div>
+          </div>
+        } @else {
+          <!-- القشرة الأصليّة أقدم من حزمة الويب (وصلت عبر OTA). نُخبِر المستخدم
+               مسبقًا بدل أن يضغط زرًّا يفشل حتمًا. -->
+          <p class="rx-note">📄 {{ NEEDS_APK }}</p>
+        }
 
         <div class="rx-results">
           @for (img of images(); track img.pageNumber) {
@@ -161,6 +167,16 @@ import { NotifyService } from '../core/notify.service';
         display: flex;
         gap: 8px;
         margin: 10px 0;
+      }
+      .rx-note {
+        margin: 10px 0;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: var(--bg, #faf8f2);
+        border: 1px dashed var(--border, #e5e0d3);
+        font-size: 0.78rem;
+        line-height: 1.9;
+        color: var(--text-soft, #888);
       }
       .rx-pdf-bar .btn {
         flex: 1;
@@ -261,6 +277,14 @@ export class ReportExportComponent {
    * كان الشرط سابقًا `navigator.canShare` وحده، فكانت الأزرار تختفي على
    * الأجهزة التي لا تدعمها رغم أنّ المشاركة الأصليّة تعمل عليها.
    */
+  /**
+   * هل يمكن إخراج ملفّ PDF على هذا الجهاز؟ على الويب دائمًا، وعلى الجوّال
+   * فقط إن كانت القشرة الأصليّة تحمل إضافتَي الملفّات والمشاركة.
+   */
+  readonly pdfSupported = computed(
+    () => !Capacitor.isNativePlatform() || this.nativeFilesAvailable(),
+  );
+
   readonly canShareFiles = computed(() => {
     if (Capacitor.isNativePlatform()) return true;
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
@@ -375,6 +399,32 @@ export class ReportExportComponent {
   }
 
   /**
+   * هل الإضافات الأصليّة للملفّات متاحة فعلًا في **القشرة المثبَّتة**؟
+   *
+   * ليست مسألة نظريّة: التحديث المباشر (OTA) يحدّث حزمة الويب وحدها ولا يمسّ
+   * الشيفرة الأصليّة إطلاقًا. فجهازٌ استلم جافاسكربت v1.29.0 فوق قشرة v1.28.0
+   * لا يملك `Filesystem` ولا `Share` أصلًا، فيرمي النداء
+   * «"Filesystem" plugin is not implemented on android» ويسقط التصدير كلّه.
+   *
+   * لذلك **كلّ** نداء أصليّ هنا مشروط بهذا الفحص، ولا يُبنى على افتراض أنّ
+   * إصدار الويب يساوي إصدار القشرة. هذه القاعدة تسري على أيّ إضافة أصليّة
+   * تُضاف مستقبلًا: تُضاف مع حارس، وإلّا انكسر التطبيق عند أوّل OTA.
+   */
+  private nativeFilesAvailable(): boolean {
+    return (
+      Capacitor.isNativePlatform() &&
+      Capacitor.isPluginAvailable('Filesystem') &&
+      Capacitor.isPluginAvailable('Share')
+    );
+  }
+
+  /** رسالة موحّدة حين تكون القشرة أقدم من حزمة الويب (تُقرأ من القالب أيضًا). */
+  readonly NEEDS_APK =
+    'حفظ PDF يحتاج تحديث التطبيق نفسه (لا التحديث التلقائيّ). حمّل النسخة الجديدة من ' +
+    'assid-center.web.app/download وثبّتها فوق الحالية — بياناتك لا تتأثّر. وحتى ذلك الحين، ' +
+    'زرّ «حفظ الصورة» يعمل بشكل كامل.';
+
+  /**
    * حفظ/مشاركة ملفّ على أندرويد — **المسار الأصليّ الموثوق**.
    *
    * سبب وجوده: واجهة المشاركة الوِبّيّة (`navigator.share` بالملفّات) غير
@@ -391,7 +441,10 @@ export class ReportExportComponent {
   private async nativeSaveAndShare(
     blob: Blob,
     fileName: string,
-  ): Promise<{ ok: boolean; uri?: string; error?: string }> {
+  ): Promise<{ ok: boolean; uri?: string; error?: string; unavailable?: boolean }> {
+    if (!this.nativeFilesAvailable()) {
+      return { ok: false, unavailable: true, error: 'الإضافات الأصليّة غير متاحة في هذه النسخة' };
+    }
     let uri = '';
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
@@ -501,7 +554,10 @@ export class ReportExportComponent {
     const res = await this.nativeSaveAndShare(blob, name);
     if (res.ok) return;
     const shared = await this.webShareFile(new File([blob], name, { type: 'image/png' }));
-    if (!shared) this.notify.error(`تعذّرت المشاركة (${res.error || 'سبب غير معروف'})`);
+    if (shared) return;
+    // الصور لها مسار أصليّ آخر متاح حتى في القشرة القديمة (حفظ في المعرض)،
+    // فلا نُخبِر المستخدم بالفشل ولدينا طريق يعمل — نسلكه ونُعلِمه بمكانها.
+    await this.downloadImage(img);
   }
 
   /* ---------- PDF ---------- */
@@ -570,7 +626,10 @@ export class ReportExportComponent {
       const shared = await this.webShareFile(new File([blob], name, { type: 'application/pdf' }));
       if (shared) return;
 
-      if (res.uri) {
+      if (res.unavailable) {
+        // القشرة أقدم من حزمة الويب — رسالة تقول ماذا يفعل، لا «فشل» غامضة.
+        this.notify.error(this.NEEDS_APK);
+      } else if (res.uri) {
         this.notify.error(
           `حُفظ ملفّ PDF لكن تعذّر فتح المشاركة (${res.error || 'سبب غير معروف'}). الملفّ في: ${res.uri}`,
         );
