@@ -473,7 +473,8 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                 <textarea
                   id="note"
                   name="note"
-                  [(ngModel)]="note"
+                  [ngModel]="note()"
+                  (ngModelChange)="note.set($event)"
                   (blur)="saveNote()"
                   placeholder="ملاحظة عامة عن سير الجلسة…"
                 ></textarea>
@@ -738,8 +739,15 @@ export class SessionPage {
   }
 
   readonly circleId = computed(() => this.session()?.circleId ?? '');
-  note = '';
+  /**
+   * ملاحظة الجلسة العامّة — إشارة (لا حقل عاديّ) كي يُعاد بناء نصّ التقرير
+   * وترويسة التقرير المصوَّر فورًا مع كلّ حرف يكتبه المعلّم، دون انتظار الحفظ
+   * على `blur` ولا عودة الجلسة من Firestore.
+   */
+  readonly note = signal('');
   private noteInit = false;
+  /** الملاحظة العامّة كما ستُطبَع في التقارير (مشذَّبة، أو فارغة فلا تُطبَع). */
+  readonly sessionNote = computed(() => this.note().trim());
 
   readonly attLabels = ATTENDANCE_LABELS;
   readonly attOrder = ATTENDANCE_ORDER;
@@ -1173,7 +1181,34 @@ export class SessionPage {
       : `الحضور: ${this.presentTotal()}/${students.length} · التسميع: ${this.recitedTotal()}/${students.length}`;
     const rule = '━━━━━━━━━━━━';
     const blocks = students.map((st, i) => this.studentBlock(i + 1, st, s));
-    return [intro, '', header, totals, rule, '', blocks.join('\n\n'), '', rule, outro].join('\n');
+    // الملاحظة العامّة تتصدّر التقرير فوق قائمة الطلّاب — بنجمتَي واتساب
+    // حولها فتظهر بخطّ عريض بارز في مجموعة أولياء الأمور.
+    const note = this.sessionNote();
+    const noteBlock = note
+      ? [
+          '',
+          '📌 *ملاحظة عامّة*',
+          ...note
+            .split('\n')
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .map((l) => `*${l}*`),
+          rule,
+        ]
+      : [];
+    return [
+      intro,
+      '',
+      header,
+      totals,
+      rule,
+      ...noteBlock,
+      '',
+      blocks.join('\n\n'),
+      '',
+      rule,
+      outro,
+    ].join('\n');
   });
 
   /** أقصى عدد طلّاب في كلّ صورة تقرير — طلب صريح من المستخدم، ثابت غير قابل للتعديل. */
@@ -1186,6 +1221,7 @@ export class SessionPage {
     return {
       title: `${circleLabel(this.circle())} — ${weekdayAr(s.date)} ${dmy(s.date)}`,
       teacherName: this.auth.teacher()?.name ?? '',
+      note: this.sessionNote() || undefined,
     };
   });
 
@@ -1303,7 +1339,7 @@ export class SessionPage {
     effect(() => {
       const s = this.session();
       if (s && !this.noteInit) {
-        this.note = s.note ?? '';
+        this.note.set(s.note ?? '');
         this.noteInit = true;
       }
     });
@@ -1465,7 +1501,7 @@ export class SessionPage {
   }
 
   async saveNote(): Promise<void> {
-    await this.notify.run(() => this.data.setSessionNote(this.id, this.note.trim()), {
+    await this.notify.run(() => this.data.setSessionNote(this.id, this.sessionNote()), {
       loading: 'جارٍ حفظ الملاحظة…',
       success: 'حُفظت ملاحظة الجلسة',
     });

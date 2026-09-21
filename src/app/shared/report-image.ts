@@ -39,6 +39,12 @@ export interface ReportImageMeta {
   title: string;
   /** اسم معلّم الحلقة — من بيانات الحساب المحفوظة. */
   teacherName: string;
+  /**
+   * الملاحظة العامّة عن سير الجلسة (ما يكتبه المعلّم في «ملاحظة
+   * الجلسة») — تُطبع في صدر كلّ صفحة فوق الجدول بخطّ أكبر وأبرز منه.
+   * تُعاد في كلّ صفحة لأنّ كلّ صورة تُشارَك منفردةً (مثل الترويسة تمامًا).
+   */
+  note?: string;
 }
 
 /**
@@ -88,6 +94,12 @@ export interface ReportImageMeta {
               <div class="ri-teacher">معلّم الحلقة: {{ meta().teacherName }}</div>
             </div>
             <div class="ri-body">
+              @if (meta().note; as note) {
+                <div class="ri-note">
+                  <div class="ri-note-label">📌 ملاحظة عامّة</div>
+                  <div class="ri-note-text">{{ note }}</div>
+                </div>
+              }
               <table class="ri-table">
                 <thead>
                   <tr>
@@ -264,6 +276,30 @@ export interface ReportImageMeta {
         background-color: #fff;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='46' height='46' viewBox='0 0 46 46'%3E%3Cg fill='none' stroke='%230d5c3f' stroke-width='1' opacity='0.07'%3E%3Cpath d='M23 3 L43 23 L23 43 L3 23 Z'/%3E%3Ccircle cx='23' cy='23' r='3.5'/%3E%3C/g%3E%3C/svg%3E");
         background-repeat: repeat;
+      }
+      /* الملاحظة العامّة — بطاقة بارزة فوق الجدول بخطّ أكبر من خطّ الصفوف
+         (الجدول 0.82rem) حتّى تُقرأ أوّلًا عند فتح الصورة. ألوان ثابتة مثل بقيّة
+         التقرير المصوّر (لا تتبع سمة التطبيق). */
+      .ri-note {
+        margin-bottom: calc(12px * var(--ri-scale, 1));
+        padding: calc(12px * var(--ri-scale, 1)) calc(14px * var(--ri-scale, 1));
+        border: 1px solid #b8d6c7;
+        border-inline-start: calc(5px * var(--ri-scale, 1)) solid #0d5c3f;
+        border-radius: 10px;
+        background: #f2f8f4;
+      }
+      .ri-note-label {
+        font-size: calc(0.86rem * var(--ri-scale, 1));
+        font-weight: 800;
+        color: #0d5c3f;
+        margin-bottom: calc(4px * var(--ri-scale, 1));
+      }
+      .ri-note-text {
+        font-size: calc(1.05rem * var(--ri-scale, 1));
+        font-weight: 700;
+        line-height: 1.7;
+        color: #14261d;
+        white-space: pre-wrap;
       }
       .ri-pageno {
         margin-top: 12px;
