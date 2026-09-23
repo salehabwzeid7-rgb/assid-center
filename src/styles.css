@@ -1049,6 +1049,9 @@ textarea {
   padding: 20px;
   animation: fade-up 0.15s ease;
 }
+/* نافذة التأكيد كائن معلَّق فوق الشاشة (overlay) لا صفحة جديدة — فحركتها
+   تكبير خفيف من المركز (scale-in) لا انزلاق أفقيّ، حتّى تُقرأ بصريًّا كطبقة
+   منفصلة عابرة، متمايزة عمدًا عن مفردة الانزلاق التي تخصّ التنقّل بين الشاشات. */
 .modal {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1057,7 +1060,17 @@ textarea {
   padding: 20px;
   width: 100%;
   max-width: 360px;
-  animation: toast-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  animation: modal-scale-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes modal-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .modal h3 {
   margin: 0 0 6px;
@@ -1562,49 +1575,97 @@ a.ops-card:active {
     mix-blend-mode: normal;
   }
 
-  /* التطبيق RTL: التقدّم = الجديدة تدخل من اليسار وتغطّي القديمة المنزاحة يمينًا. */
+  /* التطبيق RTL: التقدّم = الجديدة تدخل من اليسار (طبقة عليا، انزلاق كامل)
+     وتغطّي القديمة المنزاحة يمينًا جزئيًّا مع خفوتها قليلًا (طبقة سفلى، تأثير
+     منظور — كما في دفعة الشاشات في iOS/Android). */
   html[data-nav='forward']::view-transition-new(root) {
-    animation-name: vt-in-start;
+    animation-name: vt-push-in;
     z-index: 2;
   }
   html[data-nav='forward']::view-transition-old(root) {
-    animation-name: vt-out-end;
+    animation-name: vt-push-out;
     z-index: 1;
   }
 
-  /* الرجوع عكسه: القديمة (الحاليّة) هي التي تنزلق مبتعدةً **فوق** السابقة
-     العائدة من ورائها — لذا تُرفَع القديمة فوق الجديدة هنا وحدها. */
-  html[data-nav='back']::view-transition-new(root) {
-    animation-name: vt-in-end;
-    z-index: 1;
-  }
+  /*
+    الرجوع: **عكس تامّ لحركة التقدّم، إطارًا بإطار** — لا حركة جديدة موازية
+    لها فقط. هذا هو الإصلاح الجوهريّ لتعثّر/دقّة كانت تظهر عند الرجوع تحديدًا:
+    النسخة السابقة جعلت الطبقة الأكثر ظهورًا (العليا) تتحرّك بمقدار جزئيّ
+    (٢٢٪) فقط بينما الطبقة المختفية خلفها (السفلى) تقطع الشاشة كاملةً — فكانت
+    أغلب الحركة الفعليّة تحدث خفيّةً خلف طبقة بالكاد تتزحزح، ثمّ تظهر الشاشة
+    الجديدة فجأة قرب نهاية الحركة. الإصلاح: الطبقة العليا (الشاشة الحاليّة،
+    التي تُسحَب) تقطع المسافة الكاملة بنفسها — إعادة تشغيل حركة دخولها الأصليّة
+    (`vt-push-in`) للخلف بالضبط؛ والطبقة السفلى (الشاشة العائدة) تعود من نفس
+    نقطة الإبعاد الجزئيّ التي تركناها عندها بالضبط — إعادة تشغيل حركة خروجها
+    الأصليّة (`vt-push-out`) للخلف. بهذا تصبح كلّ الحركة مرئيّة طوال الوقت في
+    كلا الاتّجاهين، لا نصفها خفيًّا خلف الطبقة الأخرى.
+  */
   html[data-nav='back']::view-transition-old(root) {
-    animation-name: vt-out-start;
+    animation-name: vt-pop-out;
     z-index: 2;
   }
+  html[data-nav='back']::view-transition-new(root) {
+    animation-name: vt-pop-in;
+    z-index: 1;
+  }
 
-  /* إزاحة الخارجة جزئيّة (٢٢٪) لا كاملة — أثر «منظور» خفيف يوحي بأنّ الشاشة
-     السابقة لا تزال خلف الحاليّة، بدل انزلاق متساوٍ يبدو مبالغًا فيه. */
-  @keyframes vt-in-start {
+  @keyframes vt-push-in {
     from {
       transform: translateX(-100%);
     }
   }
-  @keyframes vt-out-end {
+  /* إزاحة جزئيّة (٢٢٪) لا كاملة — أثر «منظور» خفيف يوحي بأنّ الشاشة السابقة
+     لا تزال خلف الحاليّة، بدل انزلاق متساوٍ يبدو مبالغًا فيه. */
+  @keyframes vt-push-out {
     to {
       transform: translateX(22%);
       opacity: 0.65;
     }
   }
-  @keyframes vt-in-end {
-    from {
-      transform: translateX(100%);
+  /* عكس تامّ لـ vt-push-in: من موضعها الحاليّ (٠) إلى نقطة بداية الدفعة
+     تمامًا — بدل انزلاق منفصل بمقدار مختلف (١٠٠٪ من الجهة المقابلة) كما كان. */
+  @keyframes vt-pop-out {
+    to {
+      transform: translateX(-100%);
     }
   }
-  @keyframes vt-out-start {
-    to {
-      transform: translateX(-22%);
+  /* عكس تامّ لـ vt-push-out: من نقطة الإبعاد الجزئيّ والخفوت نفسها إلى الوضوح
+     الكامل في المركز — لا ظهور مفاجئ من خارج الشاشة كليًّا كما كان. */
+  @keyframes vt-pop-in {
+    from {
+      transform: translateX(22%);
       opacity: 0.65;
+    }
+  }
+
+  /* تبديل بين تبويبين شقيقين (الشريط السفليّ) — تلاشٍ متقاطع خفيف بدل
+     الانزلاق الأفقيّ: التبويبات لا علاقة هرميّة بينها فلا تُفتَح وتُغلَق
+     كالشاشات الداخليّة، والتلاشي هو النمط المعياريّ لتبديل التبويبات في
+     التطبيقات الأصليّة — أخفّ حوسبيًّا أيضًا من انزلاق طبقتين بكامل الشاشة
+     (شفافية فقط، بلا `translateX` على عنصرين بحجم الشاشة)، وهذا التبديل هو
+     أكثر أنواع التنقّل تكرارًا فيستفيد أكثر من غيره من خفّة الحركة. */
+  html[data-nav='cross']::view-transition-old(root),
+  html[data-nav='cross']::view-transition-new(root) {
+    animation-duration: 0.16s;
+    animation-timing-function: ease-out;
+  }
+  html[data-nav='cross']::view-transition-old(root) {
+    animation-name: vt-cross-out;
+    z-index: 1;
+  }
+  html[data-nav='cross']::view-transition-new(root) {
+    animation-name: vt-cross-in;
+    z-index: 2;
+  }
+  @keyframes vt-cross-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes vt-cross-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
     }
   }
 }
