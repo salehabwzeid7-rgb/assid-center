@@ -64,7 +64,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <div class="empty"><span class="icon">👤</span> لا يوجد طلاب.</div>
         } @else {
           @for (row of perStudent(); track row.id) {
-            <div class="list-item" style="cursor:default">
+            <div class="list-item is-static">
               <span class="avatar">{{ row.name.charAt(0) }}</span>
               <span class="grow">
                 <span class="primary">{{ row.name }}</span>

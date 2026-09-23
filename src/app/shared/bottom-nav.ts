@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthService } from '../core/auth.service';
+import { TAB_PATHS } from '../core/nav-transition.service';
 
 /**
  * شريط التنقّل السفلي — يظهر فقط في الوجهات الرئيسية الخمس بعد تسجيل الدخول.
@@ -109,7 +110,5 @@ export class BottomNavComponent {
     { initialValue: this.router.url.split(/[?#]/)[0] },
   );
 
-  private readonly tabs = ['/', '/circles', '/students', '/sard', '/profile'];
-
-  readonly visible = computed(() => this.auth.isLoggedIn() && this.tabs.includes(this.path()));
+  readonly visible = computed(() => this.auth.isLoggedIn() && TAB_PATHS.includes(this.path()));
 }

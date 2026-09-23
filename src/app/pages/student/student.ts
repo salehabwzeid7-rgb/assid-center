@@ -168,7 +168,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
         @if (tajweedResults() && tajweedResults()!.length > 0) {
           <div class="section-title">نتائج اختبارات التجويد</div>
           @for (r of tajweedResults(); track r.id) {
-            <div class="list-item" style="cursor:default">
+            <div class="list-item is-static">
               <span class="grow">
                 <span class="primary">{{ r.examName }}</span>
                 <span class="secondary">{{ dmy(r.date) }}</span>
@@ -203,7 +203,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
           <div class="empty"><span class="icon">📋</span> لا يوجد سجل حضور بعد.</div>
         } @else {
           @for (a of attendance(); track a.id) {
-            <div class="list-item" style="cursor:default">
+            <div class="list-item is-static">
               <span class="grow"
                 ><span class="primary">{{ dmy(a.date) }}</span></span
               >

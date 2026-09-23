@@ -125,12 +125,15 @@ interface CircleCard {
         </section>
       }
 
-      <!-- بطاقتا الملخّص: نصفان متساويان يملآن عرض الشاشة بالتساوي -->
+      <!-- بطاقتا الملخّص: نصفان متساويان يملآن عرض الشاشة بالتساوي.
+           كلّ بطاقة مدخَل فعليّ إلى قائمتها الكاملة — الرقم المعروض هو نفسه ما يقود
+           إلى ما يعدّه (الحلقات ← /circles والطلّاب ← /students)، لا رقمًا جامدًا لا يستجيب للمس. -->
       <div class="stat-row">
-        <div class="stat">
+        <a class="stat stat-link" routerLink="/circles" aria-label="عرض كلّ الحلقات">
           <span class="stat-body">
             <span class="num">{{ circles()?.length ?? 0 }} <span class="unit">حلقة</span></span>
             <span class="label">مسجّلة</span>
+            <span class="stat-go">عرض الكلّ ‹</span>
           </span>
           <span class="stat-ico" aria-hidden="true">
             <svg
@@ -145,11 +148,12 @@ interface CircleCard {
               <circle cx="12" cy="12" r="3.2" />
             </svg>
           </span>
-        </div>
-        <div class="stat">
+        </a>
+        <a class="stat stat-link" routerLink="/students" aria-label="عرض كلّ الطلّاب">
           <span class="stat-body">
             <span class="num">{{ students()?.length ?? 0 }} <span class="unit">طالب</span></span>
             <span class="label">مسجّل</span>
+            <span class="stat-go">عرض الكلّ ‹</span>
           </span>
           <span class="stat-ico" aria-hidden="true">
             <svg
@@ -165,7 +169,7 @@ interface CircleCard {
               <path d="M20.5 19v-1.4a3.5 3.5 0 0 0-2.7-3.4M15.5 5.1a3.2 3.2 0 0 1 0 5.8" />
             </svg>
           </span>
-        </div>
+        </a>
       </div>
 
       <!-- التقارير — المدخل المركزيّ: مدًى زمنيّ مرن، حلقة واحدة أو عدّة حلقات،

@@ -8,7 +8,12 @@ export interface Toast {
   id: number;
   kind: ToastKind;
   text: string;
+  /** عدد مرّات تكرّر الرسالة نفسها (١ = مرّة واحدة، فلا يُعرَض عدّاد). */
+  count: number;
 }
+
+/** أقصى عدد توستات مرئيّة معًا — ما زاد يُسقِط أقدمها. */
+const MAX_TOASTS = 4;
 
 interface ConfirmRequest {
   title: string;
@@ -48,14 +53,45 @@ export class NotifyService {
   }
 
   // ---------- توستات ----------
+  /** مؤقّت الإخفاء لكلّ توست — يُعاد ضبطه عند تكرار الرسالة نفسها. */
+  private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
+
+  /**
+   * رسالة متطابقة مع واحدة معروضة الآن تزيد عدّادها بدل أن تُكدّس نسخةً جديدة.
+   *
+   * لماذا: أيّ خلل عامّ (انقطاع شبكة أو رفض صلاحيّات) يُفشِل كلّ مستمعي Firestore
+   * دفعةً واحدة، فكانت الشاشة تمتلئ بستّ نسخ من الرسالة نفسها تحجب المحتوى
+   * ولا تضيف معلومة واحدة زائدة (رُصد فعليًّا أثناء اختبار الواجهة).
+   */
   private push(kind: ToastKind, text: string, ttl: number): number {
+    const existing = this.toasts().find((t) => t.kind === kind && t.text === text);
+    if (existing) {
+      this.toasts.update((list) =>
+        list.map((t) => (t.id === existing.id ? { ...t, count: t.count + 1 } : t)),
+      );
+      this.arm(existing.id, ttl);
+      return existing.id;
+    }
     const id = ++this.seq;
-    this.toasts.update((t) => [...t, { id, kind, text }]);
-    if (ttl > 0) setTimeout(() => this.dismiss(id), ttl);
+    this.toasts.update((t) => [...t, { id, kind, text, count: 1 }].slice(-MAX_TOASTS));
+    this.arm(id, ttl);
     return id;
   }
 
+  private arm(id: number, ttl: number): void {
+    const prev = this.timers.get(id);
+    if (prev) clearTimeout(prev);
+    if (ttl > 0)
+      this.timers.set(
+        id,
+        setTimeout(() => this.dismiss(id), ttl),
+      );
+  }
+
   dismiss(id: number): void {
+    const timer = this.timers.get(id);
+    if (timer) clearTimeout(timer);
+    this.timers.delete(id);
     this.toasts.update((t) => t.filter((x) => x.id !== id));
   }
 

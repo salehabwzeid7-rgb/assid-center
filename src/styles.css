@@ -999,6 +999,19 @@ textarea {
   flex: 1;
   line-height: 1.5;
 }
+.toast .cnt {
+  flex-shrink: 0;
+  align-self: center;
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.09);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .toast.t-success .ico {
   background: var(--ok);
 }
@@ -1519,4 +1532,222 @@ a.ops-card:active {
 }
 .app-shell:has(.bottom-nav) .fab {
   bottom: calc(88px + var(--safe-bottom));
+}
+
+/* ==========================================================================
+   انتقالات الشاشات (View Transitions) + ردّ فعل اللمس
+   ========================================================================== */
+
+/* ---- ما يبقى ثابتًا أثناء الانتقال ----
+   كلّ عنصر يأخذ `view-transition-name` يُلتقَط وحده خارج لقطة الجذر، فلا
+   ينزلق مع الصفحة. هذا هو ما يجعل الانتقال يبدو «مترابطًا»: المحتوى وحده
+   يتحرّك، بينما يبقى الشريط السفليّ وشريط التنبيه في مكانهما تمامًا كما في
+   التطبيقات الأصليّة. (كلّ اسم يجب أن يكون فريدًا في الصفحة.) */
+.bottom-nav {
+  view-transition-name: app-nav;
+}
+.ub {
+  view-transition-name: app-banner;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.26s;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    animation-fill-mode: both;
+    /* المزج الافتراضيّ يُظهر الشاشتين شفّافتين فوق بعضهما أثناء الانزلاق؛
+       `normal` يجعل الواحدة تغطّي الأخرى كصفحة صلبة — الفرق بين انتقال
+       «أصليّ» وآخر يبدو كتلاشٍ باهت. */
+    mix-blend-mode: normal;
+  }
+
+  /* التطبيق RTL: التقدّم = الجديدة تدخل من اليسار وتغطّي القديمة المنزاحة يمينًا. */
+  html[data-nav='forward']::view-transition-new(root) {
+    animation-name: vt-in-start;
+    z-index: 2;
+  }
+  html[data-nav='forward']::view-transition-old(root) {
+    animation-name: vt-out-end;
+    z-index: 1;
+  }
+
+  /* الرجوع عكسه: القديمة (الحاليّة) هي التي تنزلق مبتعدةً **فوق** السابقة
+     العائدة من ورائها — لذا تُرفَع القديمة فوق الجديدة هنا وحدها. */
+  html[data-nav='back']::view-transition-new(root) {
+    animation-name: vt-in-end;
+    z-index: 1;
+  }
+  html[data-nav='back']::view-transition-old(root) {
+    animation-name: vt-out-start;
+    z-index: 2;
+  }
+
+  /* إزاحة الخارجة جزئيّة (٢٢٪) لا كاملة — أثر «منظور» خفيف يوحي بأنّ الشاشة
+     السابقة لا تزال خلف الحاليّة، بدل انزلاق متساوٍ يبدو مبالغًا فيه. */
+  @keyframes vt-in-start {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes vt-out-end {
+    to {
+      transform: translateX(22%);
+      opacity: 0.65;
+    }
+  }
+  @keyframes vt-in-end {
+    from {
+      transform: translateX(100%);
+    }
+  }
+  @keyframes vt-out-start {
+    to {
+      transform: translateX(-22%);
+      opacity: 0.65;
+    }
+  }
+}
+
+/* حيث تعمل انتقالات الشاشات، يصبح ظهور `.page` المتلاشي تكرارًا لحركةٍ قائمة
+   (حركتان متراكبتان على المحتوى نفسه) — فيُلغى ويبقى لغيرها بديلًا. */
+@supports (view-transition-name: none) {
+  .page {
+    animation: none;
+  }
+}
+
+/* احترام تفضيل تقليل الحركة على مستوى التطبيق كلّه — لا انزلاق ولا قفزات ضغط،
+   مع إبقاء الواجهة كاملة الوظائف. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- ردّ فعل اللمس الموحّد ----
+   كلّ ما يُضغَط في التطبيق يستجيب فورًا بانكماش خفيف. `:active` وحده لا يكفي
+   على أندرويد: اللمسة السريعة قد تنتهي قبل رسم الإطار التالي فلا يُرى شيء —
+   لذا مدّة الانكماش صفر (فوريّة) ومدّة الارتداد أطول، فتُلتقَط كلّ لمسة مهما
+   قصرت. `-webkit-tap-highlight-color` مُلغًى أصلًا في أعلى الملفّ، فهذا هو
+   ردّ الفعل الوحيد المرئيّ. */
+.btn,
+.chip,
+.qa,
+.tile,
+.list-item,
+.fab,
+.ops-btn,
+.stat-link,
+.bottom-nav a,
+.app-header .icon-btn {
+  transition:
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    filter var(--ease),
+    background var(--ease),
+    color var(--ease),
+    border-color var(--ease),
+    box-shadow var(--ease);
+  -webkit-touch-callout: none;
+}
+
+.btn:active:not(:disabled),
+.chip:active,
+.qa:active,
+.tile:active,
+.list-item:active,
+.fab:active,
+.ops-btn:active,
+.stat-link:active,
+.bottom-nav a:active,
+.app-header .icon-btn:active {
+  transition-duration: 0s;
+}
+
+.tile:active {
+  transform: scale(0.96);
+  border-color: var(--gold);
+}
+
+/* الشريط السفليّ: الانكماش كان بلا انتقال مُعرَّف للـ transform فيقفز رجوعًا
+   دفعةً واحدة؛ صار ارتداده ناعمًا كبقيّة العناصر أعلاه. */
+.bottom-nav a:active {
+  transform: scale(0.9);
+}
+
+/* التبويب النشط يكبر قليلًا لحظة اختياره — إشارة صغيرة تؤكّد وصول اللمسة. */
+@media (prefers-reduced-motion: no-preference) {
+  .bottom-nav a.active svg {
+    animation: nav-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  @keyframes nav-pop {
+    from {
+      transform: scale(0.82);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
+}
+
+/* ---- صفوف للعرض فقط ----
+   `.list-item` يمنح انكماشًا عند الضغط، وهو وعد بأنّ الصفّ يفتح شيئًا. صفوف
+   العرض المحض (سجلّ تسميع، نتيجة اختبار…) كانت تأخذ هذا الوعد فتنكمش تحت
+   الإصبع ثمّ لا يحدث شيء — إحساس «زرّ معطّل». هذه الصفوف تُعلَّم `is-static`
+   فتحتفظ بشكلها وتتخلّى عن كلّ إيماءة تفاعل. */
+.list-item.is-static {
+  cursor: default;
+}
+.list-item.is-static:active,
+.list-item.is-static:hover {
+  transform: none;
+  border-color: var(--border);
+}
+
+/* ---- إتاحة: حلقة تركيز واضحة لمن يتنقّل بلوحة مفاتيح ----
+   `:focus-visible` لا يظهر عند اللمس أو النقر، فلا يشوّش على مستخدم الجوّال. */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ---- بطاقتا الملخّص في الرئيسية حين تكونان رابطين ----
+   الرقم وحده لا يُفهم منه أنّه مدخل؛ السهم الصغير هو ما يقول «اضغطني». */
+.stat-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.stat-link:active {
+  transform: scale(0.97);
+  border-color: var(--gold);
+}
+
+.stat-link .stat-go {
+  margin-top: 3px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--green-mid);
+  line-height: 1;
+}
+
+@media (hover: hover) {
+  .stat-link:hover {
+    border-color: var(--gold);
+  }
+  .list-item:hover,
+  .tile:hover {
+    border-color: var(--gold);
+  }
 }

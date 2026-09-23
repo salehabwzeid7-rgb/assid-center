@@ -36,6 +36,11 @@ import { DataService } from '../core/data.service';
             }
           </span>
           <span class="msg">{{ t.text }}</span>
+          @if (t.count > 1) {
+            <span class="cnt" [attr.aria-label]="'تكرّرت ' + t.count + ' مرّات'"
+              >×{{ t.count }}</span
+            >
+          }
         </div>
       }
     </div>

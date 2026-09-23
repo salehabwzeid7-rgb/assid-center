@@ -202,7 +202,7 @@ interface Recording {
           @if (examinedRows().length) {
             <div class="section-title">الأجزاء المُختبَرة</div>
             @for (r of examinedRows(); track r.juz) {
-              <div class="list-item" style="cursor:default">
+              <div class="list-item is-static">
                 <span class="avatar">{{ r.juz }}</span>
                 <span class="grow">
                   <span class="primary">الجزء {{ r.juz }}</span>

@@ -5,6 +5,7 @@ import { filter, take } from 'rxjs';
 import { App as CapApp } from '@capacitor/app';
 import { AuthService } from './core/auth.service';
 import { DataService } from './core/data.service';
+import { NavTransitionService } from './core/nav-transition.service';
 import { NotifyService } from './core/notify.service';
 import { ThemeService } from './core/theme.service';
 import { UpdateService } from './core/update.service';
@@ -39,11 +40,14 @@ export class App {
   private theme = inject(ThemeService);
   // فحص التحديثات المباشرة (OTA) على أندرويد
   private update = inject(UpdateService);
+  // يكتب اتّجاه الانتقال على <html> قبل كلّ تنقّل
+  private navTransition = inject(NavTransitionService);
   private auth = inject(AuthService);
   private data = inject(DataService);
   private notify = inject(NotifyService);
 
   constructor() {
+    this.navTransition.init();
     this.update.init();
     this.hideSplashWhenReady();
     this.autoUpgradeLegacyAccount();
