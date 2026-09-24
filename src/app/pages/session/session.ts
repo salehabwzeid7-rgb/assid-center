@@ -1357,7 +1357,7 @@ export class SessionPage {
     if (this.opening || this.session()?.status !== 'scheduled') return;
     this.opening = true;
     try {
-      await this.data.setSessionStatus(this.id, 'open');
+      await this.data.setSessionStatus(this.id, 'open', this.circle()?.name);
     } catch (e) {
       console.error(e);
     } finally {
@@ -1494,7 +1494,7 @@ export class SessionPage {
         this.notify.error('تعذّر تسجيل وقت انصراف بعض الطلّاب تلقائيًّا — يمكنك تعديله يدويًّا');
       }
     }
-    await this.notify.run(() => this.data.setSessionStatus(this.id, status), {
+    await this.notify.run(() => this.data.setSessionStatus(this.id, status, this.circle()?.name), {
       success: status === 'closed' ? 'أُنهيت الجلسة' : 'أُعيد فتح الجلسة',
       error: 'تعذّر تغيير حالة الجلسة',
     });

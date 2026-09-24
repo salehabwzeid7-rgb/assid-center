@@ -18,12 +18,15 @@ import {
   increment,
   runTransaction,
   collectionGroup,
+  orderBy,
+  limit as fbLimit,
   type CollectionReference,
   type DocumentReference,
   type Query,
   type QueryConstraint,
   type DocumentData,
 } from 'firebase/firestore';
+import { Capacitor } from '@capacitor/core';
 import { db } from './firebase';
 import { AuthService } from './auth.service';
 import { NotifyService } from './notify.service';
@@ -53,6 +56,7 @@ import {
   type ActivityLogEntry,
   type PlatformTeacherSummary,
   type PlatformMirrorItem,
+  type PlatformSessionMirror,
   type PlatformStats,
   isActualRecitation,
 } from './models';
@@ -468,6 +472,42 @@ export class DataService {
     }
   }
 
+  /**
+   * مرآة حدث فتح/إغلاق جلسة (v1.34) — سجلّ دائم لا يُحذف (خلافًا لـ
+   * circleMirror/studentMirror اللتين تُحذَفان مع حذف أصلهما)، بمعرّف الجلسة
+   * نفسه فيُستبدَل بالكامل عند كل تبديل حالة تالٍ (لا تراكم نسخ لنفس الجلسة).
+   * `circleName` اختياريّ: غيابه (استدعاء لا يملكه) لا يمنع تسجيل الحدث،
+   * فقط يترك الاسم فارغًا — أفضل من فقدان السجلّ بالكامل.
+   */
+  private async writePlatformSessionMirror(
+    sessionId: string,
+    before: Session,
+    status: SessionStatus,
+    circleName: string | undefined,
+    deviceId: string,
+    platform: string,
+  ): Promise<void> {
+    try {
+      const uid = this.auth.user()?.uid;
+      const teacherName = this.auth.teacher()?.name ?? '';
+      if (!uid) return;
+      const payload: Omit<PlatformSessionMirror, 'id'> = {
+        circleId: before.circleId,
+        circleName: circleName ?? '',
+        teacherId: uid,
+        teacherName,
+        date: before.date,
+        status,
+        deviceId,
+        platform,
+        updatedAt: Date.now(),
+      };
+      await setDoc(doc(db, PLATFORM_COL.teachers, uid, 'sessionMirror', sessionId), payload);
+    } catch {
+      // صامت عمدًا — راجع ملاحظة writePlatformDeletedItem أعلاه.
+    }
+  }
+
   /** سجلّ الحركات كاملًا — الأحدث أوّلًا. تُستخدم في شاشة «سجل الحركات» فقط. */
   activityLog(destroyRef?: DestroyRef): Signal<ActivityLogEntry[] | undefined> {
     return this.live<ActivityLogEntry>(
@@ -660,13 +700,21 @@ export class DataService {
     return this.getOne<Session>(COL.sessions, id);
   }
 
-  async setSessionStatus(id: string, status: SessionStatus): Promise<void> {
+  async setSessionStatus(id: string, status: SessionStatus, circleName?: string): Promise<void> {
     const before = await this.getOneForAudit<Session>(COL.sessions, id);
+    const deviceId = this.auth.getOrCreateDeviceId();
+    const platform = Capacitor.getPlatform();
     await updateDoc(this.ref(COL.sessions, id), {
       status,
+      deviceId,
+      platform,
       ...(status === 'closed' ? { closedAt: Date.now() } : {}),
     });
     if (before && before.status !== status) {
+      // مرآة لوحة المالك: أيّ جهاز فتح/أغلق هذه الجلسة — راجع تعليق
+      // PlatformSessionMirror في models.ts. أفضل مجهود صامت، لا يوقف العمليّة
+      // الأصليّة لو فشل (نفس فلسفة كل كتابات لوحة المالك الأخرى).
+      void this.writePlatformSessionMirror(id, before, status, circleName, deviceId, platform);
       await this.logActivity({
         action: 'update',
         target: 'session',
@@ -1828,20 +1876,66 @@ export class DataService {
   }
 
   /**
-   * بحث/عرض فقط عن طالب بالاسم عبر كل المعلّمين دفعة واحدة (collectionGroup)
-   * — **بلا أيّ دمج أو محاولة مطابقة** بين نتائج معلّمين مختلفين (قرار متعمَّد
-   * بموافقة المستخدم: لا يوجد معرّف فريد حقيقيّ للطالب في هذا التطبيق، فتشابه
-   * الاسم لا يعني بالضرورة نفس الطفل — كل نتيجة سجلّ طالب مستقلّ تمامًا تحت
-   * معلّمه). مطابقة جزئيّة بسيطة من جهة العميل (Firestore لا يدعم بحث نصّيّ).
+   * آخر ٥٠ حدث فتح/إغلاق جلسة لمعلّم محدَّد، الأحدث أوّلًا — لتبويب «الأجهزة
+   * والجلسات» في تفاصيل المعلّم من لوحة المالك (v1.34).
    */
-  async searchPlatformStudents(nameQuery: string): Promise<PlatformMirrorItem[]> {
-    const q = nameQuery.trim();
-    if (!q) return [];
-    const snap = await getDocs(collectionGroup(db, 'studentMirror'));
-    const norm = (s: string) => s.trim();
-    return snap.docs
-      .map((d) => d.data() as PlatformMirrorItem)
-      .filter((s) => norm(s.name).includes(norm(q)));
+  platformTeacherSessions(
+    uid: string,
+    destroyRef?: DestroyRef,
+  ): Signal<PlatformSessionMirror[] | undefined> {
+    const out = signal<PlatformSessionMirror[] | undefined>(undefined);
+    const unsub = onSnapshot(
+      query(
+        collection(db, PLATFORM_COL.teachers, uid, 'sessionMirror'),
+        orderBy('updatedAt', 'desc'),
+        fbLimit(50),
+      ),
+      (snap) => {
+        out.set(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as PlatformSessionMirror));
+      },
+    );
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /**
+   * كل الحلقات عبر كل المعلّمين دفعة واحدة (collectionGroup) — لصفحة تصفّح
+   * الحلقات من لوحة المالك (v1.34)، مطابقًا تمامًا لأسلوب `searchPlatformStudents`
+   * (عرض فقط، بلا أيّ دمج أو فرز خادميّ يحتاج فهرسًا مركّبًا).
+   */
+  platformAllCircles(destroyRef?: DestroyRef): Signal<PlatformMirrorItem[] | undefined> {
+    const out = signal<PlatformMirrorItem[] | undefined>(undefined);
+    const unsub = onSnapshot(collectionGroup(db, 'circleMirror'), (snap) => {
+      out.set(
+        snap.docs
+          .map((d) => d.data() as PlatformMirrorItem)
+          .sort((a, b) => b.createdAt - a.createdAt),
+      );
+    });
+    destroyRef?.onDestroy(unsub);
+    return out;
+  }
+
+  /**
+   * كل الطلّاب عبر كل المعلّمين دفعة واحدة (collectionGroup، حيّة) — لصفحة
+   * تصفّح/بحث الطلّاب من لوحة المالك (v1.34؛ كانت `searchPlatformStudents`
+   * السابقة بحثًا لمرّة واحدة بلا تصفّح، فلا تعرض شيئًا قبل الكتابة — استُبدلت
+   * بهذه لإتاحة «كل الطلّاب» كقائمة فعليّة، والتصفية تحدث محليًّا في الصفحة).
+   * **بلا أيّ دمج أو محاولة مطابقة** بين نتائج معلّمين مختلفين (قرار متعمَّد
+   * بموافقة المستخدم: لا يوجد معرّف فريد حقيقيّ للطالب في هذا التطبيق، فتشابه
+   * الاسم لا يعني بالضرورة نفس الطفل — كل نتيجة سجلّ طالب مستقلّ تمامًا تحت معلّمه).
+   */
+  platformAllStudents(destroyRef?: DestroyRef): Signal<PlatformMirrorItem[] | undefined> {
+    const out = signal<PlatformMirrorItem[] | undefined>(undefined);
+    const unsub = onSnapshot(collectionGroup(db, 'studentMirror'), (snap) => {
+      out.set(
+        snap.docs
+          .map((d) => d.data() as PlatformMirrorItem)
+          .sort((a, b) => b.createdAt - a.createdAt),
+      );
+    });
+    destroyRef?.onDestroy(unsub);
+    return out;
   }
 
   /** سجلّ كل حركات الحذف عبر كل المعلّمين — للوحة المالك فقط. */
@@ -1870,11 +1964,51 @@ export class DataService {
     const snap = await getDoc(doc(db, PLATFORM_COL.deletedItems, logId));
     if (!snap.exists()) throw new Error('لم يُعثر على سجلّ هذه الحركة');
     const entry = snap.data() as ActivityLogEntry;
+
+    // حساب معلّم موقوف (v1.34) — استعادة مختلفة تمامًا عن بقيّة الأنواع: لا
+    // `snapshots` هنا إطلاقًا (لم نُخزِّن نسخة من مستند platformTeachers كاملًا
+    // عمدًا — إعادة كتابته بالكامل كانت ستمحو عدّاداته الحاليّة إن تغيّرت منذ
+    // الإيقاف). المطلوب فقط مسح `disabledAt`، لا استبدال المستند.
+    if (entry.target === 'teacher') {
+      if (!entry.teacherUid) throw new Error('سجلّ حساب معلّم بلا معرّف — تعذّرت الاستعادة');
+      await updateDoc(doc(db, PLATFORM_COL.teachers, entry.teacherUid), {
+        disabledAt: deleteField(),
+      });
+      await updateDoc(doc(db, PLATFORM_COL.deletedItems, logId), { restoredAt: Date.now() });
+      return;
+    }
+
     if (!entry.snapshots?.length) throw new Error('لا توجد بيانات محفوظة لاستعادتها لهذه الحركة');
     for (const s of entry.snapshots) {
       await setDoc(this.ref(s.collectionName, s.id), s.data);
     }
     await updateDoc(doc(db, PLATFORM_COL.deletedItems, logId), { restoredAt: Date.now() });
+  }
+
+  /**
+   * يوقف حساب معلّم (v1.34) — لوحة المالك فقط (`isPlatformOwner()` في
+   * firestore.rules). لا يحذف حساب Firebase Auth نفسه ولا أيًّا من بياناته
+   * الحقيقيّة (circles/students/...، تبقى سليمة تمامًا) — فقط يمنع الدخول
+   * (`AuthService.loadOrCreateTeacher` يرفضه عند أوّل تحقّق تالٍ) ويُسجَّله في
+   * «سجلّ المحذوفات» قابلًا للاستعادة الفوريّة (مسح `disabledAt` فقط).
+   *
+   * حذف حساب Firebase Auth فعليًّا وبياناته نهائيًّا يتطلّب Admin SDK (Cloud
+   * Function) — غير متاح على خطّة Spark الحاليّة بلا ترقية، ومتروك عمدًا
+   * خارج هذه الدالّة (قرار تكلفة يخصّ صاحب المشروع، لا قرارًا تقنيًّا فقط).
+   */
+  async disableTeacherAccount(uid: string, name: string, email: string): Promise<void> {
+    await updateDoc(doc(db, PLATFORM_COL.teachers, uid), { disabledAt: Date.now() });
+    const logRef = doc(collection(db, PLATFORM_COL.deletedItems));
+    const payload: Omit<ActivityLogEntry, 'id'> = {
+      action: 'delete',
+      target: 'teacher',
+      summary: `إيقاف حساب المعلّم «${name}» (${email})`,
+      teacherUid: uid,
+      actorName: this.auth.teacher()?.name || 'المالك',
+      createdAt: Date.now(),
+      restoredAt: null,
+    };
+    await setDoc(logRef, clean(payload));
   }
 }
 

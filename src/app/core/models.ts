@@ -312,6 +312,14 @@ export interface Session extends Owned {
   note?: string;
   createdAt: number;
   closedAt?: number;
+  /**
+   * الجهاز/المنصّة اللذان فتحا هذه الجلسة آخر مرّة (v1.34) — يُكتَبان في
+   * `DataService.setSessionStatus` عند كلّ انتقال إلى 'open'، لا عند الإنشاء
+   * المجدوَل وحده. لأغراض لوحة المالك فقط (نفس معرّف الجهاز المحليّ
+   * المستخدَم في `Teacher.deviceId`) — لا يظهران في واجهة المعلّم نفسها.
+   */
+  deviceId?: string;
+  platform?: string;
 }
 
 /** سجل الحضور (ضمن جلسة) */
@@ -586,7 +594,9 @@ export type ActivityTarget =
   | 'evaluation'
   | 'serd'
   | 'exam'
-  | 'tajweedExam';
+  | 'tajweedExam'
+  /** إيقاف حساب معلّم من لوحة المالك (v1.34) — راجع PlatformTeacherSummary.disabledAt. */
+  | 'teacher';
 
 export const ACTIVITY_TARGET_LABELS: Record<ActivityTarget, string> = {
   student: 'طالب',
@@ -598,6 +608,7 @@ export const ACTIVITY_TARGET_LABELS: Record<ActivityTarget, string> = {
   serd: 'سرد',
   exam: 'اختبار',
   tajweedExam: 'اختبار تجويد',
+  teacher: 'حساب معلّم',
 };
 
 /** حقل تغيّر ضمن حركة «تعديل» — بقيمتيه قبل وبعد، لعرض تفصيليّ. */
@@ -633,6 +644,13 @@ export interface ActivityLogEntry extends Owned {
   actorName?: string;
   /** وقت الاستعادة إن استُعيدت هذه الحركة (null/غائب = لم تُستعَد بعد). */
   restoredAt?: number | null;
+  /**
+   * معرّف حساب المعلّم المتأثّر — target='teacher' فقط (v1.34). استعادة هذا
+   * النوع لا تُعيد كتابة `snapshots` كبقيّة الأنواع (كانت ستستبدل مستند ملخّص
+   * المعلّم كاملًا فتمحو عدّاداته)؛ بدلًا من ذلك تمسح `disabledAt` تحديدًا عن
+   * `platformTeachers/{teacherUid}` — راجع DataService.restorePlatformDeletedItem.
+   */
+  teacherUid?: string;
   createdAt: number;
 }
 
@@ -678,6 +696,14 @@ export interface PlatformTeacherSummary {
   memorizedCount: number;
   createdAt: number;
   lastActiveAt: number;
+  /**
+   * وقت إيقاف الحساب من المالك (v1.34) — `null`/غياب = نشط. الحساب المُعطَّل
+   * يُرفَض تلقائيًّا عند أوّل تحقّق تالٍ من حالة الدخول (راجع
+   * AuthService.loadOrCreateTeacher)، ويُسجَّل إيقافه في `platformDeletedItems`
+   * (target='teacher') قابلًا للاستعادة بمسح هذا الحقل — لا حذف فعليّ لحساب
+   * Firebase Auth نفسه (يتطلّب Cloud Functions/خطّة Blaze، خارج نطاق هذا).
+   */
+  disabledAt?: number | null;
 }
 
 /** نسخة خفيفة لحلقة/طالب ضمن ملخّص معلّم — للتصفّح والبحث من لوحة المالك فقط. */
@@ -687,6 +713,26 @@ export interface PlatformMirrorItem {
   teacherId: string;
   teacherName: string;
   createdAt: number;
+}
+
+/**
+ * نسخة خفيفة لحدث «فتح/إغلاق جلسة» — مرآة لوحة المالك (v1.34)، منفصلة تمامًا
+ * عن مجموعة `sessions` الحقيقيّة (نفس فلسفة circleMirror/studentMirror).
+ * تُكتَب من جهاز المعلّم نفسه عند كلّ تبديل حالة جلسة (`DataService.setSessionStatus`)
+ * — هذا بالضبط ما يجعلها «سجلّ جهاز استُخدم لأداء الجلسة»، لا مجرّد وقت الإنشاء.
+ */
+export interface PlatformSessionMirror {
+  id: string;
+  circleId: string;
+  circleName: string;
+  teacherId: string;
+  teacherName: string;
+  date: string;
+  status: SessionStatus;
+  deviceId?: string;
+  platform?: string;
+  /** آخر وقت تبديل حالة (فتح أو إغلاق) — يُستبدَل بالكامل في كل مرّة. */
+  updatedAt: number;
 }
 
 /** عدّادات عامّة على مستوى المنصّة — مستند واحد، يُحدَّث بـ increment() من كل الأجهزة. */

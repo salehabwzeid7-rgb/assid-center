@@ -39,6 +39,11 @@ export const routes: Routes = [
           ),
       },
       {
+        path: 'circles',
+        loadComponent: () =>
+          import('./pages/owner-circles/owner-circles').then((m) => m.OwnerCirclesPage),
+      },
+      {
         path: 'teacher/:uid',
         loadComponent: () =>
           import('./pages/owner-teacher-detail/owner-teacher-detail').then(

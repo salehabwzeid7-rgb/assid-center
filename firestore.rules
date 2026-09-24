@@ -179,6 +179,10 @@ service cloud.firestore {
       allow get: if isPlatformOwner() || (signedIn() && request.auth.uid == uid);
       allow list: if isPlatformOwner();
       allow write: if signedIn() && request.auth.uid == uid;
+      // إيقاف/استعادة حساب معلّم (v1.34) — تعديل حقل disabledAt فقط. عمليّة
+      // مستند مفرد بمعرّف {uid} محدَّد سلفًا (لا list)، فآمنة مع OR بنفس منطق
+      // create الحاليّ لدى circles/students/... أعلاه (isOwner() || isPlatformOwner()).
+      allow update: if isPlatformOwner();
 
       match /circleMirror/{id} {
         allow get, list: if isPlatformOwner();
@@ -188,6 +192,19 @@ service cloud.firestore {
         allow get, list: if isPlatformOwner();
         allow write: if signedIn() && request.auth.uid == uid;
       }
+      // مرآة أحداث فتح/إغلاق الجلسات (v1.34) — جهاز/منصّة كلّ حدث، لعرضها في
+      // تفاصيل المعلّم من لوحة المالك. نفس نمط circleMirror/studentMirror بالضبط.
+      match /sessionMirror/{id} {
+        allow get, list: if isPlatformOwner();
+        allow write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // استعلام جماعيّ (collectionGroup) عبر كل circleMirror الفرعيّة (v1.34) —
+    // تصفّح كل الحلقات عبر كل المعلّمين دفعة واحدة من لوحة المالك. نفس تحذير
+    // الأمان أدناه بالضبط: الاسم circleMirror (لا "circles") متعمَّد وضروريّ.
+    match /{path=**}/circleMirror/{id} {
+      allow list: if isPlatformOwner();
     }
 
     // استعلام جماعيّ (collectionGroup) عبر كل studentMirror الفرعيّة — بحث عن

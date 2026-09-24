@@ -8,7 +8,7 @@ import {
   updateProfile,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { TEACHERS, PLATFORM_COL, OWNER_EMAIL, type Teacher } from './models';
 
@@ -20,6 +20,14 @@ export class AuthService {
   readonly teacher = signal<Teacher | null>(null);
   /** هل انتهى فحص حالة الدخول الأولي؟ */
   readonly ready = signal(false);
+  /**
+   * true لحظة رفض دخول حساب أوقفه المالك (v1.34) — يُضبَط داخل
+   * `loadOrCreateTeacher` ويقرؤه `login()` فورًا بعدها ليرمي خطأً بصيغة
+   * `auth/user-disabled` (نفس رمز خطأ Firebase الحقيقيّ لحساب مُعطَّل من
+   * Firebase Console، فتُعاد استخدام رسالته الجاهزة في login.ts::mapAuthError
+   * بلا تكرار نصّ). يُعاد ضبطه false في بداية كل محاولة دخول جديدة.
+   */
+  private wasJustDisabled = false;
 
   private resolveReady!: () => void;
   /** وعد يُحَل بعد اكتمال فحص حالة الدخول الأولي (يُستخدم في الحُرّاس) */
@@ -89,10 +97,14 @@ export class AuthService {
    * بالضبط بسبب غياب علامة لم تُضبط بعد.
    */
   async login(identifier: string, password: string): Promise<void> {
+    this.wasJustDisabled = false;
     const email = this.identifierToEmail(identifier);
     if (email.toLowerCase() === OWNER_EMAIL) this.setOwnerSessionFlag();
     const cred = await signInWithEmailAndPassword(auth, email, password);
     await this.loadOrCreateTeacher(cred.user);
+    if (this.wasJustDisabled) {
+      throw Object.assign(new Error('هذا الحساب موقوف'), { code: 'auth/user-disabled' });
+    }
   }
 
   /** إنشاء حساب معلّم جديد من الصفر — يحصل على مساحة عمل معزولة خاصّة به. */
@@ -164,11 +176,44 @@ export class AuthService {
   }
 
   /**
-   * يقرأ ملف المعلّم، وينشئه تلقائيًا إن لم يكن موجودًا.
-   * الملفّ الموجود يُحمَّل كما هو (حساب قديم يبقى في المساحة المشتركة بلا مساس).
-   * الملفّ المُنشَأ حديثًا يحصل على مساحة معزولة.
+   * يقرأ ملف المعلّم، وينشئه تلقائيًا إن لم يكن موجودًا (`doLoadOrCreateTeacher`
+   * أدناه). الملفّ الموجود يُحمَّل كما هو (حساب قديم يبقى في المساحة المشتركة
+   * بلا مساس)؛ الملفّ المُنشَأ حديثًا يحصل على مساحة معزولة.
+   *
+   * استدعاءان متزامنان محتملان لنفس uid — من `login()` مباشرة، ومن مستمع
+   * `onAuthStateChanged` في الباني الذي يُطلَق مستقلًّا حين يكتمل نفس تسجيل
+   * الدخول (كلاهما يستدعي هذه الدالّة على نفس حدث الدخول). كانا غير مؤذيين
+   * قبل فحص الإيقاف (كتابات idempotent كـ`touchPlatformTeacher`)، لكن معه
+   * صارا خطرًا حقيقيًّا: لو نفّذ الاستدعاء الأوّل `signOut()` بعد اكتشاف
+   * الإيقاف بينما طلب `getDoc` الخاصّ بالاستدعاء الثاني لا يزال معلَّقًا، يفقد
+   * الثاني صلاحيّة القراءة (`permission-denied`) فيُعامَل الفشل كـ«غير موقوف»
+   * (نهج التساهل الآمن في `isTeacherDisabled`) — يُتيح هذا فعليًّا الدخول رغم
+   * الإيقاف. الإصلاح: قفل بسيط بمعرّف uid، فلا ينفّذ المنطق الفعليّ إلّا
+   * استدعاء واحد لكلّ دخول، ويُعيد الآخر استخدام نتيجته نفسها.
    */
+  private pendingLoads = new Map<string, Promise<void>>();
   private async loadOrCreateTeacher(u: User): Promise<void> {
+    const existing = this.pendingLoads.get(u.uid);
+    if (existing) return existing;
+    const p = this.doLoadOrCreateTeacher(u).finally(() => this.pendingLoads.delete(u.uid));
+    this.pendingLoads.set(u.uid, p);
+    return p;
+  }
+
+  private async doLoadOrCreateTeacher(u: User): Promise<void> {
+    // حساب موقوف من المالك (v1.34) — يُتحقَّق منه أوّلًا، قبل أيّ كتابة أو
+    // تحميل ملفّ. حساب المالك نفسه مستثنًى دائمًا (لا مستند platformTeachers
+    // له أصلًا، ولا معنى لإيقافه من نفسه). راجع تعليق wasJustDisabled أعلاه.
+    if ((u.email ?? '').toLowerCase() !== OWNER_EMAIL) {
+      const disabled = await this.isTeacherDisabled(u.uid);
+      if (disabled) {
+        this.wasJustDisabled = true;
+        this.user.set(null);
+        this.teacher.set(null);
+        await signOut(auth);
+        return;
+      }
+    }
     const ref = doc(db, TEACHERS, u.uid);
     const snap = await getDoc(ref);
     if (snap.exists()) {
@@ -197,9 +242,10 @@ export class AuthService {
    * لأغراض لوحة المالك فقط (v1.26.0): عدّ الأجهزة الفريدة وربط الحسابات
    * المتعدّدة على نفس الجهاز. ليس معرّف جهاز حقيقيًّا على مستوى النظام (يُفقَد
    * لو مُسحت بيانات المتصفّح/التطبيق) — أقرب تقدير ممكن بلا Cloud Functions
-   * ولا نشر على متجر يوفّر رقم تثبيت حقيقيًّا.
+   * ولا نشر على متجر يوفّر رقم تثبيت حقيقيًّا. عامّ (v1.34) — DataService
+   * يستخدمه أيضًا لختم كلّ حدث فتح جلسة بنفس معرّف الجهاز.
    */
-  private getOrCreateDeviceId(): string {
+  getOrCreateDeviceId(): string {
     const KEY = 'almaher_device_id';
     try {
       let id = localStorage.getItem(KEY);
@@ -275,6 +321,32 @@ export class AuthService {
       );
     } catch {
       // صامت عمدًا — راجع الملاحظة أعلاه.
+    }
+  }
+
+  /**
+   * هل أوقف المالك هذا الحساب؟ (v1.34) — فشل القراءة (لا اتّصال، أو حساب
+   * أُنشئ قبل ميزة لوحة المالك فلا مستند platformTeachers له بعد) يُعامَل
+   * كـ«غير موقوف» عمدًا: منع الدخول بسبب فشل شبكة عابر أسوأ بكثير من السماح
+   * لحساب لم يُتحقَّق حظره فعليًّا (وهو الافتراض الآمن الوحيد المتاح هنا بلا
+   * إعادة محاولة، فالتطبيق كلّه يعتمد أصلًا على العمل دون اتصال).
+   */
+  private async isTeacherDisabled(uid: string): Promise<boolean> {
+    try {
+      // getDocFromServer لا getDoc العادية عمدًا: التخزين المحلّيّ الدائم
+      // (persistentLocalCache في firebase.ts) قد يُرجع نسخة مخبَّأة قديمة —
+      // خلل حقيقيّ رُصد بالاختبار: حساب أُوقف من جهاز آخر (المالك) كان لا
+      // يزال يُقرأ "غير موقوف" من هذا الجهاز لأنّ القراءة الأولى لهذا المستند
+      // على هذا الجهاز (فحص الإيقاف نفسه لا شيء غيره) تعود من الذاكرة المؤقّتة
+      // قبل تلقّي أيّ نسخة من الخادم. هذا الفحص أمنيّ بحت (بوّابة دخول)، فلا
+      // يجوز أن يثق بنسخة قد تكون قديمة — الشبكة البطيئة تفشل بأمان (catch
+      // أدناه يعيد false)، وهذا أفضل من نجاح خاطئ بحساب مُفترَض موقوفًا.
+      const snap = await getDocFromServer(doc(db, PLATFORM_COL.teachers, uid));
+      if (!snap.exists()) return false;
+      const data = snap.data() as { disabledAt?: number | null };
+      return !!data.disabledAt;
+    } catch {
+      return false;
     }
   }
 
