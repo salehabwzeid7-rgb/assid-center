@@ -27,6 +27,7 @@
 
 - **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام · `origin` · فرع `master`).
 - **رابط تحميل APK المباشر (للمشاركة):** `https://assid-center.web.app/download` (Firebase Hosting، الملفّ `public-apk/app.bin` بامتداد `.bin` لأنّ خطّة Spark تمنع رفع `.apk`؛ ترويسات `firebase.json` تجعله يُنزَّل ويُثبَّت كـ APK).
+- **موقع الويب (PWA لآيفون/آيباد وأيّ متصفّح):** `https://almaher-teacher.web.app` — موقع Firebase Hosting ثانٍ منفصل تمامًا (هدف `webapp` في `firebase.json`)، ينشر `dist/assid-center/browser` مباشرةً بلا Capacitor ولا OTA. يُنشَر يدويًّا: `npx firebase deploy --only hosting:webapp` — راجع DEPLOY.md § ٦.
 
 1. بعد اكتمال التغييرات والتحقّق منها، شغّل: `/deploy [patch|minor|major]` (أو `npm run release -- <level> --push`).
 2. `scripts/release.mjs`: رفع الرقم → تنسيق → بناء → `commit` + `tag vX.Y.Z` → دفع → ثمّ `publish-apk.mjs` (بناء APK محليًّا + `firebase deploy --only hosting`).

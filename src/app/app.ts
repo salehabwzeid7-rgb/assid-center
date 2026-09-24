@@ -11,6 +11,7 @@ import { ThemeService } from './core/theme.service';
 import { UpdateService } from './core/update.service';
 import { UpdateBannerComponent } from './shared/update-banner';
 import { BottomNavComponent } from './shared/bottom-nav';
+import { IosInstallBannerComponent } from './shared/ios-install-banner';
 import { ToastHostComponent } from './shared/toast-host';
 
 declare global {
@@ -22,13 +23,22 @@ declare global {
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, ToastHostComponent, BottomNavComponent, UpdateBannerComponent],
+  imports: [
+    RouterOutlet,
+    ToastHostComponent,
+    BottomNavComponent,
+    UpdateBannerComponent,
+    IosInstallBannerComponent,
+  ],
   template: `
     <div class="app-shell">
       <!-- تنبيه تقادم القشرة الأصليّة — يخصّ التطبيق كلّه لا شاشة بعينها. -->
       <app-update-banner />
       <router-outlet />
       <app-bottom-nav />
+      <!-- دعوة تثبيت PWA — سفاري على iOS فقط، ولا تظهر إن كان التطبيق مثبَّتًا
+           أصلًا أو داخل غلاف Capacitor الأصليّ (راجع الفحوص داخل المكوّن). -->
+      <app-ios-install-banner />
     </div>
     <app-toast-host />
   `,

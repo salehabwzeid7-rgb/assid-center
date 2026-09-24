@@ -4,6 +4,10 @@
 
 - **رابط التحميل المباشر (للمشاركة في واتساب):** `https://assid-center.web.app/download`
   — يفتح فيُنزّل الـ APK فورًا (بلا صفحة)، ويثبّته أندرويد مباشرةً. صفحة تحميل بزرّ: `https://assid-center.web.app`
+- **موقع الويب (PWA — آيفون/آيباد وأيّ متصفّح):** `https://almaher-teacher.web.app`
+  — نفس التطبيق بلا Capacitor، يُضاف يدويًّا للشاشة الرئيسية عبر سفاري (زرّ مشاركة ←
+  «إضافة إلى الشاشة الرئيسية»؛ التطبيق يعرض هذا الإرشاد تلقائيًّا لزوّار iOS). راجع
+  قسم «٦» أدناه.
 - **المستودع:** https://github.com/salehabwzeid7-rgb/assid-center (عام)
 - **أرشيف النسخ:** https://github.com/salehabwzeid7-rgb/assid-center/releases
 
@@ -106,3 +110,33 @@ npm run apk:debug     # يحتاج JDK 21 + Android SDK — الناتج في م
 - **يكفي الويب:** تعديلات Angular/HTML/CSS/منطق TS. **يحتاج APK جديدًا:** إضافة Capacitor جديدة،
   إذن أندرويد جديد، تغيير في `capacitor.config.ts` بخصوص الطبقة الأصليّة، رفع `versionCode`.
 - عند تثبيت APK أحدث، تُمسح الحزم المُنزَّلة ويُعاد الاعتماد على حزمة الويب المدمجة (`resetWhenUpdate`).
+
+---
+
+## ٦) موقع الويب (PWA) — `almaher-teacher.web.app`
+
+نسخة ويب صرفة (بلا Capacitor، بلا OTA — كلّ زيارة تحمّل أحدث نسخة تلقائيًّا كأيّ
+موقع عاديّ) لمن لا يملك أندرويد، وتحديدًا **آيفون/آيباد** حيث لا يوجد بديل لمتجر
+APK المباشر (أبل تمنع التثبيت الجانبيّ خارج App Store). نفس شيفرة التطبيق بلا أيّ
+تعديل وظيفيّ — الفرق طبقة PWA فقط:
+
+- `public/manifest.webmanifest` + `public/icons/*` (مولَّدة من أيقونة أندرويد
+  الحاليّة `ic_launcher.png`، لا حاجة لتصميم منفصل).
+- وسوم `apple-touch-icon` / `apple-mobile-web-app-*` في `src/index.html` — سفاري
+  لا يقرأ `manifest.webmanifest` بالكامل كأندرويد فيحتاجها صراحةً.
+- `IosInstallBannerComponent` (`src/app/shared/ios-install-banner.ts`) — أبل لا
+  تُطلق حدث `beforeinstallprompt` كأندرويد/كروم، فلا نافذة تثبيت تلقائيّة؛ هذا
+  الشريط يظهر فقط لزوّار سفاري على iOS غير المثبَّت أصلًا، ويُغلَق نهائيًّا
+  (تخزين محليّ) بعد أوّل إغلاق يدويّ.
+
+**استضافة منفصلة تمامًا عن صفحة تحميل الـ APK** — موقع Firebase Hosting ثانٍ
+(`almaher-teacher`) بهدف `webapp` في `firebase.json`/`​.firebaserc`، فلا يتأثّر
+أيّ من مسارَي `/download`/`/apk` الحاليَّين بأيّ نشر لهذا الموقع أو العكس.
+
+```bash
+npm run build:prod
+npx firebase deploy --only hosting:webapp --project assid-center
+```
+
+> لا خطوة تلقائيّة لهذا ضمن `npm run release` حاليًّا — يُنشَر يدويًّا عند الحاجة
+> (تعديلات واجهة تخصّ زوّار iOS، أو لمزامنته مع إصدار أندرويد جديد).

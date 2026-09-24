@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "assid-center"
-  }
+  },
+  "targets": {
+    "assid-center": {
+      "hosting": {
+        "downloadsite": [
+          "assid-center"
+        ],
+        "webapp": [
+          "almaher-teacher"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

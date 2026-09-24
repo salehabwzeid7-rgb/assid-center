@@ -3,69 +3,94 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "hosting": {
-    "public": "public-apk",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      { "source": "/download", "destination": "/app.bin" },
-      { "source": "/apk", "destination": "/app.bin" }
-    ],
-    "headers": [
-      {
-        "source": "**/*.bin",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "application/vnd.android.package-archive"
-          },
-          {
-            "key": "Content-Disposition",
-            "value": "attachment; filename=\"AlMaher-Teacher.apk\""
-          },
-          { "key": "Cache-Control", "value": "no-cache, max-age=0" }
-        ]
-      },
-      {
-        "source": "/download",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "application/vnd.android.package-archive"
-          },
-          {
-            "key": "Content-Disposition",
-            "value": "attachment; filename=\"AlMaher-Teacher.apk\""
-          },
-          { "key": "Cache-Control", "value": "no-cache, max-age=0" }
-        ]
-      },
-      {
-        "source": "/apk",
-        "headers": [
-          {
-            "key": "Content-Type",
-            "value": "application/vnd.android.package-archive"
-          },
-          {
-            "key": "Content-Disposition",
-            "value": "attachment; filename=\"AlMaher-Teacher.apk\""
-          },
-          { "key": "Cache-Control", "value": "no-cache, max-age=0" }
-        ]
-      },
-      {
-        "source": "/ota/bundle-*.zip",
-        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
-      },
-      {
-        "source": "/ota/latest.json",
-        "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0" },
-          { "key": "Access-Control-Allow-Origin", "value": "*" }
-        ]
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "downloadsite",
+      "public": "public-apk",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "rewrites": [
+        { "source": "/download", "destination": "/app.bin" },
+        { "source": "/apk", "destination": "/app.bin" }
+      ],
+      "headers": [
+        {
+          "source": "**/*.bin",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/vnd.android.package-archive"
+            },
+            {
+              "key": "Content-Disposition",
+              "value": "attachment; filename=\"AlMaher-Teacher.apk\""
+            },
+            { "key": "Cache-Control", "value": "no-cache, max-age=0" }
+          ]
+        },
+        {
+          "source": "/download",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/vnd.android.package-archive"
+            },
+            {
+              "key": "Content-Disposition",
+              "value": "attachment; filename=\"AlMaher-Teacher.apk\""
+            },
+            { "key": "Cache-Control", "value": "no-cache, max-age=0" }
+          ]
+        },
+        {
+          "source": "/apk",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/vnd.android.package-archive"
+            },
+            {
+              "key": "Content-Disposition",
+              "value": "attachment; filename=\"AlMaher-Teacher.apk\""
+            },
+            { "key": "Cache-Control", "value": "no-cache, max-age=0" }
+          ]
+        },
+        {
+          "source": "/ota/bundle-*.zip",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        },
+        {
+          "source": "/ota/latest.json",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-cache, no-store, max-age=0" },
+            { "key": "Access-Control-Allow-Origin", "value": "*" }
+          ]
+        }
+      ]
+    },
+    {
+      "target": "webapp",
+      "public": "dist/assid-center/browser",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "cleanUrls": true,
+      "trailingSlash": false,
+      "rewrites": [{ "source": "**", "destination": "/index.html" }],
+      "headers": [
+        {
+          "source": "/index.html",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, max-age=0" }]
+        },
+        {
+          "source": "/manifest.webmanifest",
+          "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, max-age=0" }]
+        },
+        {
+          "source": "**/*.@(js|css)",
+          "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+        }
+      ]
+    }
+  ],
   "emulators": {
     "auth": { "port": 9099 },
     "firestore": { "port": 8080 },
