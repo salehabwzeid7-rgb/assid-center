@@ -1,5 +1,6 @@
 import { Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import { isIosSafariTab } from '../core/platform';
 import { NotifyService } from '../core/notify.service';
 import { renderPdf, type PdfDoc } from '../core/report-pdf';
 
@@ -96,24 +97,40 @@ import { renderPdf, type PdfDoc } from '../core/report-pdf';
                 <img [src]="img.dataUrl" [alt]="'صفحة التقرير ' + img.pageNumber" />
                 <span class="rx-thumb-hint">اضغط للعرض بالحجم الكامل 🔍</span>
               </button>
+              <!-- ترتيب «مشاركة/تنزيل» على سفاري/آيفون معكوس — راجع preferShare()
+                   أسفل، ونفس التعليق في report-image.ts (السبب واحد). -->
               <div class="rx-result-actions">
-                <button
-                  type="button"
-                  class="btn btn-ghost"
-                  (click)="downloadImage(img)"
-                  [disabled]="saving() === img.pageNumber"
-                >
-                  {{
-                    saving() === img.pageNumber
-                      ? 'جارٍ الحفظ…'
-                      : '⬇ حفظ الصورة' +
-                        (images().length > 1 ? ' (صفحة ' + img.pageNumber + ')' : '')
-                  }}
-                </button>
-                @if (canShareFiles()) {
-                  <button type="button" class="btn btn-ghost" (click)="shareImage(img)">
+                @if (preferShare()) {
+                  <button type="button" class="btn btn-primary" (click)="shareImage(img)">
                     ↗ مشاركة
                   </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    (click)="downloadImage(img)"
+                    [disabled]="saving() === img.pageNumber"
+                  >
+                    {{ saving() === img.pageNumber ? 'جارٍ الحفظ…' : '⬇ حفظ الصورة' }}
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    (click)="downloadImage(img)"
+                    [disabled]="saving() === img.pageNumber"
+                  >
+                    {{
+                      saving() === img.pageNumber
+                        ? 'جارٍ الحفظ…'
+                        : '⬇ حفظ الصورة' +
+                          (images().length > 1 ? ' (صفحة ' + img.pageNumber + ')' : '')
+                    }}
+                  </button>
+                  @if (canShareFiles()) {
+                    <button type="button" class="btn btn-ghost" (click)="shareImage(img)">
+                      ↗ مشاركة
+                    </button>
+                  }
                 }
               </div>
             </div>
@@ -303,6 +320,9 @@ export class ReportExportComponent {
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     return typeof nav.canShare === 'function';
   });
+
+  /** سفاري/آيفون داخل تبويب (لا مثبَّت، لا Capacitor) — راجع `isIosSafariTab`. */
+  readonly preferShare = computed(() => this.canShareFiles() && isIosSafariTab());
 
   /* ---------- التوليد ---------- */
 

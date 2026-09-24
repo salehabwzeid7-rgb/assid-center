@@ -1540,10 +1540,10 @@ a.ops-card:active {
 }
 
 /* ترك مساحة أسفل الصفحة والزرّ العائم عند وجود شريط التنقّل */
-.app-shell:has(.bottom-nav) .page {
+.app-shell.has-bottom-nav .page {
   padding-bottom: calc(86px + var(--safe-bottom));
 }
-.app-shell:has(.bottom-nav) .fab {
+.app-shell.has-bottom-nav .fab {
   bottom: calc(88px + var(--safe-bottom));
 }
 /* دعوة تثبيت iOS (.iib) فوق شريط التنقّل عند وجوده — بلا هذا كانت تغطّيه
@@ -1551,7 +1551,7 @@ a.ops-card:active {
    تبويبات التنقّل عن المستخدم إلى أن يُغلقها؛ عطل رُصد فعليًّا بلقطة شاشة
    لصفحة الرئيسية بعد الدخول. بلا شريط تنقّل (شاشة الدخول مثلًا) تبقى الدعوة
    قريبة من أسفل الشاشة كما صُمِّمت. */
-.app-shell:has(.bottom-nav) .iib {
+.app-shell.has-bottom-nav .iib {
   bottom: calc(var(--nav-h) + 14px + var(--safe-bottom));
 }
 

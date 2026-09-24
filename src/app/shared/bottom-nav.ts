@@ -1,9 +1,6 @@
-import { Component, computed, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
-import { filter, map } from 'rxjs';
-import { AuthService } from '../core/auth.service';
-import { TAB_PATHS } from '../core/nav-transition.service';
+import { Component, inject } from '@angular/core';
+import { RouterLink, RouterLinkActive } from '@angular/router';
+import { BottomNavVisibilityService } from '../core/bottom-nav-visibility.service';
 
 /**
  * شريط التنقّل السفلي — يظهر فقط في الوجهات الرئيسية الخمس بعد تسجيل الدخول.
@@ -99,16 +96,6 @@ import { TAB_PATHS } from '../core/nav-transition.service';
   `,
 })
 export class BottomNavComponent {
-  private auth = inject(AuthService);
-  private router = inject(Router);
-
-  private readonly path = toSignal(
-    this.router.events.pipe(
-      filter((e): e is NavigationEnd => e instanceof NavigationEnd),
-      map((e) => e.urlAfterRedirects.split(/[?#]/)[0]),
-    ),
-    { initialValue: this.router.url.split(/[?#]/)[0] },
-  );
-
-  readonly visible = computed(() => this.auth.isLoggedIn() && TAB_PATHS.includes(this.path()));
+  private readonly nav = inject(BottomNavVisibilityService);
+  readonly visible = this.nav.visible;
 }

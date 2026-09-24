@@ -135,8 +135,13 @@ APK المباشر (أبل تمنع التثبيت الجانبيّ خارج App
 
 ```bash
 npm run build:prod
-npx firebase deploy --only hosting:webapp --project assid-center
+npx firebase deploy --only hosting:webapp --project assid-center   # هذا الموقع وحده
+npx firebase deploy --only hosting --project assid-center          # الموقعان معًا
 ```
 
-> لا خطوة تلقائيّة لهذا ضمن `npm run release` حاليًّا — يُنشَر يدويًّا عند الحاجة
-> (تعديلات واجهة تخصّ زوّار iOS، أو لمزامنته مع إصدار أندرويد جديد).
+> **يُنشَر تلقائيًّا مع كلّ `npm run release -- <level> --push`** — منذ تحويل
+> `firebase.json` إلى مصفوفة أهداف استضافة، صار استدعاء `firebase deploy --only hosting`
+> بلا اسم هدف (كما في `publish-ota.mjs`/`publish-apk.mjs`) ينشر **كلا** الموقعين معًا
+> تلقائيًّا، فتصل كلّ تحديثات الويب لمستخدمي آيفون فور كلّ إصدار أندرويد بلا أيّ
+> خطوة إضافيّة. الأمران أعلاه للنشر اليدويّ المنفرد فقط (تعديل يخصّ واجهة آيفون
+> وحدها، بين إصدارَي أندرويد).

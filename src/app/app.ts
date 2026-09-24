@@ -4,6 +4,7 @@ import { Location } from '@angular/common';
 import { filter, take } from 'rxjs';
 import { App as CapApp } from '@capacitor/app';
 import { AuthService } from './core/auth.service';
+import { BottomNavVisibilityService } from './core/bottom-nav-visibility.service';
 import { DataService } from './core/data.service';
 import { NavTransitionService } from './core/nav-transition.service';
 import { NotifyService } from './core/notify.service';
@@ -31,7 +32,13 @@ declare global {
     IosInstallBannerComponent,
   ],
   template: `
-    <div class="app-shell">
+    <!--
+      صنف has-bottom-nav (لا CSS ‎:has()‎ وحده) — الحشو أسفل الصفحة وتموضع
+      الزرّ العائم ودعوة تثبيت iOS تعتمد كلّها على ظهور الشريط. ‎:has()‎ غير
+      مدعوم قبل Safari 15.4 (آيفون أقدم من ذلك يفقد الحشو بالكامل فيختفي
+      المحتوى خلف الشريط) — صنف عاديّ مدعوم في كلّ متصفّح بلا أيّ شرط إصدار.
+    -->
+    <div class="app-shell" [class.has-bottom-nav]="bottomNav.visible()">
       <!-- تنبيه تقادم القشرة الأصليّة — يخصّ التطبيق كلّه لا شاشة بعينها. -->
       <app-update-banner />
       <router-outlet />
@@ -46,6 +53,7 @@ declare global {
 export class App {
   private location = inject(Location);
   private router = inject(Router);
+  protected readonly bottomNav = inject(BottomNavVisibilityService);
   // تهيئة السمة مبكرًا (تُطبَّق على <html>)
   private theme = inject(ThemeService);
   // فحص التحديثات المباشرة (OTA) على أندرويد

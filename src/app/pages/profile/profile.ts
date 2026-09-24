@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { DataService } from '../../core/data.service';
+import { IosInstallService } from '../../core/ios-install.service';
 import { NotifyService } from '../../core/notify.service';
 import { UpdateService } from '../../core/update.service';
 import { DEFAULT_REPORT_INTRO, DEFAULT_REPORT_OUTRO } from '../../core/models';
@@ -187,6 +188,21 @@ import { PageHeaderComponent } from '../../shared/page-header';
         </button>
       </div>
 
+      @if (ios.eligible) {
+        <!-- مدخل دائم لإعادة إرشاد التثبيت — الشريط السفليّ يُغلَق نهائيًّا
+             بعد أوّل ضغطة على «✕» (عمدًا، حتى لا يزعج)، فمن غيّر رأيه لاحقًا
+             يحتاج طريقة أخرى غير مسح بيانات المتصفّح للوصول إليه مجدّدًا. -->
+        <div class="section-title">التثبيت على الشاشة الرئيسية</div>
+        <div class="card">
+          <p class="muted" style="margin-top:0;font-size:.86rem">
+            لم تثبّت الماهر على شاشتك الرئيسية بعد؟ اضغط الزرّ لعرض خطوات التثبيت من جديد.
+          </p>
+          <button class="btn btn-ghost btn-block" type="button" (click)="showInstallGuide()">
+            عرض خطوات التثبيت
+          </button>
+        </div>
+      }
+
       <div class="card">
         <button class="btn btn-danger btn-block" type="button" (click)="logout()">
           تسجيل الخروج
@@ -269,9 +285,16 @@ export class ProfilePage {
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
   readonly notify = inject(NotifyService);
+  readonly ios = inject(IosInstallService);
   private data = inject(DataService);
   private update = inject(UpdateService);
   private router = inject(Router);
+
+  /** يعيد إظهار شريط إرشاد التثبيت أسفل الشاشة — راجع IosInstallService. */
+  showInstallGuide(): void {
+    this.ios.showAgain();
+    this.notify.info('انظر أسفل الشاشة لخطوات التثبيت');
+  }
 
   readonly themes = THEME_ORDER;
   readonly labels = THEME_LABELS;

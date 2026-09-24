@@ -1,4 +1,5 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { IosInstallService } from '../core/ios-install.service';
 
 /**
  * شريط إرشاد التثبيت لزوّار سفاري على آيفون/آيباد (PWA).
@@ -8,18 +9,13 @@ import { Component, signal } from '@angular/core';
  * دعوة، فالمستخدم لا يعرف أصلًا أنّ الصفحة قابلة للتثبيت ما لم نخبره صراحةً
  * بالخطوات اليدويّة (زرّ المشاركة ← إضافة إلى الشاشة الرئيسية).
  *
- * يظهر فقط حين: المتصفّح سفاري على iOS/iPadOS حقيقيّ (لا أندرويد ولا سطح
- * مكتب)، والصفحة مفتوحة داخل تبويب متصفّح عاديّ لا مثبَّتة أصلًا (فحص
- * `navigator.standalone` ومطابقة `display-mode`)، ولم يُغلقه المستخدم من
- * قبل على هذا الجهاز (تخزين محليّ دائم — هذه دعوة لمرّة واحدة لا تنبيه حالة
- * متكرّرة مثل `UpdateBannerComponent`، فإغلاقها نهائيّ لا لهذه الجلسة فقط).
+ * الحالة (متى يظهر، الإغلاق الدائم، إعادة الإظهار من صفحة الحساب) في
+ * `IosInstallService` — لا هنا؛ هذا المكوّن عرض فقط.
  */
-const DISMISS_KEY = 'assid-center:ios-install-dismissed';
-
 @Component({
   selector: 'app-ios-install-banner',
   template: `
-    @if (show()) {
+    @if (ios.show()) {
       <div class="iib" role="status">
         <div class="iib-body">
           <div class="iib-title">ثبّت الماهر على شاشتك الرئيسية</div>
@@ -35,7 +31,7 @@ const DISMISS_KEY = 'assid-center:ios-install-dismissed';
             في سفاري، ثمّ اختر «إضافة إلى الشاشة الرئيسية».
           </div>
         </div>
-        <button type="button" class="iib-x" (click)="dismiss()" aria-label="إخفاء">✕</button>
+        <button type="button" class="iib-x" (click)="ios.dismiss()" aria-label="إخفاء">✕</button>
       </div>
     }
   `,
@@ -97,53 +93,5 @@ const DISMISS_KEY = 'assid-center:ios-install-dismissed';
   ],
 })
 export class IosInstallBannerComponent {
-  private readonly dismissed = signal(this.readDismissed());
-
-  readonly show = signal(this.computeShow());
-
-  constructor() {
-    // إعادة الحساب مرّة واحدة بعد الإقلاع تكفي — لا حالة تتغيّر لاحقًا تستحقّ
-    // تتبّعًا تفاعليًّا (لا شيء في القياسات المستخدَمة يتبدّل أثناء الجلسة).
-    this.show.set(this.computeShow());
-  }
-
-  dismiss(): void {
-    try {
-      localStorage.setItem(DISMISS_KEY, '1');
-    } catch {
-      /* تخزين محليّ غير متاح (وضع خاص مثلًا) — الإخفاء يبقى لهذه الجلسة فقط */
-    }
-    this.dismissed.set(true);
-    this.show.set(false);
-  }
-
-  private readDismissed(): boolean {
-    try {
-      return localStorage.getItem(DISMISS_KEY) === '1';
-    } catch {
-      return false;
-    }
-  }
-
-  private computeShow(): boolean {
-    if (this.dismissed()) return false;
-    if (!this.isIosSafari()) return false;
-    if (this.isStandalone()) return false;
-    return true;
-  }
-
-  /** iOS/iPadOS حقيقيّ (لا أندرويد، ولا سطح مكتب). iPadOS 13+ يُعرِّف نفسه
-   * كـ macOS في userAgent، فيُميَّز بدعم اللمس بدل ذلك. */
-  private isIosSafari(): boolean {
-    const ua = navigator.userAgent;
-    const isIPhoneOrIPad = /iPad|iPhone|iPod/.test(ua);
-    const isIPadOS13Plus = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-    return isIPhoneOrIPad || isIPadOS13Plus;
-  }
-
-  /** مثبَّت أصلًا على الشاشة الرئيسية — لا داعي للدعوة. */
-  private isStandalone(): boolean {
-    const nav = navigator as Navigator & { standalone?: boolean };
-    return nav.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-  }
+  protected readonly ios = inject(IosInstallService);
 }

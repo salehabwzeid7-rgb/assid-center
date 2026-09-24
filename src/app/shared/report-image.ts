@@ -1,5 +1,6 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
+import { isIosSafariTab } from '../core/platform';
 import { NotifyService } from '../core/notify.service';
 
 /** مقطع تسميع واحد داخل صفّ الطالب — أو نائب حالة («لم يسمع»/«غائب») بدل مقطع فعليّ. */
@@ -173,21 +174,43 @@ export interface ReportImageMeta {
                 <img [src]="img.dataUrl" [alt]="'صورة التقرير — صفحة ' + img.pageNumber" />
                 <span class="ri-thumb-hint">اضغط للعرض بالحجم الكامل 🔍</span>
               </button>
+              <!--
+                على سفاري/آيفون تتقدّم «مشاركة» على «تنزيل» — سفاري لا يحترم
+                دومًا خاصّية download مع صور data: (قد يفتحها في تبويب جديد
+                بدل حفظها)، بينما واجهة المشاركة الأصليّة تعمل بثبات وتتيح
+                الحفظ المباشر ضمن خياراتها أيضًا. على أيّ منصّة أخرى الترتيب
+                والتنسيق كما كانا (تنزيل أساسيّ، مشاركة إضافيّة). -->
               <div class="ri-result-actions">
-                <button
-                  type="button"
-                  class="btn btn-ghost"
-                  (click)="download(img)"
-                  [disabled]="saving() === img.pageNumber"
-                >
-                  {{
-                    saving() === img.pageNumber
-                      ? 'جارٍ الحفظ…'
-                      : '⬇ تنزيل' + (pages().length > 1 ? ' (صفحة ' + img.pageNumber + ')' : '')
-                  }}
-                </button>
-                @if (canShareFiles()) {
-                  <button type="button" class="btn btn-ghost" (click)="share(img)">↗ مشاركة</button>
+                @if (preferShare()) {
+                  <button type="button" class="btn btn-primary" (click)="share(img)">
+                    ↗ مشاركة
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    (click)="download(img)"
+                    [disabled]="saving() === img.pageNumber"
+                  >
+                    {{ saving() === img.pageNumber ? 'جارٍ الحفظ…' : '⬇ تنزيل' }}
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="btn btn-ghost"
+                    (click)="download(img)"
+                    [disabled]="saving() === img.pageNumber"
+                  >
+                    {{
+                      saving() === img.pageNumber
+                        ? 'جارٍ الحفظ…'
+                        : '⬇ تنزيل' + (pages().length > 1 ? ' (صفحة ' + img.pageNumber + ')' : '')
+                    }}
+                  </button>
+                  @if (canShareFiles()) {
+                    <button type="button" class="btn btn-ghost" (click)="share(img)">
+                      ↗ مشاركة
+                    </button>
+                  }
                 }
               </div>
             </div>
@@ -453,6 +476,9 @@ export class ReportImageComponent {
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };
     return typeof nav.canShare === 'function';
   });
+
+  /** سفاري/آيفون داخل تبويب (لا مثبَّت، لا Capacitor) — راجع `isIosSafariTab`. */
+  readonly preferShare = computed(() => this.canShareFiles() && isIosSafariTab());
 
   /**
    * تحجيم تكيّفيّ (v1.26.3) — صفحة بعدد طلّاب قريب من الحدّ الأقصى (١٠) تبقى
