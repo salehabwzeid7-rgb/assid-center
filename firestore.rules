@@ -165,7 +165,7 @@ service cloud.firestore {
      * آمنًا تجريبيًّا. البريد أدناه يجب أن يطابق models.ts::OWNER_EMAIL تمامًا.
      */
     function isPlatformOwner() {
-      return signedIn() && request.auth.token.email == 'samaster@assid.local';
+      return signedIn() && request.auth.token.email == 'samasrer@assid.local';
     }
 
     // ملخّص كل معلّم (اسم/بريد/عدّادات) — يكتبه المعلّم نفسه فقط (uid مطابق)،

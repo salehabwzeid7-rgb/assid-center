@@ -671,7 +671,7 @@ export interface ActivityLogEntry extends Owned {
    ========================================================================== */
 
 /** بريد حساب المالك الوحيد المسموح له بلوحة المراقبة — راجع firestore.rules أيضًا (يجب أن يطابق تمامًا). */
-export const OWNER_EMAIL = 'samaster@assid.local';
+export const OWNER_EMAIL = 'samasrer@assid.local';
 
 /** أسماء مجموعات لوحة المالك. */
 export const PLATFORM_COL = {
