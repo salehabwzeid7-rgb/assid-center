@@ -7,19 +7,20 @@
    رسميًّا.
 
    العقبة التي تجعل هذا غير بديهيّ: العربيّة تحتاج **تشكيل الحروف** (صورة أوّليّة
-   ووسطى ونهائيّة ومعزولة) و**ترتيبًا ثنائيّ الاتّجاه**. تُعالَج هنا هكذا:
+   ووسطى ونهائيّة ومعزولة) و**ترتيبًا ثنائيّ الاتّجاه**. كلاهما يتولّاه jsPDF
+   نفسه، بشرط أن يصله النصّ **بترتيبه المنطقيّ** كما كُتب:
 
-     ١) `jsPDF.processArabic` مسجَّل على حدث `preProcessText`، فيحوّل كلّ نصّ
-        إلى صور الحروف العربيّة (U+FE70–FEFF) تلقائيًّا قبل الرسم.
-     ٢) لذلك **يجب** أن يحوي الخطّ تلك الكتلة. أكثر الخطوط الحديثة لا تحويها
-        لأنّها تعتمد تشكيل OpenType. خطّ أميري يحويها كاملة (تُحقّق من ذلك
-        بفحص جدول cmap)، ولذلك اختير — وهو خطّ نسخ مناسب للوثائق المطبوعة.
-     ٣) الترتيب ثنائيّ الاتّجاه **مكتوب هنا يدويًّا** (`toVisual`)، ولا يُستعمَل
-        `setR2L` إطلاقًا: فهو يعكس السلسلة كلّها عكسًا بسيطًا، فتنعكس معها
-        الأرقام — «09/2026» تصير «6202/90». القاعدة الصحيحة أنّ مقاطع الأرقام
-        واللاتينيّة تبقى بترتيبها الداخليّ، ويُعكَس ترتيب المقاطع وحدها.
-     ٤) ومع ذلك تبقى وحدات القياس (٪) في ترويسة العمود لا في الخلايا — أنظف
-        في جدول مطبوع، ويُبقي الخلايا أرقامًا خالصة.
+     ١) `processArabic` على حدث `preProcessText` يشكّل الحروف إلى صورها
+        (U+FE70–FEFF) على الترتيب المنطقيّ — التشكيل يعتمد على جار الحرف.
+     ٢) محرّك Bidi المدمج على `postProcessText` يعيد الترتيب بصريًّا بخوارزميّة
+        Unicode الكاملة: الأرقام والتواريخ تبقى بترتيبها، والأقواس تنعكس صحيحًا.
+     ٣) لذلك **لا عكس يدويّ هنا إطلاقًا**. العكس اليدويّ السابق كان يلتقي بعكس
+        المحرّك فيُرجِع كلّ كلمة مقلوبة («حاضر» ← «رضاح»).
+     ٤) الحركات (الشدّة والفتحة…) تُزال قبل الرسم: `processArabic` يعدّها حرفًا
+        فاصلًا فيقطع الكلمة عندها («المعلّم» تنفصل لامها عن ميمها)، ولا تموضع
+        GPOS في jsPDF يضع الحركة فوق حرفها أصلًا.
+     ٥) الخطّ يجب أن يحوي كتلة صور الحروف. أميري يحويها كاملة (تُحقّق من ذلك
+        بفحص جدول cmap)، وهو خطّ نسخ مناسب للوثائق المطبوعة.
 
    الخطّ يُجلَب من أصول التطبيق عند أوّل توليد ويُخبَّأ في الذاكرة: لا يدخل حزمة
    الجافاسكربت، ويبقى متاحًا دون اتّصال لأنّه مضمَّن في التطبيق.
@@ -70,101 +71,15 @@ export interface PdfDoc {
 }
 
 /* --------------------------------------------------------------------------
-   الترتيب ثنائيّ الاتّجاه
+   تهيئة النصّ العربيّ
    -------------------------------------------------------------------------- */
 
-/** محارف تُعكَس صورتها عند عكس مقطع عربيّ (الأقواس ونحوها). */
-const MIRROR: Record<string, string> = {
-  '(': ')',
-  ')': '(',
-  '[': ']',
-  ']': '[',
-  '{': '}',
-  '}': '{',
-  '<': '>',
-  '>': '<',
-  '«': '»',
-  '»': '«',
-};
+/** الحركات وعلامات القرآن الصغيرة وألف الوصل الخنجريّة — تُزال قبل التشكيل. */
+const ARABIC_MARKS = /[ؐ-ًؚ-ٰٟۖ-ۭ]/g;
 
-/** عربيّ؟ يشمل الكتلة الأساسيّة وصور الحروف التي يُنتجها `processArabic`. */
-function isRtlChar(ch: string): boolean {
-  const c = ch.codePointAt(0) ?? 0;
-  return (
-    (c >= 0x0600 && c <= 0x06ff) ||
-    (c >= 0x0750 && c <= 0x077f) ||
-    (c >= 0xfb50 && c <= 0xfdff) ||
-    (c >= 0xfe70 && c <= 0xfeff)
-  );
-}
-
-/** رقم أو حرف لاتينيّ — مقطع يبقى بترتيبه الداخليّ. */
-function isLtrChar(ch: string): boolean {
-  return /[0-9A-Za-z]/.test(ch);
-}
-
-/**
- * يحوّل نصًّا بترتيبه المنطقيّ إلى ترتيبه **البصريّ** (من اليسار لليمين كما
- * يرسمه PDF)، مع إبقاء مقاطع الأرقام واللاتينيّة بترتيبها الداخليّ.
- *
- * هذا ما يفصل «شهر 09/2026» الصحيحة عن «6202/90 رهش» التي ينتجها العكس
- * البسيط. المحارف المحايدة (فراغ، شرطة، مائلة، نقطتان) تتبع المقطع السابق
- * لها، وهو تبسيط كافٍ لنصوص التقارير: كلمات عربيّة وأرقام وتواريخ.
- */
-export function toVisual(text: string): string {
-  if (!text) return '';
-  const chars = [...text];
-
-  // تصنيف كلّ محرف. المحايد (فراغ، مائلة، شرطة، نقطتان) **لا يلتحق بالمقطع
-  // السابق دائمًا**: يتبع جارَيه. فإن كان بين رقمين انضمّ إليهما («09/2026»
-  // مقطع واحد)، وإلّا عُدّ عربيًّا فبقي فاصلًا بين المقطعين («تقرير 3 طلّاب»
-  // يحتفظ بفراغَيه). الالتحاق الأعمى بالسابق كان يبتلع الفراغ قبل الرقم
-  // ويُخرِج «بالط3 ريرقت».
-  const cls: ('rtl' | 'ltr' | 'n')[] = chars.map((ch) =>
-    isRtlChar(ch) ? 'rtl' : isLtrChar(ch) ? 'ltr' : 'n',
-  );
-  for (let i = 0; i < cls.length; i++) {
-    if (cls[i] !== 'n') continue;
-    let prev: 'rtl' | 'ltr' | null = null;
-    for (let j = i - 1; j >= 0; j--) {
-      if (cls[j] !== 'n') {
-        prev = cls[j] as 'rtl' | 'ltr';
-        break;
-      }
-    }
-    let next: 'rtl' | 'ltr' | null = null;
-    for (let j = i + 1; j < cls.length; j++) {
-      if (cls[j] !== 'n') {
-        next = cls[j] as 'rtl' | 'ltr';
-        break;
-      }
-    }
-    cls[i] = prev === 'ltr' && next === 'ltr' ? 'ltr' : 'rtl';
-  }
-
-  type Run = { rtl: boolean; chars: string[] };
-  const runs: Run[] = [];
-  chars.forEach((ch, i) => {
-    const rtl = cls[i] === 'rtl';
-    const last = runs[runs.length - 1];
-    if (last && last.rtl === rtl) last.chars.push(ch);
-    else runs.push({ rtl, chars: [ch] });
-  });
-
-  // ترتيب المقاطع يُعكَس (النصّ عربيّ في مجمله)، ومحتوى المقطع العربيّ يُعكَس
-  // ويُعكَس معه اتّجاه الأقواس؛ أمّا مقاطع الأرقام فتبقى كما هي تمامًا.
-  return runs
-    .reverse()
-    .map((r) =>
-      r.rtl
-        ? r.chars
-            .slice()
-            .reverse()
-            .map((ch) => MIRROR[ch] ?? ch)
-            .join('')
-        : r.chars.join(''),
-    )
-    .join('');
+/** يُبقي النصّ بترتيبه المنطقيّ — التشكيل والترتيب البصريّ يتولّاهما jsPDF. */
+function stripArabicMarks(text: string): string {
+  return text.replace(ARABIC_MARKS, '');
 }
 
 /* --------------------------------------------------------------------------
@@ -253,10 +168,7 @@ function setColor(c: Ctx, rgb: readonly number[]): void {
   c.doc.setTextColor(rgb[0], rgb[1], rgb[2]);
 }
 
-/**
- * يرسم نصًّا. `dir: 'ltr'` يُعطّل ترتيب R2L مؤقّتًا — لازم للأرقام والتواريخ،
- * وإلّا انقلب ترتيب مثل «18 / 20».
- */
+/** يرسم نصًّا بترتيبه المنطقيّ. */
 function drawText(
   c: Ctx,
   text: string,
@@ -267,29 +179,40 @@ function drawText(
 ): void {
   if (!text) return;
   const jsAlign = align === 'start' ? 'right' : align === 'end' ? 'left' : 'center';
-  c.doc.text(prepare(c, text, dir), x, y, { align: jsAlign, baseline: 'middle' });
+  c.doc.text(prepare(text, dir), x, y, { align: jsAlign, baseline: 'middle', ...bidi(dir) });
 }
 
 /**
- * يُحضّر النصّ للرسم: تشكيل الحروف العربيّة ثمّ ترتيبها بصريًّا.
- *
- * الترتيب مهمّ: التشكيل يعتمد على جار الحرف في الترتيب **المنطقيّ**، فلو عُكِس
- * النصّ قبله لاختار صورًا خاطئة. ولهذا يُشكَّل أوّلًا ثمّ يُعكَس.
- * (`processArabic` يُعاد استدعاؤه تلقائيًّا داخل `text()` لكنّه لا يمسّ صور
- * الحروف الناتجة، فلا ضرر.)
+ * خيارات محرّك Bidi في jsPDF. افتراضه أنّ المُدخَل **مرتّب بصريًّا سلفًا**
+ * (`isInputVisual: true`) وبلا عكس للأقواس — فيقلب النصّ المنطقيّ ويترك «(»
+ * متّجهة للجهة الخطأ. نُصرّح: مُدخَل منطقيّ، مُخرَج بصريّ يُرسَم من اليسار،
+ * واتّجاه الفقرة بحسب الخليّة.
  */
-function prepare(c: Ctx, text: string, dir: CellDir): string {
-  if (dir === 'ltr') return text;
-  return toVisual(c.doc.processArabic(text));
+function bidi(dir: CellDir) {
+  return {
+    isInputVisual: false,
+    isOutputVisual: true,
+    isInputRtl: dir === 'rtl',
+    isOutputRtl: false,
+    isSymmetricSwapping: true,
+  };
+}
+
+function prepare(text: string, dir: CellDir): string {
+  return dir === 'ltr' ? text : stripArabicMarks(text);
+}
+
+/** عرض النصّ كما سيُرسَم — صور الحروف المُشكَّلة أضيق من المعزولة. */
+function shapedWidth(c: Ctx, text: string): number {
+  return c.doc.getTextWidth(c.doc.processArabic(text));
 }
 
 /** يقصّ النصّ بما يسع عرض الخليّة ويُلحق «…». */
 function fit(c: Ctx, text: string, maxW: number, dir: CellDir = 'rtl'): string {
   if (!text) return '';
-  // القياس يجري على الشكل النهائيّ — عرض الحروف المُشكَّلة يختلف عن الخام.
-  if (c.doc.getTextWidth(prepare(c, text, dir)) <= maxW) return text;
-  let s = text;
-  while (s.length > 1 && c.doc.getTextWidth(prepare(c, s + '…', dir)) > maxW) s = s.slice(0, -1);
+  let s = prepare(text, dir);
+  if (shapedWidth(c, s) <= maxW) return s;
+  while (s.length > 1 && shapedWidth(c, s + '…') > maxW) s = s.slice(0, -1);
   return s + '…';
 }
 
@@ -371,8 +294,9 @@ function drawStats(c: Ctx, items: { label: string; value: string }[]): void {
 
 function drawNote(c: Ctx, text: string, danger?: boolean): void {
   setFont(c, false, FS.note);
-  // يُشكَّل أوّلًا ليكون قياس العرض دقيقًا، ثمّ يُقسَّم، ثمّ يُعكَس كلّ سطر.
-  const lines: string[] = c.doc.splitTextToSize(c.doc.processArabic(text), CONTENT_W - 20);
+  // التقسيم على النصّ المنطقيّ غير المُشكَّل — الحروف المعزولة أعرض، فالسطر
+  // المرسوم لا يتجاوز العرض أبدًا.
+  const lines: string[] = c.doc.splitTextToSize(stripArabicMarks(text), CONTENT_W - 20);
   const h = lines.length * 13 + 14;
   ensureSpace(c, h + 8);
   c.doc.setFillColor(danger ? 253 : 247, danger ? 243 : 249, danger ? 242 : 248);
@@ -381,9 +305,10 @@ function drawNote(c: Ctx, text: string, danger?: boolean): void {
   c.doc.roundedRect(MARGIN.x, c.y, CONTENT_W, h, 4, 4, 'FD');
   setColor(c, danger ? DANGER : MUTED);
   lines.forEach((ln, i) => {
-    c.doc.text(toVisual(ln), PAGE.w - MARGIN.x - 10, c.y + 13 + i * 13, {
+    c.doc.text(ln, PAGE.w - MARGIN.x - 10, c.y + 13 + i * 13, {
       align: 'right',
       baseline: 'middle',
+      ...bidi('rtl'),
     });
   });
   c.y += h + 8;
@@ -487,20 +412,6 @@ export async function renderPdf(model: PdfDoc): Promise<Blob> {
   doc.addFont(FONT_FILES.bold.file, FONT_NAME, 'bold');
   doc.setFont(FONT_NAME, 'normal');
   doc.setProperties({ title: model.title, subject: model.subtitle, creator: 'الماهر' });
-
-  /*
-    تعطيل التشكيل التلقائيّ على هذه النسخة وحدها.
-
-    `processArabic` مشترك على حدث `preProcessText`، فيُطبَّق على كلّ نصّ يُرسَم.
-    ونحن نُشكّل بأنفسنا في `prepare()` **قبل** العكس البصريّ (والترتيب لا يقبل
-    القلب: التشكيل يعتمد على الجار المنطقيّ). فلو بقي الحدث لعمل مرّة ثانية على
-    النصّ المعكوس، فتلتقي لام وألف بعد العكس فيُدمجان في «ﻻ» — وهو ما حوّل
-    «اسم الطالب» إلى «ﺐﻻﻄﻟﺍ». نُلغي النشر لهذا الحدث وحده ونُبقي البقيّة.
-  */
-  const events = doc.internal.events;
-  const publish = events.publish.bind(events);
-  events.publish = (topic: string, payload: unknown) =>
-    topic === 'preProcessText' ? undefined : publish(topic, payload);
 
   const c: Ctx = {
     doc,

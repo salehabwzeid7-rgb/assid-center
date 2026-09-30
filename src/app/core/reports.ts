@@ -97,6 +97,8 @@ export type DayOutcome =
   | 'not_recited'
   /** حاضر ولا سجلّ تسميع إطلاقًا — ثغرة تسجيل عند المعلّم، لا تقصير من الطالب */
   | 'no_record'
+  /** حضر حصّة في حلقة تجويد — لا تسميع فيها أصلًا، فليست ثغرة تسجيل */
+  | 'tajweed'
   | 'excused'
   | 'absent';
 
@@ -107,6 +109,7 @@ export const DAY_OUTCOME_LABELS: Record<DayOutcome, string> = {
   postponed: 'مؤجَّل',
   not_recited: 'لم يسمّع',
   no_record: 'حاضر بلا تسجيل',
+  tajweed: 'حاضر — حصّة التجويد',
   excused: 'مأذون له',
   absent: 'غائب',
 };
@@ -122,14 +125,15 @@ function isAttending(s: AttendanceStatus | undefined): boolean {
 }
 
 /**
- * سجلّ حضور واحد لكلّ (طالب، تاريخ) — يُبقي الأحدث إنشاءً. نفس إزالة التكرار
- * المطبَّقة في `DataService`، مكرّرة هنا عمدًا: الطبقة النقيّة يجب ألّا تفترض
- * أنّ من ناداها نظّف المدخلات.
+ * سجلّ حضور واحد لكلّ (طالب، حلقة، تاريخ) — يُبقي الأحدث إنشاءً. مكرّرة هنا
+ * عمدًا من `DataService`: الطبقة النقيّة يجب ألّا تفترض أنّ من ناداها نظّف
+ * المدخلات. الحلقة جزء من المفتاح لأنّ طالب التحفيظ والتجويد يحضر حصّتين في
+ * اليوم نفسه أحيانًا، ولكلّ حصّة سجلّها.
  */
 function dedupeAttendance(rows: readonly AttendanceRecord[]): AttendanceRecord[] {
   const byKey = new Map<string, AttendanceRecord>();
   for (const a of rows) {
-    const key = `${a.studentId}_${a.date}`;
+    const key = `${a.studentId}_${a.circleId}_${a.date}`;
     const prev = byKey.get(key);
     if (!prev || a.createdAt > prev.createdAt) byKey.set(key, a);
   }
@@ -676,12 +680,27 @@ export function buildStudentTimeline(
     ]),
   ].sort();
 
+  const tajweedCircleIds = new Set(src.circles.filter(isTajweedCircle).map((c) => c.id));
+
   const days: StudentDay[] = dates.map((date) => {
-    const a = att.find((x) => x.date === date);
+    const dayAtt = att.filter((x) => x.date === date);
+    const hifzAtt = dayAtt.find((x) => !tajweedCircleIds.has(x.circleId));
+    const tajweedAtt = dayAtt.find((x) => tajweedCircleIds.has(x.circleId));
     const dayRecs = recs.filter((r) => r.date === date);
     const daySerd = serd.filter((r) => r.date === date);
     const dayExams = exams.filter((r) => r.date === date);
-    const outcome = dayOutcomeFrom(a, dayRecs, daySerd.length > 0, dayExams.length > 0);
+    const hasHifzActivity =
+      !!hifzAtt || dayRecs.length > 0 || daySerd.length > 0 || dayExams.length > 0;
+    // يوم لا أثر فيه للتحفيظ إلّا حضور حصّة تجويد: حلقة التجويد لا تسجّل
+    // تسميعًا أصلًا، فحصيلة التحفيظ هنا («حاضر بلا تسجيل») وصف خاطئ لليوم.
+    const outcome: DayOutcome = hasHifzActivity
+      ? dayOutcomeFrom(hifzAtt, dayRecs, daySerd.length > 0, dayExams.length > 0)
+      : isAttending(tajweedAtt?.status)
+        ? 'tajweed'
+        : tajweedAtt?.status === 'excused'
+          ? 'excused'
+          : 'absent';
+    const a = hifzAtt ?? tajweedAtt;
     const postponedNote = dayRecs.find((r) => r.postponed)?.notes?.trim();
     const notRecitedNote = dayRecs.find((r) => r.notRecited)?.notes?.trim();
     return {
