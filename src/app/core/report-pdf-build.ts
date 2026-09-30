@@ -28,6 +28,7 @@ import type { ReportAudience } from './report-text';
 import {
   DAY_OUTCOME_LABELS,
   INACTIVE_DAYS,
+  achievementDays,
   type CircleReport,
   type OverviewReport,
   type StudentTimeline,
@@ -199,20 +200,31 @@ function cellOf(row: TajweedStudentRow, examId: string): TajweedExamCell | undef
 function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
   const sections: PdfSection[] = [];
 
-  sections.push({
-    kind: 'stats',
-    items: [
-      { label: 'الحضور ٪', value: tl.att.rate === null ? '—' : String(tl.att.rate) },
-      { label: 'وجه', value: String(tl.pages) },
-      { label: 'حفظ جديد', value: String(tl.newPages) },
-      { label: 'متوسّط التسميع ٪', value: tl.avgScore === null ? '—' : String(tl.avgScore) },
-    ],
-  });
+  const attRate = { label: 'الحضور ٪', value: tl.att.rate === null ? '—' : String(tl.att.rate) };
+  if (tl.hasHifz) {
+    sections.push({
+      kind: 'stats',
+      items: [
+        attRate,
+        { label: 'وجه', value: String(tl.pages) },
+        { label: 'حفظ جديد', value: String(tl.newPages) },
+        { label: 'متوسّط التسميع ٪', value: tl.avgScore === null ? '—' : String(tl.avgScore) },
+      ],
+    });
+  } else {
+    const t = tajweedSum(tl);
+    sections.push({
+      kind: 'stats',
+      items: [
+        attRate,
+        { label: 'حصص حضرها', value: String(tl.att.present + tl.att.late) },
+        { label: 'اختبارات التجويد', value: String(tl.tajweed.length) },
+        { label: 'مجموع العلامات', value: t.max ? `${t.achieved} / ${t.max}` : '—' },
+      ],
+    });
+  }
 
-  const days =
-    meta.audience === 'parents'
-      ? tl.days.filter((d) => d.recitations.length || d.serd.length || d.exams.length)
-      : tl.days;
+  const days = meta.audience === 'parents' ? achievementDays(tl) : tl.days;
 
   const rows: PdfCell[][] = [];
   for (const d of days) {
@@ -288,16 +300,23 @@ function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
   } else {
     sections.push({
       kind: 'table',
-      title: 'السِجلّ اليوميّ',
-      columns: [
-        { header: 'اليوم', weight: 2.2, align: 'start' },
-        { header: 'الحالة', weight: 1.3 },
-        { header: 'النشاط', weight: 1.9 },
-        { header: 'التفصيل', weight: 3.6, align: 'start' },
-        { header: 'الدرجة ٪', weight: 1.2 },
-        { header: 'التقدير', weight: 1.6 },
-      ],
-      rows,
+      title: tl.hasHifz ? 'السِجلّ اليوميّ' : 'سجلّ الحضور',
+      columns: tl.hasHifz
+        ? [
+            { header: 'اليوم', weight: 2.2, align: 'start' },
+            { header: 'الحالة', weight: 1.3 },
+            { header: 'النشاط', weight: 1.9 },
+            { header: 'التفصيل', weight: 3.6, align: 'start' },
+            { header: 'الدرجة ٪', weight: 1.2 },
+            { header: 'التقدير', weight: 1.6 },
+          ]
+        : [
+            { header: 'اليوم', weight: 2.2, align: 'start' },
+            { header: 'الحالة', weight: 1.3 },
+            { header: 'التفصيل', weight: 4, align: 'start' },
+          ],
+      // في تقرير التجويد الخالص لا نشاط ولا درجة يوميّة — الحالة والتفصيل فقط.
+      rows: tl.hasHifz ? rows : rows.map((r) => [r[0], r[1], r[3]]),
     });
   }
 
@@ -384,6 +403,14 @@ function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
   return sections;
 }
 
+function tajweedSum(tl: StudentTimeline): { achieved: number; max: number } {
+  const sat = tl.tajweed.filter((c) => c.score !== null);
+  return {
+    achieved: sat.reduce((a, c) => a + (c.score ?? 0), 0),
+    max: sat.reduce((a, c) => a + c.totalScore, 0),
+  };
+}
+
 export function buildStudentPdf(tl: StudentTimeline, meta: PdfMeta): PdfDoc {
   return {
     title: tl.name,
@@ -401,39 +428,77 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
   if (rep.students.length === 1) return buildStudentPdf(rep.students[0], meta);
 
   const t = rep.totals;
-  const sections: PdfSection[] = [
-    {
-      kind: 'stats',
-      items: [
-        { label: 'طالب', value: String(t.students) },
-        { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
-        { label: 'وجه', value: String(t.pages) },
-        { label: 'متوسّط التسميع ٪', value: t.avgScore === null ? '—' : String(t.avgScore) },
-      ],
-    },
-    {
-      kind: 'table',
-      title: 'ملخّص الطلّاب',
-      columns: [
-        { header: '#', weight: 0.5, dir: 'ltr' },
-        { header: 'اسم الطالب', weight: 4, align: 'start' },
-        { header: 'الحضور ٪', weight: 1.4 },
-        { header: 'الأوجه', weight: 1.2 },
-        { header: 'المتوسّط ٪', weight: 1.4 },
-        { header: 'سرد', weight: 1 },
-        { header: 'اختبار', weight: 1.1 },
-      ],
-      rows: rep.students.map((s, i) => [
-        num(i + 1),
-        name(s.name),
-        pct(s.att.rate),
-        num(s.pages),
-        pct(s.avgScore),
-        num(s.serd.length),
-        num(s.exams.length),
-      ]),
-    },
-  ];
+  const sections: PdfSection[] = t.hasHifz
+    ? [
+        {
+          kind: 'stats',
+          items: [
+            { label: 'طالب', value: String(t.students) },
+            { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
+            { label: 'وجه', value: String(t.pages) },
+            { label: 'متوسّط التسميع ٪', value: t.avgScore === null ? '—' : String(t.avgScore) },
+          ],
+        },
+        {
+          kind: 'table',
+          title: 'ملخّص الطلّاب',
+          columns: [
+            { header: '#', weight: 0.5, dir: 'ltr' },
+            { header: 'اسم الطالب', weight: 4, align: 'start' },
+            { header: 'الحضور ٪', weight: 1.4 },
+            { header: 'الأوجه', weight: 1.2 },
+            { header: 'المتوسّط ٪', weight: 1.4 },
+            { header: 'سرد', weight: 1 },
+            { header: 'اختبار', weight: 1.1 },
+          ],
+          rows: rep.students.map((s, i) => [
+            num(i + 1),
+            name(s.name),
+            pct(s.att.rate),
+            num(s.pages),
+            pct(s.avgScore),
+            num(s.serd.length),
+            num(s.exams.length),
+          ]),
+        },
+      ]
+    : [
+        {
+          kind: 'stats',
+          items: [
+            { label: 'طالب', value: String(t.students) },
+            { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
+            { label: 'اختبارات التجويد', value: String(t.tajweedCount) },
+            {
+              label: 'مجموع العلامات',
+              value: t.tajweedMax ? `${t.tajweedAchieved} / ${t.tajweedMax}` : '—',
+            },
+          ],
+        },
+        {
+          kind: 'table',
+          title: 'ملخّص الطلّاب',
+          columns: [
+            { header: '#', weight: 0.5, dir: 'ltr' },
+            { header: 'اسم الطالب', weight: 4, align: 'start' },
+            { header: 'الحضور ٪', weight: 1.4 },
+            { header: 'حضر', weight: 1.1 },
+            { header: 'اختبارات', weight: 1.3 },
+            { header: 'المجموع', weight: 1.6 },
+          ],
+          rows: rep.students.map((s, i) => {
+            const sum = tajweedSum(s);
+            return [
+              num(i + 1),
+              name(s.name),
+              pct(s.att.rate),
+              num(s.att.present + s.att.late),
+              num(s.tajweed.length),
+              { text: sum.max ? `${sum.achieved} / ${sum.max}` : '—', dir: 'ltr' as const },
+            ];
+          }),
+        },
+      ];
 
   // كلّ طالب يبدأ على ورقة جديدة — الفصل ضروريّ في سجلّ يُحفَظ ورقيًّا.
   for (const tl of rep.students) {

@@ -14,7 +14,12 @@ import {
 import { surahName } from '../core/quran-data';
 import { periodLabel } from '../core/report-period';
 import type { ReportAudience } from '../core/report-text';
-import { DAY_OUTCOME_LABELS, type StudentDay, type StudentTimeline } from '../core/reports';
+import {
+  DAY_OUTCOME_LABELS,
+  achievementDays,
+  type StudentDay,
+  type StudentTimeline,
+} from '../core/reports';
 
 /* ==========================================================================
    بطاقة تقرير الطالب المصوَّرة — سِجلّ يوميّ عبر كلّ حلقاته وأنشطته.
@@ -91,15 +96,19 @@ interface DayView {
             </p>
           } @else {
             <div class="sc-block">
-              <div class="sc-block-head">السِجلّ اليوميّ</div>
+              <div class="sc-block-head">{{ hifz() ? 'السِجلّ اليوميّ' : 'سجلّ الحضور' }}</div>
               <table class="sc-table">
                 <thead>
                   <tr>
                     <th class="w-day">اليوم</th>
                     <th class="w-status">الحالة</th>
-                    <th class="w-kind">النشاط</th>
-                    <th class="w-detail">التفصيل</th>
-                    <th class="w-score">الدرجة</th>
+                    @if (hifz()) {
+                      <th class="w-kind">النشاط</th>
+                      <th class="w-detail">التفصيل</th>
+                      <th class="w-score">الدرجة</th>
+                    } @else {
+                      <th class="w-detail">التفصيل</th>
+                    }
                   </tr>
                 </thead>
                 <tbody>
@@ -111,7 +120,7 @@ interface DayView {
                           <span class="d-date">{{ dmy(d.date) }}</span>
                         </td>
                         <td class="w-status">{{ d.status }}</td>
-                        <td class="c-none" colspan="3" [class.is-gap]="d.gap">
+                        <td class="c-none" [attr.colspan]="hifz() ? 3 : 1" [class.is-gap]="d.gap">
                           {{ d.placeholder }}
                         </td>
                       </tr>
@@ -456,10 +465,25 @@ export class StudentReportCardComponent {
   readonly dmy = dmy;
   readonly periodText = computed(() => periodLabel(this.timeline().period));
 
+  /** نطاق فيه تحفيظ — وإلّا فهو تقرير تجويد خالص: حضور واختبارات فقط. */
+  readonly hifz = computed(() => this.timeline().hasHifz);
+
   readonly stats = computed<{ value: string; label: string }[]>(() => {
     const tl = this.timeline();
+    const att = { value: tl.att.rate === null ? '—' : tl.att.rate + '٪', label: 'الحضور' };
+    if (!tl.hasHifz) {
+      const sat = tl.tajweed.filter((c) => c.score !== null);
+      const max = sat.reduce((a, c) => a + c.totalScore, 0);
+      const achieved = sat.reduce((a, c) => a + (c.score ?? 0), 0);
+      return [
+        att,
+        { value: String(tl.att.present + tl.att.late), label: 'حصص حضرها' },
+        { value: String(tl.tajweed.length), label: 'اختبارات التجويد' },
+        { value: max ? `${achieved} / ${max}` : '—', label: 'مجموع العلامات' },
+      ];
+    }
     return [
-      { value: tl.att.rate === null ? '—' : tl.att.rate + '٪', label: 'الحضور' },
+      att,
       { value: String(tl.pages), label: 'وجه' },
       { value: String(tl.newPages), label: 'حفظ جديد' },
       { value: tl.avgScore === null ? '—' : tl.avgScore + '٪', label: 'متوسّط التسميع' },
@@ -517,10 +541,7 @@ export class StudentReportCardComponent {
   /** الأيّام المعروضة — تقرير الأهالي يعرض المُنجَز وحده. */
   private readonly visibleDays = computed<DayView[]>(() => {
     const tl = this.timeline();
-    const days =
-      this.audience() === 'parents'
-        ? tl.days.filter((d) => d.recitations.length || d.serd.length || d.exams.length)
-        : tl.days;
+    const days = this.audience() === 'parents' ? achievementDays(tl) : tl.days;
     return days.map((d) => this.viewOf(d));
   });
 

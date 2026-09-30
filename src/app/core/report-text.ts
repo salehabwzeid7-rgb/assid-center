@@ -29,6 +29,7 @@ import { surahName } from './quran-data';
 import { periodLabel } from './report-period';
 import {
   DAY_OUTCOME_LABELS,
+  achievementDays,
   INACTIVE_DAYS,
   tallyLabel,
   type CircleReport,
@@ -242,7 +243,9 @@ export function studentTimelineText(
   lines.push(RULE);
 
   lines.push(`الحضور: ${tallyLabel(tl.att)}${tl.att.rate === null ? '' : ` (${tl.att.rate}٪)`}`);
-  lines.push(`مجموع الأوجه: ${tl.pages}${tl.newPages ? ` (حفظ جديد ${tl.newPages})` : ''}`);
+  if (tl.hasHifz) {
+    lines.push(`مجموع الأوجه: ${tl.pages}${tl.newPages ? ` (حفظ جديد ${tl.newPages})` : ''}`);
+  }
   if (tl.avgScore !== null) lines.push(`متوسّط التسميع: ${tl.avgScore}٪`);
   if (tl.serd.length) lines.push(`السرد: ${tl.serd.length}`);
   if (tl.exams.length) lines.push(`اختبارات الأجزاء: ${tl.exams.length}`);
@@ -257,9 +260,7 @@ export function studentTimelineText(
     lines.push('لا سجلّات في هذه الفترة.');
   } else {
     // الأهالي: الأيّام المُنجَزة فقط — قائمة غياب طويلة ليست تقريرًا للأهل.
-    const days = parents
-      ? tl.days.filter((d) => d.recitations.length || d.serd.length || d.exams.length)
-      : tl.days;
+    const days = parents ? achievementDays(tl) : tl.days;
     if (days.length === 0) lines.push('لا إنجاز مسجَّل في هذه الفترة.');
     else lines.push(days.map((d) => dayLines(d, audience).join('\n')).join('\n\n'));
   }
@@ -352,7 +353,7 @@ export function studentsReportText(
   lines.push(RULE);
 
   lines.push(`الحضور العامّ: ${t.att.rate === null ? '—' : t.att.rate + '٪'}`);
-  if (t.pages > 0 || t.avgScore !== null) {
+  if (t.hasHifz && (t.pages > 0 || t.avgScore !== null)) {
     lines.push(`مجموع الأوجه: ${t.pages}${t.newPages ? ` (حفظ جديد ${t.newPages})` : ''}`);
     if (t.avgScore !== null) lines.push(`متوسّط التسميع: ${t.avgScore}٪`);
   }

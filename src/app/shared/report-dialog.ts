@@ -185,7 +185,8 @@ type Subject = 'circle' | 'students';
                 }
               </div>
               <p class="rd-hint">
-                تقرير الطالب يشمل كلّ حلقاته معًا — تسميعه وسرده واختبارات أجزائه واختبارات تجويده.
+                تقرير الطالب يقتصر على الحلقات المختارة أعلاه — اختر حلقة التجويد وحدها لتقرير تجويد
+                خالص، أو النوعين معًا لتقرير يجمع تسميعه واختبارات تجويده.
               </p>
             }
           }
@@ -467,7 +468,7 @@ export class ReportDialogComponent {
   );
 
   readonly studentsReport = computed(() =>
-    buildStudentsReport(this.source(), this.studentIds(), this.period.period()),
+    buildStudentsReport(this.source(), this.studentIds(), this.period.period(), this.circleIds()),
   );
 
   readonly ready = computed(() =>

@@ -601,7 +601,9 @@ export class ReportsPage {
     const id = this.expanded();
     if (!id) return null;
     const st = this.source().students.find((s) => s.id === id);
-    return st ? buildStudentTimeline(this.source(), st, this.period.period()) : null;
+    return st
+      ? buildStudentTimeline(this.source(), st, this.period.period(), this.circleIds())
+      : null;
   });
 
   dayStatus(d: StudentTimeline['days'][number]): string {

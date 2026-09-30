@@ -109,7 +109,7 @@ export const DAY_OUTCOME_LABELS: Record<DayOutcome, string> = {
   postponed: 'مؤجَّل',
   not_recited: 'لم يسمّع',
   no_record: 'حاضر بلا تسجيل',
-  tajweed: 'حاضر — حصّة التجويد',
+  tajweed: 'حصّة التجويد',
   excused: 'مأذون له',
   absent: 'غائب',
 };
@@ -632,19 +632,41 @@ export interface StudentTimeline {
   serd: SerdRecord[];
   exams: ExamRecord[];
   tajweed: TajweedExamCell[];
+  /** نطاق التقرير يشمل حلقة تحفيظ — وإلّا لا معنى لأعمدة التسميع والأوجه والسرد. */
+  hasHifz: boolean;
+  /** نطاق التقرير يشمل حلقة تجويد. */
+  hasTajweed: boolean;
 }
 
 /**
- * سِجلّ يوميّ كامل لطالب واحد عبر كلّ حلقاته وكلّ أنشطته داخل المدى — يخدم
- * «تاريخ الطالب الكامل» في التقرير المرجعيّ حين يُمرَّر `allTimePeriod()`.
+ * أيّام الإنجاز وحدها — ما يُعرَض في تقرير الأهالي. حضور حصّة التجويد إنجاز
+ * بذاته، إذ لا تسميع فيها أصلًا.
+ */
+export function achievementDays(tl: StudentTimeline): StudentDay[] {
+  return tl.days.filter(
+    (d) => d.recitations.length || d.serd.length || d.exams.length || d.outcome === 'tajweed',
+  );
+}
+
+/**
+ * سِجلّ يوميّ لطالب واحد داخل المدى — يخدم «تاريخ الطالب الكامل» في التقرير
+ * المرجعيّ حين يُمرَّر `allTimePeriod()`. `circleIds` يقصره على الحلقات
+ * المختارة (فارغة = كلّ حلقاته): من اختار حلقة التجويد وحدها لا يريد تسميع
+ * الطالب في حلقة التحفيظ.
  */
 export function buildStudentTimeline(
   src: ReportSource,
   student: Student,
   period: Period,
+  circleIds: readonly string[] = [],
 ): StudentTimeline {
-  const mine = <T extends { studentId: string; date: string }>(rows: readonly T[]): T[] =>
-    rows.filter((r) => r.studentId === student.id && inPeriod(r.date, period));
+  const inScope = (cid: string) => circleIds.length === 0 || circleIds.includes(cid);
+  const mine = <T extends { studentId: string; circleId: string; date: string }>(
+    rows: readonly T[],
+  ): T[] =>
+    rows.filter(
+      (r) => r.studentId === student.id && inScope(r.circleId) && inPeriod(r.date, period),
+    );
 
   const att = dedupeAttendance(mine(src.attendance));
   const recs = mine(src.recitations);
@@ -653,7 +675,7 @@ export function buildStudentTimeline(
 
   const examById = new Map(src.tajweedExams.map((e) => [e.id, e]));
   const tajweed: TajweedExamCell[] = src.tajweedResults
-    .filter((r) => r.studentId === student.id && inPeriod(r.date, period))
+    .filter((r) => r.studentId === student.id && inScope(r.circleId) && inPeriod(r.date, period))
     .map((r) => {
       const ex = examById.get(r.examId);
       const passScore = ex?.passScore ?? r.passScore;
@@ -681,6 +703,15 @@ export function buildStudentTimeline(
   ].sort();
 
   const tajweedCircleIds = new Set(src.circles.filter(isTajweedCircle).map((c) => c.id));
+  const scopeCircleIds = new Set([
+    ...studentCircleIds(student).filter(inScope),
+    ...att.map((a) => a.circleId),
+    ...recs.map((r) => r.circleId),
+    ...serd.map((r) => r.circleId),
+    ...exams.map((r) => r.circleId),
+  ]);
+  const hasTajweed = [...scopeCircleIds].some((id) => tajweedCircleIds.has(id));
+  const hasHifz = [...scopeCircleIds].some((id) => !tajweedCircleIds.has(id));
 
   const days: StudentDay[] = dates.map((date) => {
     const dayAtt = att.filter((x) => x.date === date);
@@ -727,6 +758,8 @@ export function buildStudentTimeline(
     serd,
     exams,
     tajweed,
+    hasHifz,
+    hasTajweed: hasTajweed || tajweed.length > 0,
   };
 }
 
@@ -835,6 +868,8 @@ export interface StudentsTotals {
   tajweedCount: number;
   tajweedAchieved: number;
   tajweedMax: number;
+  hasHifz: boolean;
+  hasTajweed: boolean;
 }
 
 export interface StudentsReport {
@@ -845,9 +880,10 @@ export interface StudentsReport {
 }
 
 /**
- * تقرير مجموعة طلّاب (واحد أو اثنان أو كلّهم) عبر **كلّ** حلقاتهم معًا —
- * تحفيظًا وتجويدًا في آنٍ واحد. الطالب المسجَّل في النوعين تقريره واحد يجمع
- * تسميعه وسرده واختبارات أجزائه واختبارات تجويده، وإلّا كان ناقصًا.
+ * تقرير مجموعة طلّاب (واحد أو اثنان أو كلّهم) داخل الحلقات المختارة
+ * (`circleIds` فارغة = كلّ حلقاتهم). اختيار النوعين معًا يجمع للطالب تسميعه
+ * وسرده واختبارات أجزائه واختبارات تجويده؛ واختيار التجويد وحده يُخرج
+ * تقرير تجويد خالصًا.
  *
  * الإجماليّات تُبقي التجويد مفصولًا (مجموع خام) عن التحفيظ (أوجه ومتوسّط
  * مئويّ) — جمعهما في رقم واحد بلا معنى.
@@ -856,13 +892,14 @@ export function buildStudentsReport(
   src: ReportSource,
   studentIds: readonly string[],
   period: Period,
+  circleIds: readonly string[] = [],
 ): StudentsReport {
   const wanted = new Set(studentIds);
   const chosen = src.students
     .filter((s) => wanted.has(s.id))
     .sort((a, b) => a.name.localeCompare(b.name, 'ar'));
 
-  const students = chosen.map((st) => buildStudentTimeline(src, st, period));
+  const students = chosen.map((st) => buildStudentTimeline(src, st, period, circleIds));
 
   const scores = students.flatMap((t) => (t.avgScore === null ? [] : [t.avgScore]));
   const tajweedCells = students.flatMap((t) => t.tajweed.filter((c) => c.score !== null));
@@ -881,6 +918,8 @@ export function buildStudentsReport(
       tajweedCount: tajweedCells.length,
       tajweedAchieved: tajweedCells.reduce((a, c) => a + (c.score ?? 0), 0),
       tajweedMax: tajweedCells.reduce((a, c) => a + c.totalScore, 0),
+      hasHifz: students.some((t) => t.hasHifz),
+      hasTajweed: students.some((t) => t.hasTajweed),
     },
   };
 }
