@@ -2,6 +2,7 @@ import { Component, ElementRef, computed, inject, input, signal, viewChild } fro
 import { Capacitor } from '@capacitor/core';
 import { isIosSafariTab } from '../core/platform';
 import { NotifyService } from '../core/notify.service';
+import { closeOnBack } from '../core/back-stack.service';
 import { renderPdf, type PdfDoc } from '../core/report-pdf';
 
 /* ==========================================================================
@@ -294,6 +295,13 @@ export class ReportExportComponent {
   readonly images = signal<{ pageNumber: number; dataUrl: string }[]>([]);
   readonly saving = signal<number | null>(null);
   readonly lightboxImg = signal<{ pageNumber: number; dataUrl: string } | null>(null);
+
+  constructor() {
+    closeOnBack(
+      () => !!this.lightboxImg(),
+      () => this.closeLightbox(),
+    );
+  }
 
   /**
    * هل تُعرَض أزرار المشاركة؟ على الجوّال **دائمًا** — المشاركة هناك تمرّ عبر

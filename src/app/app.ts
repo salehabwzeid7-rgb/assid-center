@@ -8,6 +8,7 @@ import { BottomNavVisibilityService } from './core/bottom-nav-visibility.service
 import { DataService } from './core/data.service';
 import { NavTransitionService } from './core/nav-transition.service';
 import { NotifyService } from './core/notify.service';
+import { BackStackService } from './core/back-stack.service';
 import { ThemeService } from './core/theme.service';
 import { UpdateService } from './core/update.service';
 import { UpdateBannerComponent } from './shared/update-banner';
@@ -63,6 +64,7 @@ export class App {
   private auth = inject(AuthService);
   private data = inject(DataService);
   private notify = inject(NotifyService);
+  private backStack = inject(BackStackService);
 
   constructor() {
     this.navTransition.init();
@@ -72,6 +74,7 @@ export class App {
     this.autoBackfillPlatformSummary();
 
     CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (this.backStack.closeTop()) return;
       if (canGoBack && history.length > 1) {
         this.location.back();
       } else {

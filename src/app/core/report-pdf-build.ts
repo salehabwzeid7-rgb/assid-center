@@ -14,14 +14,10 @@ import {
   ATTENDANCE_LABELS,
   EXAM_PASS,
   EXAM_SCOPE_LABELS,
-  RECITATION_KIND_LABELS,
   SARD_PASS,
   SERD_SCOPE_LABELS,
   passLabel,
-  ratingLabel,
-  scoreOf,
 } from './models';
-import { surahName } from './quran-data';
 import { periodLabel } from './report-period';
 import type { PdfCell, PdfDoc, PdfSection } from './report-pdf';
 import type { ReportAudience } from './report-text';
@@ -30,6 +26,7 @@ import {
   INACTIVE_DAYS,
   achievementDays,
   type CircleReport,
+  type DayEntry,
   type OverviewReport,
   type StudentTimeline,
   type StudentsReport,
@@ -232,40 +229,18 @@ function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
       { text: `${weekdayAr(d.date)} ${dmy(d.date)}`, dir: 'rtl' },
       { text: d.status ? ATTENDANCE_LABELS[d.status] : DAY_OUTCOME_LABELS[d.outcome], dir: 'rtl' },
     ];
-    const items: { kind: string; detail: string; score: string; verdict: string; fail: boolean }[] =
-      [];
-
-    for (const r of d.recitations) {
-      const s = scoreOf(r);
-      items.push({
-        kind: RECITATION_KIND_LABELS[r.kind],
-        detail: `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
-        score: String(s),
-        verdict: ratingLabel(s, r.rating),
-        fail: s < 90,
-      });
-    }
-    for (const s of d.serd) {
-      items.push({
-        kind: SERD_SCOPE_LABELS[s.scope] ?? 'سرد',
-        detail: `الجزء ${s.juz}`,
-        score: String(s.score),
-        verdict: passLabel(s.score, SARD_PASS),
-        fail: s.score < SARD_PASS,
-      });
-    }
-    for (const e of d.exams) {
-      items.push({
-        kind: EXAM_SCOPE_LABELS[e.scope ?? 'juz'] ?? 'اختبار',
-        detail: `الجزء ${e.juz}`,
-        score: String(e.score),
-        verdict: passLabel(e.score, EXAM_PASS),
-        fail: e.score < EXAM_PASS,
-      });
-    }
+    // كلّ محاولة سطر مستقلّ بترتيبها الزمنيّ؛ تُرقَّم حين تتعدّد في اليوم نفسه.
+    const multi = d.entries.length > 1;
+    const items = d.entries.map((e, i) => ({
+      kind: multi ? `${i + 1}. ${e.label}` : e.label,
+      detail: entryDetail(e),
+      score: e.score === null ? '' : String(e.score),
+      verdict: e.verdict,
+      fail: e.fail,
+    }));
 
     if (items.length === 0) {
-      const gap = d.outcome === 'not_recited' || d.outcome === 'no_record';
+      const gap = d.outcome === 'no_record';
       const txt =
         d.outcome === 'absent' || d.outcome === 'excused'
           ? (d.note ?? '')
@@ -282,7 +257,8 @@ function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
         rows.push([
           i === 0 ? head[0] : { text: '' },
           i === 0 ? head[1] : { text: '' },
-          { text: it.kind, dir: 'rtl', bold: true },
+          // «لم يسمّع» بلا درجة تُلوَّن خليّة نوعها نفسها، وإلّا لم يبقَ أيّ أثر للتحذير.
+          { text: it.kind, dir: 'rtl', bold: true, danger: it.fail && !it.score },
           { text: it.detail, dir: 'rtl' },
           { text: it.score, dir: 'ltr', danger: it.fail, strong: !it.fail },
           { text: it.verdict, dir: 'rtl', danger: it.fail },
@@ -401,6 +377,16 @@ function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
   }
 
   return sections;
+}
+
+/**
+ * تفصيل المحاولة مع ملاحظتها القصيرة: «النبأ ١ إلى النبأ ٢٠ — تردّد كثير».
+ * السهم «←» يُستبدَل بـ«إلى»: خطّ أميري لا يحوي رمز الأسهم فيختفي في PDF.
+ */
+function entryDetail(e: DayEntry): string {
+  const detail = e.detail.replace(/\s*←\s*/g, ' إلى ');
+  if (detail && e.note) return `${detail} — ${e.note}`;
+  return detail || e.note;
 }
 
 function tajweedSum(tl: StudentTimeline): { achieved: number; max: number } {

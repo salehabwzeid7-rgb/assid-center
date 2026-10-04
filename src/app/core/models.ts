@@ -103,6 +103,9 @@ export const EXAM_PASS = 90;
 /** عتبة نجاح التسميع داخل الجلسة */
 export const TASMIE_PASS = 90;
 
+/** أقصى طول لملاحظة المحاولة القصيرة (نحو ثلاث كلمات) — تُطبَع بجانبها في التقرير. */
+export const NOTE_MAX = 30;
+
 /** يحصر الدرجة ضمن ٠..١٠٠ ويقرّبها لعدد صحيح */
 export function clampScore(v: number | string | null | undefined): number {
   const n = Math.round(Number(v) || 0);

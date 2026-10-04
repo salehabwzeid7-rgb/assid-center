@@ -1,4 +1,5 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { closeOnBack } from '../core/back-stack.service';
 import { NotifyService } from '../core/notify.service';
 import { isTajweedCircle, studentCircleIds, type Student } from '../core/models';
 import {
@@ -382,6 +383,11 @@ export class ReportDialogComponent {
   private readonly studentOverride = signal<string[] | null>(null);
 
   constructor() {
+    // النافذة نفسها طبقة: الرجوع يُغلقها ولا يغادر صفحة التقارير.
+    closeOnBack(
+      () => true,
+      () => this.close.emit(),
+    );
     // نسخة مبدئيّة من حالة اللوحة، ثمّ تستقلّ النافذة بحالتها.
     queueMicrotask(() => {
       const p = this.initialPeriod();

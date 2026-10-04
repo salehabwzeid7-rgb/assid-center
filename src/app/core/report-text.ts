@@ -14,18 +14,7 @@
    ========================================================================== */
 
 import { dmy, weekdayAr } from './format';
-import {
-  ATTENDANCE_LABELS,
-  EXAM_SCOPE_LABELS,
-  RECITATION_KIND_LABELS,
-  SARD_PASS,
-  EXAM_PASS,
-  SERD_SCOPE_LABELS,
-  passLabel,
-  ratingLabel,
-  scoreOf,
-} from './models';
-import { surahName } from './quran-data';
+import { ATTENDANCE_LABELS } from './models';
 import { periodLabel } from './report-period';
 import {
   DAY_OUTCOME_LABELS,
@@ -199,25 +188,26 @@ function dayLines(d: StudentTimeline['days'][number], audience: ReportAudience):
   }`;
   const out = [head];
 
-  for (const r of d.recitations) {
-    const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
-    const score = scoreOf(r);
-    out.push(
-      `  ${RECITATION_KIND_LABELS[r.kind]}: ${pagesLabel(r.pages)} — ${score}٪ (${ratingLabel(score, r.rating)}) [${range}]`,
-    );
-    if (audience === 'reference' && (r.hifzErrors || r.tajweedErrors || r.promptCount)) {
-      out.push(`    خطأ ${r.hifzErrors} · تجويد ${r.tajweedErrors} · تردّد ${r.promptCount}`);
+  // كلّ محاولة سطر بترتيبها الزمنيّ؛ تُرقَّم حين تتعدّد في اليوم نفسه.
+  const multi = d.entries.length > 1;
+  d.entries.forEach((e, i) => {
+    const n = multi ? `${i + 1}. ` : '';
+    const note = e.note ? ` — ${e.note}` : '';
+    if (e.kind === 'recitation' && e.rec) {
+      const r = e.rec;
+      out.push(
+        `  ${n}${e.label}: ${pagesLabel(r.pages)} — ${e.score}٪ (${e.verdict}) [${e.detail}]${note}`,
+      );
+      if (audience === 'reference' && (r.hifzErrors || r.tajweedErrors || r.promptCount)) {
+        out.push(`    خطأ ${r.hifzErrors} · تجويد ${r.tajweedErrors} · تردّد ${r.promptCount}`);
+      }
+    } else if (e.score !== null) {
+      out.push(`  ${n}${e.label} — ${e.detail}: ${e.score}٪ (${e.verdict})${note}`);
+    } else {
+      out.push(`  ${n}${e.label}${note}`);
     }
-  }
-  for (const s of d.serd) {
-    const scope = SERD_SCOPE_LABELS[s.scope] ?? 'سرد';
-    out.push(`  ${scope} — الجزء ${s.juz}: ${s.score}٪ (${passLabel(s.score, SARD_PASS)})`);
-  }
-  for (const e of d.exams) {
-    const scope = EXAM_SCOPE_LABELS[e.scope ?? 'juz'] ?? 'اختبار';
-    out.push(`  ${scope} — الجزء ${e.juz}: ${e.score}٪ (${passLabel(e.score, EXAM_PASS)})`);
-  }
-  if (d.recitations.length === 0 && d.serd.length === 0 && d.exams.length === 0) {
+  });
+  if (d.entries.length === 0) {
     // لا نكتب «لم يسمّع» لغائب — الغياب وحده يكفي، وإلّا بدا كأنّه تقصير إضافيّ.
     if (d.outcome !== 'absent' && d.outcome !== 'excused') {
       out.push(`  ${d.note || DAY_OUTCOME_LABELS[d.outcome]}`);

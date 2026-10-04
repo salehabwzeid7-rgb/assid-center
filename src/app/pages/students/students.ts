@@ -8,6 +8,7 @@ import {
   viewChild,
   ElementRef,
 } from '@angular/core';
+import { closeOnBack } from '../../core/back-stack.service';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
@@ -241,6 +242,11 @@ export class StudentsPage {
 
   readonly q = signal('');
   readonly adding = signal(false);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => this.adding(),
+    () => this.closeAdd(),
+  );
   readonly saving = signal(false);
   readonly error = signal('');
 

@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { NotifyService } from '../core/notify.service';
 import { DataService } from '../core/data.service';
+import { closeOnBack } from '../core/back-stack.service';
 
 /** حاوية الإشعارات: التوستات + شريط الاتصال + نافذة التأكيد. تُركَّب مرة في الجذر. */
 @Component({
@@ -74,4 +75,11 @@ import { DataService } from '../core/data.service';
 export class ToastHostComponent {
   readonly notify = inject(NotifyService);
   readonly data = inject(DataService);
+
+  constructor() {
+    closeOnBack(
+      () => !!this.notify.confirmRequest(),
+      () => this.notify.answerConfirm(false),
+    );
+  }
 }

@@ -1,4 +1,5 @@
 import { Component, computed, ElementRef, input, model, signal, viewChild } from '@angular/core';
+import { closeOnBack } from '../core/back-stack.service';
 import { FormsModule } from '@angular/forms';
 import { SURAHS } from '../core/quran-data';
 
@@ -168,6 +169,11 @@ export class SurahPickerComponent {
   private readonly searchInput = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   readonly opened = signal(false);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => this.opened(),
+    () => this.close(),
+  );
   readonly query = signal('');
 
   readonly filtered = computed(() => {

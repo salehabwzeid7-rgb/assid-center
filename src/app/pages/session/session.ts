@@ -1,4 +1,5 @@
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
+import { closeOnBack } from '../../core/back-stack.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
@@ -9,18 +10,19 @@ import {
   ATTENDANCE_ORDER,
   DEFAULT_REPORT_INTRO,
   DEFAULT_REPORT_OUTRO,
-  RECITATION_KIND_LABELS,
   SARD_PASS,
   SESSION_STATUS_LABELS,
   TASMIE_PASS,
+  NOTE_MAX,
   circleLabel,
+  clampScore,
   isActualRecitation,
   isTajweedCircle,
-  ratingLabel,
   scoreOf,
   studentCircleIds,
   type AttendanceRecord,
   type AttendanceStatus,
+  type ExamRecord,
   type RecitationRecord,
   type SerdRecord,
   type Session,
@@ -28,7 +30,8 @@ import {
 } from '../../core/models';
 import { dmy, weekdayAr } from '../../core/format';
 import { fmt12, isValidHHMM, nowHHMM } from '../../core/time';
-import { completedJuz, surahName } from '../../core/quran-data';
+import { completedJuz } from '../../core/quran-data';
+import { buildDayEntries, type DayEntry } from '../../core/reports';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { RecitationPanelComponent } from '../../shared/recitation-panel';
 import {
@@ -158,62 +161,33 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                 </div>
 
                 @if (!isTajweed()) {
+                  @let attempts = attemptsOf(st.id);
+                  @for (e of attempts; track e.id; let i = $index) {
+                    <button
+                      type="button"
+                      class="muted rp-done rp-done-btn"
+                      [class.rp-not-recited]="e.kind === 'not_recited' || e.kind === 'postponed'"
+                      [disabled]="!isPresent(st.id)"
+                      (click)="openStudentModal(st.id, e)"
+                    >
+                      @if (attempts.length > 1) {
+                        <b>{{ i + 1 }}.</b>
+                      }
+                      {{ attemptLine(e) }}
+                      @if (isPresent(st.id)) {
+                        — تعديل ›
+                      }
+                    </button>
+                  }
                   @if (isPresent(st.id)) {
-                    @for (r of recsOf(st.id); track r.kind) {
-                      @if (r.notRecited) {
-                        <button
-                          type="button"
-                          class="muted rp-done rp-done-btn rp-not-recited"
-                          (click)="openStudentModal(st.id)"
-                        >
-                          ⭕ لم يسمّع — تعديل ›
-                        </button>
-                      } @else if (r.postponed) {
-                        <button
-                          type="button"
-                          class="muted rp-done rp-done-btn rp-not-recited"
-                          (click)="openStudentModal(st.id)"
-                        >
-                          📝 {{ r.notes?.trim() || 'ملاحظة/تأجيل' }} — تعديل ›
-                        </button>
-                      } @else {
-                        <button
-                          type="button"
-                          class="muted rp-done rp-done-btn"
-                          (click)="openStudentModal(st.id)"
-                        >
-                          {{ kindLabels[r.kind] }}: {{ surahName(r.fromSurah) }} {{ r.fromAyah }} ←
-                          {{ surahName(r.toSurah) }} {{ r.toAyah }} · {{ r.pages }} وجه ·
-                          {{ scoreOf(r) }}٪ — تعديل ›
-                        </button>
-                      }
-                    }
-                    @if (canAddKind(st.id)) {
-                      <button
-                        class="btn btn-primary btn-block"
-                        style="margin-top:8px"
-                        type="button"
-                        (click)="openStudentModal(st.id)"
-                      >
-                        📖 {{ recsOf(st.id).length ? 'تسجيل تسميع آخر' : 'تسجيل التسميع' }}
-                      </button>
-                    }
-                  } @else if (recsOf(st.id).length > 0) {
-                    @for (r of recsOf(st.id); track r.kind) {
-                      @if (r.notRecited) {
-                        <div class="muted rp-done rp-not-recited">⭕ لم يسمّع في هذه الجلسة</div>
-                      } @else if (r.postponed) {
-                        <div class="muted rp-done rp-not-recited">
-                          📝 {{ r.notes?.trim() || 'ملاحظة/تأجيل' }}
-                        </div>
-                      } @else {
-                        <div class="muted rp-done">
-                          سُجّل تسميع سابق ({{ kindLabels[r.kind] }}): {{ surahName(r.fromSurah) }}
-                          {{ r.fromAyah }} ← {{ surahName(r.toSurah) }} {{ r.toAyah }} ·
-                          {{ r.pages }} وجه · {{ scoreOf(r) }}٪
-                        </div>
-                      }
-                    }
+                    <button
+                      class="btn btn-primary btn-block"
+                      style="margin-top:8px"
+                      type="button"
+                      (click)="openStudentModal(st.id)"
+                    >
+                      📖 {{ attempts.length ? 'تسجيل محاولة أخرى' : 'تسجيل التسميع' }}
+                    </button>
                   }
                 }
               </div>
@@ -262,39 +236,87 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                   </label>
                 </div>
                 @if (!isTajweed()) {
-                  <!-- نتيجة الحصّة — خيارات متبادلة الإقصاء، تبويب واحد فقط نشط لكلّ طالب -->
-                  <div class="outcome-tabs">
-                    @for (o of outcomeOrder; track o) {
-                      <button
-                        type="button"
-                        class="chip"
-                        [class.active]="currentOutcome() === o"
-                        (click)="setOutcome(o)"
-                      >
-                        {{ outcomeLabels[o] }}
+                  <!-- محاولات اليوم: كلّ محاولة مستقلّة بترتيبها، قابلة للتعديل والحذف -->
+                  @let attempts = attemptsOf(st.id);
+                  @if (attempts.length > 0) {
+                    <div class="attempts">
+                      <div class="attempts-title">محاولات اليوم ({{ attempts.length }})</div>
+                      @for (e of attempts; track e.id; let i = $index) {
+                        <div class="attempt" [class.is-editing]="editing()?.id === e.id">
+                          <span class="attempt-n">{{ i + 1 }}</span>
+                          <span class="grow attempt-text" [class.is-fail]="e.fail">
+                            {{ attemptLine(e) }}
+                          </span>
+                          <button type="button" class="chip" (click)="editAttempt(e)">تعديل</button>
+                          <button
+                            type="button"
+                            class="chip chip-danger"
+                            (click)="deleteAttempt(e)"
+                            aria-label="حذف المحاولة"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+
+                  <div class="row-between attempt-form-head">
+                    <b>
+                      {{
+                        editing()
+                          ? 'تعديل المحاولة ' + (editingIndex(st.id) + 1)
+                          : attempts.length
+                            ? 'محاولة جديدة (' + (attempts.length + 1) + ')'
+                            : 'نتيجة الحصّة'
+                      }}
+                    </b>
+                    @if (editing()) {
+                      <button type="button" class="chip" (click)="cancelEdit()">
+                        إلغاء التعديل
                       </button>
                     }
                   </div>
 
+                  <!-- نوع المحاولة — يُقفَل أثناء تعديل محاولة قائمة -->
+                  @if (!editing()) {
+                    <div class="outcome-tabs">
+                      @for (o of outcomeOrder; track o) {
+                        <button
+                          type="button"
+                          class="chip"
+                          [class.active]="currentOutcome() === o"
+                          (click)="setOutcome(o)"
+                        >
+                          {{ outcomeLabels[o] }}
+                        </button>
+                      }
+                    </div>
+                  }
+
                   @switch (currentOutcome()) {
                     @case ('recite') {
-                      <app-recitation-panel
-                        [sessionId]="id"
-                        [studentId]="st.id"
-                        [circleId]="s.circleId"
-                        [date]="s.date"
-                        [existingEntries]="recsOf(st.id)"
-                      />
+                      @for (k of [panelKey()]; track k) {
+                        <app-recitation-panel
+                          [sessionId]="id"
+                          [studentId]="st.id"
+                          [circleId]="s.circleId"
+                          [date]="s.date"
+                          [entry]="editingRec()"
+                          (saved)="onAttemptSaved()"
+                        />
+                      }
                     }
                     @case ('notrecited') {
                       <div class="field" style="margin-top:8px">
-                        <label>السبب (اختياري)</label>
-                        <textarea
-                          rows="2"
-                          [(ngModel)]="notRecitedNote"
+                        <label>ملاحظة قصيرة (اختياريّة، تظهر في التقرير)</label>
+                        <input
+                          type="text"
+                          [maxlength]="noteMax"
+                          [(ngModel)]="attemptNote"
                           [ngModelOptions]="{ standalone: true }"
-                          placeholder="مثال: تأخّر الطالب، انتهى وقت الحصّة…"
-                        ></textarea>
+                          placeholder="مثال: لم يحضّر المقطع"
+                        />
                       </div>
                       <button
                         class="btn btn-primary btn-block"
@@ -303,18 +325,19 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                         [disabled]="outcomeSaving()"
                         (click)="saveNotRecited(st.id)"
                       >
-                        حفظ الحالة
+                        {{ editing() ? 'حفظ التعديل' : 'حفظ: لم يسمّع' }}
                       </button>
                     }
                     @case ('postponed') {
                       <div class="field" style="margin-top:8px">
-                        <label>الملاحظة</label>
-                        <textarea
-                          rows="2"
-                          [(ngModel)]="postponedNote"
+                        <label>الملاحظة (تظهر في التقرير)</label>
+                        <input
+                          type="text"
+                          [maxlength]="noteMax"
+                          [(ngModel)]="attemptNote"
                           [ngModelOptions]="{ standalone: true }"
-                          placeholder="مثال: أُجِّل التسميع ليوم الأحد"
-                        ></textarea>
+                          placeholder="مثال: أُجِّل ليوم الأحد"
+                        />
                       </div>
                       <button
                         class="btn btn-primary btn-block"
@@ -323,7 +346,7 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                         [disabled]="outcomeSaving()"
                         (click)="savePostponed(st.id)"
                       >
-                        حفظ الملاحظة
+                        {{ editing() ? 'حفظ التعديل' : 'حفظ الملاحظة' }}
                       </button>
                     }
                     @default {
@@ -357,6 +380,16 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                             />
                           </div>
                         </div>
+                        <div class="field">
+                          <label>ملاحظة قصيرة (اختياريّة، تظهر في التقرير)</label>
+                          <input
+                            type="text"
+                            [maxlength]="noteMax"
+                            [(ngModel)]="attemptNote"
+                            [ngModelOptions]="{ standalone: true }"
+                            placeholder="مثال: أخطاء في الربع الأخير"
+                          />
+                        </div>
                         <button
                           class="btn btn-primary btn-block"
                           type="button"
@@ -364,7 +397,8 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                           [disabled]="outcomeSaving()"
                           (click)="saveManual(st.id)"
                         >
-                          حفظ {{ currentOutcome() === 'serd' ? 'السرد' : 'الاختبار' }}
+                          {{ editing() ? 'حفظ التعديل' : 'حفظ' }}
+                          {{ currentOutcome() === 'serd' ? 'السرد' : 'الاختبار' }}
                         </button>
                       }
                     }
@@ -579,6 +613,67 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
         padding-top: 10px;
         border-top: 1px dashed var(--border);
       }
+      /* ---- محاولات اليوم ---- */
+      .attempts {
+        margin-top: 12px;
+        padding: 10px;
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .attempts-title {
+        font-size: 0.8rem;
+        font-weight: 800;
+        color: var(--text-soft);
+      }
+      .attempt {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: var(--radius-xs);
+        background: var(--surface);
+        border: 1px solid transparent;
+        transition: border-color var(--ease);
+      }
+      .attempt.is-editing {
+        border-color: var(--green-mid);
+      }
+      .attempt-n {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--green-tint);
+        color: var(--green);
+        display: grid;
+        place-items: center;
+        font-size: 0.74rem;
+        font-weight: 800;
+      }
+      .attempt-text {
+        min-width: 0;
+        font-size: 0.84rem;
+        line-height: 1.45;
+      }
+      .attempt-text.is-fail {
+        color: var(--danger);
+      }
+      .attempt .chip {
+        flex-shrink: 0;
+        padding: 4px 10px;
+        font-size: 0.76rem;
+      }
+      .chip-danger {
+        color: var(--danger);
+      }
+      .attempt-form-head {
+        margin-top: 12px;
+        font-size: 0.9rem;
+      }
       .edit-banner {
         margin-top: 10px;
         padding: 10px 12px;
@@ -753,8 +848,6 @@ export class SessionPage {
   readonly attOrder = ATTENDANCE_ORDER;
   readonly scoreOf = scoreOf;
   readonly statusLabels = SESSION_STATUS_LABELS;
-  readonly kindLabels = RECITATION_KIND_LABELS;
-  readonly surahName = surahName;
 
   private readonly allStudents = this.data.allStudents(this.destroyRef);
   private readonly allCircles = this.data.circles(this.destroyRef);
@@ -780,40 +873,13 @@ export class SessionPage {
   private readonly allSerds = this.data.allSerds(this.destroyRef);
   private readonly allExams = this.data.allExams(this.destroyRef);
 
-  /**
-   * نتيجة سرد/اختبار **اليوم فقط** لهذه الجلسة (حلقة+تاريخ) — سطر واحد
-   * كحدّ أقصى لكلّ نوع (سرد/اختبار)، الأحدث (createdAt) إن وُجد أكثر من
-   * سجلّ. جلسة واحدة = نتيجة واحدة لكلّ نوع، لا قائمة بكلّ الأجزاء التي
-   * جرى سردها/اختبارها يومًا ما — كان الخلل السابق يجمع سطرًا لكلّ جزء
-   * مختلف بدل الاكتفاء بأحدث نتيجة، فيظهر «تاريخ» طويل بدل نتيجة الجلسة.
-   */
-  private sameDayActivities(
-    studentId: string,
-    date: string,
-    circleId: string,
-  ): { label: string; score: number }[] {
-    const fmt = (juz: number, scope: string | undefined, juzList?: number[]) =>
-      scope === 'block' ? `كتلة ${(juzList ?? [juz]).join('،')}` : `الجزء ${juz}`;
-    const latest = <T extends { createdAt: number }>(list: T[]): T | null =>
-      list.reduce<T | null>((best, r) => (!best || r.createdAt > best.createdAt ? r : best), null);
-    const sameDay = <T extends { studentId: string; date: string; circleId: string }>(
-      list: T[] | undefined,
-    ) =>
-      (list ?? []).filter(
-        (r) => r.studentId === studentId && r.date === date && r.circleId === circleId,
-      );
-    const serd = latest(sameDay(this.allSerds()));
-    const exam = latest(sameDay(this.allExams()));
-    const out: { label: string; score: number }[] = [];
-    if (serd)
-      out.push({ label: `سرد: ${fmt(serd.juz, serd.scope, serd.juzList)}`, score: serd.score });
-    if (exam)
-      out.push({ label: `اختبار: ${fmt(exam.juz, exam.scope, exam.juzList)}`, score: exam.score });
-    return out;
-  }
-
   /** الطالب المفتوحة تفاصيله حاليًّا في النافذة المنبثقة — null إن كانت مغلقة. */
   private readonly activeStudentId = signal<string | null>(null);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => this.activeStudentId() !== null,
+    () => this.closeStudentModal(),
+  );
   readonly activeStudent = computed(
     () => this.students()?.find((s) => s.id === this.activeStudentId()) ?? null,
   );
@@ -835,10 +901,21 @@ export class SessionPage {
   };
   readonly currentOutcome = signal<Outcome>('recite');
   readonly outcomeSaving = signal(false);
-  notRecitedNote = '';
-  postponedNote = '';
+  /** ملاحظة المحاولة القصيرة («لم يسمّع» / تأجيل / سرد / اختبار) — تظهر في التقرير. */
+  attemptNote = '';
+  readonly noteMax = NOTE_MAX;
   manualJuz = 0;
   manualScore = 90;
+
+  /** المحاولة الجاري تعديلها — `null` = محاولة جديدة. */
+  readonly editing = signal<DayEntry | null>(null);
+  /** سجلّ التسميع المُعدَّل (للوحة التسميع) إن كانت المحاولة تسميعًا. */
+  readonly editingRec = computed(() => {
+    const e = this.editing();
+    return e?.kind === 'recitation' ? (e.rec ?? null) : null;
+  });
+  /** يُعاد إنشاء لوحة التسميع بتغييره — لتبدأ فارغة بعد كلّ حفظ أو تبديل محاولة. */
+  readonly panelKey = signal(0);
 
   private readonly memorizedJuz = computed(() =>
     completedJuz(this.activeStudent()?.memorizedSurahs ?? []),
@@ -851,41 +928,124 @@ export class SessionPage {
         set.add(r.juz);
     return set;
   });
-  readonly manualJuzOptions = computed(() =>
-    this.currentOutcome() === 'exam'
-      ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
-      : this.memorizedJuz(),
-  );
+  readonly manualJuzOptions = computed(() => {
+    const base =
+      this.currentOutcome() === 'exam'
+        ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
+        : this.memorizedJuz();
+    // جزء المحاولة المُعدَّلة يبقى متاحًا ولو خرج من الشرط لاحقًا.
+    const e = this.editing();
+    const juz = e && (e.kind === 'serd' || e.kind === 'exam') ? this.serdOrExamOf(e)?.juz : null;
+    return juz && !base.includes(juz) ? [...base, juz].sort((a, b) => a - b) : base;
+  });
 
-  /** يستنتج تبويب النتيجة الحاليّ من بيانات هذا الطالب الفعليّة في هذه الجلسة. */
-  private deriveOutcome(studentId: string): Outcome {
-    const recs = this.recsOf(studentId);
-    if (recs.some(isActualRecitation)) return 'recite';
-    if (recs.some((r) => r.postponed)) return 'postponed';
-    if (recs.some((r) => r.notRecited)) return 'notrecited';
-    const s = this.session();
-    if (s) {
-      const sameDay = (list: { studentId: string; date: string; circleId: string }[] | undefined) =>
-        (list ?? []).some(
-          (r) => r.studentId === studentId && r.date === s.date && r.circleId === s.circleId,
-        );
-      if (sameDay(this.allSerds())) return 'serd';
-      if (sameDay(this.allExams())) return 'exam';
-    }
-    return 'recite';
-  }
-
-  openStudentModal(studentId: string): void {
+  /**
+   * يفتح نافذة الطالب. بلا `entry` ← محاولة جديدة (تسميع افتراضيًّا)؛ مع
+   * `entry` ← تعديل تلك المحاولة مباشرةً.
+   */
+  openStudentModal(studentId: string, entry?: DayEntry): void {
     this.activeStudentId.set(studentId);
-    const recs = this.recsOf(studentId);
-    this.notRecitedNote = recs.find((r) => r.notRecited)?.notes ?? '';
-    this.postponedNote = recs.find((r) => r.postponed)?.notes ?? '';
-    this.currentOutcome.set(this.deriveOutcome(studentId));
-    this.manualJuz = this.manualJuzOptions()[0] ?? 0;
+    if (entry) this.editAttempt(entry);
+    else this.resetAttemptForm();
   }
   closeStudentModal(): void {
     this.activeStudentId.set(null);
+    this.editing.set(null);
   }
+
+  /** كلّ محاولات الطالب في هذه الجلسة بترتيبها: تسميعات + سرد/اختبار اليوم. */
+  attemptsOf(studentId: string): DayEntry[] {
+    const s = this.session();
+    if (!s) return [];
+    const sameDay = <T extends { studentId: string; date: string; circleId: string }>(
+      list: T[] | undefined,
+    ) =>
+      (list ?? []).filter(
+        (r) => r.studentId === studentId && r.date === s.date && r.circleId === s.circleId,
+      );
+    return buildDayEntries(
+      this.recsOf(studentId),
+      sameDay(this.allSerds()),
+      sameDay(this.allExams()),
+    );
+  }
+
+  /** سطر المحاولة المختصر: «حفظ جديد: النبأ ١ ← النبأ ٢٠ · ٩٥٪ — تردّد». */
+  attemptLine(e: DayEntry): string {
+    const parts = [e.detail ? `${e.label}: ${e.detail}` : e.label];
+    if (e.score !== null) parts.push(`${e.score}٪`);
+    return parts.join(' · ') + (e.note ? ` — ${e.note}` : '');
+  }
+
+  editingIndex(studentId: string): number {
+    const id = this.editing()?.id;
+    return this.attemptsOf(studentId).findIndex((e) => e.id === id);
+  }
+
+  private serdOrExamOf(e: DayEntry): SerdRecord | ExamRecord | undefined {
+    const list: (SerdRecord | ExamRecord)[] | undefined =
+      e.kind === 'serd' ? this.allSerds() : this.allExams();
+    return list?.find((r) => r.id === e.id);
+  }
+
+  /** يحمّل محاولة قائمة في النموذج للتعديل. */
+  editAttempt(e: DayEntry): void {
+    this.editing.set(e);
+    this.attemptNote = e.note;
+    const outcome: Outcome =
+      e.kind === 'recitation'
+        ? 'recite'
+        : e.kind === 'not_recited'
+          ? 'notrecited'
+          : e.kind === 'postponed'
+            ? 'postponed'
+            : e.kind;
+    this.currentOutcome.set(outcome);
+    if (e.kind === 'serd' || e.kind === 'exam') {
+      const r = this.serdOrExamOf(e);
+      this.manualJuz = r?.juz ?? this.manualJuzOptions()[0] ?? 0;
+      this.manualScore = r?.score ?? 90;
+    }
+    this.panelKey.update((k) => k + 1);
+  }
+
+  cancelEdit(): void {
+    this.resetAttemptForm();
+  }
+
+  /** نموذج محاولة جديدة فارغ — بعد كلّ حفظ أو إلغاء تعديل. */
+  private resetAttemptForm(): void {
+    this.editing.set(null);
+    this.attemptNote = '';
+    this.currentOutcome.set('recite');
+    this.manualScore = 90;
+    this.manualJuz = this.manualJuzOptions()[0] ?? 0;
+    this.panelKey.update((k) => k + 1);
+  }
+
+  onAttemptSaved(): void {
+    this.resetAttemptForm();
+  }
+
+  async deleteAttempt(e: DayEntry): Promise<void> {
+    const ok = await this.notify.confirm('حذف هذه المحاولة؟', {
+      message: this.attemptLine(e),
+      confirmText: 'حذف',
+      danger: true,
+    });
+    if (!ok) return;
+    if (this.editing()?.id === e.id) this.resetAttemptForm();
+    await this.notify.run(
+      () =>
+        e.kind === 'serd'
+          ? this.data.deleteSerd(e.id)
+          : e.kind === 'exam'
+            ? this.data.deleteExam(e.id)
+            : this.data.deleteRecitation(e.id),
+      { loading: 'جارٍ الحذف…', success: 'حُذفت المحاولة', error: 'تعذّر الحذف' },
+    );
+  }
+
   setOutcome(o: Outcome): void {
     this.currentOutcome.set(o);
     if (o === 'serd' || o === 'exam') this.manualJuz = this.manualJuzOptions()[0] ?? 0;
@@ -908,58 +1068,76 @@ export class SessionPage {
   async saveManual(studentId: string): Promise<void> {
     const kind = this.currentOutcome();
     const s = this.session();
-    const juz = this.manualJuz;
+    const juz = Number(this.manualJuz);
     if ((kind !== 'serd' && kind !== 'exam') || !s || !juz || this.outcomeSaving()) return;
     this.outcomeSaving.set(true);
+    const score = clampScore(this.manualScore);
+    const notes = this.attemptNote.trim();
+    const editing = this.editing();
     const base = {
       studentId,
       circleId: s.circleId,
+      sessionId: this.id,
       scope: 'juz' as const,
       juz,
-      score: this.manualScore,
+      score,
       date: s.date,
+      notes: notes || undefined,
     };
     try {
-      await this.notify.run(
+      const ok = await this.notify.run<unknown>(
         () =>
-          kind === 'serd'
-            ? this.data.addSerd({ ...base, cycle: this.nextSeq(studentId, juz, 'serd') })
-            : this.data.addExam({ ...base, attempt: this.nextSeq(studentId, juz, 'exam') }),
-        { success: kind === 'serd' ? 'سُجّل السرد' : 'سُجّل الاختبار', error: 'تعذّر الحفظ' },
+          editing
+            ? this.data.updateSerdOrExam(kind, editing.id, { juz, score, notes }).then(() => true)
+            : kind === 'serd'
+              ? this.data.addSerd({ ...base, cycle: this.nextSeq(studentId, juz, 'serd') })
+              : this.data.addExam({ ...base, attempt: this.nextSeq(studentId, juz, 'exam') }),
+        {
+          success: editing ? 'حُفظ التعديل' : kind === 'serd' ? 'سُجّل السرد' : 'سُجّل الاختبار',
+          error: 'تعذّر الحفظ',
+        },
       );
+      if (ok !== undefined) this.resetAttemptForm();
     } finally {
       this.outcomeSaving.set(false);
     }
   }
 
-  /** يحفظ حالة «لم يسمّع» — نفس شريحة الحفظ الجديد («new»)، لا تتكرّر لكلّ نوع تسميع. */
+  /** يحفظ محاولة «لم يسمّع» — سجلّ مستقلّ؛ الطالب قد يُسجَّل «لم يسمّع» ثمّ يسمّع لاحقًا. */
   async saveNotRecited(studentId: string): Promise<void> {
     const s = this.session();
     if (!s || this.outcomeSaving()) return;
     this.outcomeSaving.set(true);
     try {
-      await this.notify.run(
-        () =>
-          this.data.upsertSessionRecitation(this.id, studentId, {
-            studentId,
-            circleId: s.circleId,
-            sessionId: this.id,
-            date: s.date,
-            kind: 'new',
-            fromSurah: 0,
-            fromAyah: 0,
-            toSurah: 0,
-            toAyah: 0,
-            pages: 0,
-            score: 0,
-            hifzErrors: 0,
-            tajweedErrors: 0,
-            promptCount: 0,
-            notRecited: true,
-            notes: this.notRecitedNote.trim() || undefined,
-          }),
-        { success: 'سُجّلت الحالة: لم يسمّع', error: 'تعذّر الحفظ' },
-      );
+      await this.notify
+        .run(
+          () =>
+            this.data.upsertSessionRecitation(
+              this.id,
+              studentId,
+              {
+                studentId,
+                circleId: s.circleId,
+                sessionId: this.id,
+                date: s.date,
+                kind: 'new',
+                fromSurah: 0,
+                fromAyah: 0,
+                toSurah: 0,
+                toAyah: 0,
+                pages: 0,
+                score: 0,
+                hifzErrors: 0,
+                tajweedErrors: 0,
+                promptCount: 0,
+                notRecited: true,
+                notes: this.attemptNote.trim() || undefined,
+              },
+              this.editing()?.id,
+            ),
+          { success: 'سُجّلت المحاولة: لم يسمّع', error: 'تعذّر الحفظ' },
+        )
+        .then((r) => r !== undefined && this.resetAttemptForm());
     } finally {
       this.outcomeSaving.set(false);
     }
@@ -971,28 +1149,35 @@ export class SessionPage {
     if (!s || this.outcomeSaving()) return;
     this.outcomeSaving.set(true);
     try {
-      await this.notify.run(
-        () =>
-          this.data.upsertSessionRecitation(this.id, studentId, {
-            studentId,
-            circleId: s.circleId,
-            sessionId: this.id,
-            date: s.date,
-            kind: 'new',
-            fromSurah: 0,
-            fromAyah: 0,
-            toSurah: 0,
-            toAyah: 0,
-            pages: 0,
-            score: 0,
-            hifzErrors: 0,
-            tajweedErrors: 0,
-            promptCount: 0,
-            postponed: true,
-            notes: this.postponedNote.trim() || undefined,
-          }),
-        { success: 'حُفظت الملاحظة', error: 'تعذّر الحفظ' },
-      );
+      await this.notify
+        .run(
+          () =>
+            this.data.upsertSessionRecitation(
+              this.id,
+              studentId,
+              {
+                studentId,
+                circleId: s.circleId,
+                sessionId: this.id,
+                date: s.date,
+                kind: 'new',
+                fromSurah: 0,
+                fromAyah: 0,
+                toSurah: 0,
+                toAyah: 0,
+                pages: 0,
+                score: 0,
+                hifzErrors: 0,
+                tajweedErrors: 0,
+                promptCount: 0,
+                postponed: true,
+                notes: this.attemptNote.trim() || undefined,
+              },
+              this.editing()?.id,
+            ),
+          { success: 'حُفظت الملاحظة', error: 'تعذّر الحفظ' },
+        )
+        .then((r) => r !== undefined && this.resetAttemptForm());
     } finally {
       this.outcomeSaving.set(false);
     }
@@ -1107,41 +1292,33 @@ export class SessionPage {
     // حلقات التجويد لا تسميع فيها إطلاقًا — لا معنى لسطر «لم يُسمّع في هذه
     // الجلسة» هنا (يوحي بتسميع متوقَّع لم يحدث)، فيُكتفى بسطر الحضور وحده.
     if (present && !this.isTajweed()) {
-      const actual = recs.filter(isActualRecitation);
-      if (actual.length > 0) {
-        // قد يكون للطالب أكثر من تسميع بنفس الجلسة (حفظ جديد + مراجعة) —
-        // سطر منفصل لكلّ نوع، موسومًا باسمه حتى لا يلتبس بغيره.
-        for (const r of actual) {
-          const range = `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`;
-          const score = scoreOf(r);
+      const attempts = this.attemptsOf(st.id);
+      const multi = attempts.length > 1;
+      attempts.forEach((e, i) => {
+        // تُرقَّم المحاولات حين تتعدّد: «لم يسمّع» ثمّ «سمّع» تُروى كما جرت فعلًا.
+        const n = multi ? `(${i + 1}) ` : '';
+        const note = e.note ? ` — ${e.note}` : '';
+        if (e.kind === 'recitation' && e.rec) {
+          const r = e.rec;
           lines.push(
-            `• التسميع (${this.kindLabels[r.kind]}): ${r.pages} وجه — ${score}٪ (${ratingLabel(score, r.rating)}) (${range})`,
+            `• ${n}التسميع (${e.label}): ${r.pages} وجه — ${e.score}٪ (${e.verdict}) (${e.detail})${note}`,
           );
           if (r.hifzErrors || r.tajweedErrors || r.promptCount) {
             lines.push(
               `  الأخطاء: خطأ ${r.hifzErrors} · تجويد ${r.tajweedErrors} · تردّد ${r.promptCount}`,
             );
           }
-          if (r.notes?.trim()) lines.push(`  ملاحظة: ${r.notes.trim()}`);
-        }
-      } else {
-        const extra = this.sameDayActivities(st.id, s.date, s.circleId);
-        const postponedEntry = recs.find((r) => r.postponed);
-        if (extra.length > 0) {
-          for (const e of extra) lines.push(`• ${e.label} — ${e.score}٪`);
-        } else if (postponedEntry) {
-          // ملاحظة/تأجيل — تُطبَع كما هي، بلا صياغة سلبيّة («لم يسمّع»).
-          lines.push(`• ${postponedEntry.notes?.trim() || 'مؤجَّل'}`);
+        } else if (e.kind === 'serd' || e.kind === 'exam') {
+          const word = e.kind === 'serd' ? 'سرد' : 'اختبار';
+          lines.push(`• ${n}${word}: ${e.detail} — ${e.score}٪${note}`);
+        } else if (e.kind === 'postponed') {
+          // تأجيل/ملاحظة — تُطبَع كما هي، بلا صياغة سلبيّة.
+          lines.push(`• ${n}${e.note || 'مؤجَّل'}`);
         } else {
-          const notRecitedEntry = recs.find((r) => r.notRecited);
-          if (notRecitedEntry) {
-            const reason = notRecitedEntry.notes?.trim();
-            lines.push(`• التسميع: لم يسمّع${reason ? ' — ' + reason : ''}`);
-          } else {
-            lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
-          }
+          lines.push(`• ${n}التسميع: لم يسمّع${note}`);
         }
-      }
+      });
+      if (attempts.length === 0) lines.push('• التسميع: لم يُسمّع في هذه الجلسة');
     }
     if (a?.note?.trim()) lines.push(`• ملاحظة الحضور: ${a.note.trim()}`);
     return lines.join('\n');
@@ -1157,8 +1334,13 @@ export class SessionPage {
   private readonly reportStudentsOrder = computed(() => {
     const s = this.session();
     const rank = (st: Student): 0 | 1 | 2 => {
-      if (this.recsOf(st.id).some(isActualRecitation)) return 0; // سمّعوا
-      if (s && this.sameDayActivities(st.id, s.date, s.circleId).length > 0) return 0; // سرد/اختبار اليوم — يُعامَل كمُنجَز
+      // سمّعوا، أو سردوا/اختُبروا اليوم — يُعامَلون كمُنجِزين.
+      if (
+        this.attemptsOf(st.id).some(
+          (e) => e.kind === 'recitation' || e.kind === 'serd' || e.kind === 'exam',
+        )
+      )
+        return 0;
       if (this.attOf(st.id)?.status === 'absent') return 2; // غائبون
       return 1; // لم يسمّعوا (حاضر/متأخر/مأذون بلا تسميع فعليّ ولا سرد/اختبار)
     };
@@ -1249,27 +1431,28 @@ export class SessionPage {
           },
         ];
       } else {
-        const actual = this.recsOf(st.id).filter(isActualRecitation);
-        if (actual.length > 0) {
-          segments = actual.map((r) => {
-            const score = scoreOf(r);
-            return {
-              detail: `${this.kindLabels[r.kind]}: ${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
-              hesitation: r.promptCount,
-              mistakes: r.hifzErrors,
-              rating: `${score}٪ (${ratingLabel(score, r.rating)})`,
-            };
+        const attempts = this.attemptsOf(st.id);
+        const multi = attempts.length > 1;
+        if (attempts.length > 0) {
+          segments = attempts.map((e, i) => {
+            const n = multi ? `${i + 1}. ` : '';
+            const note = e.note ? ` — ${e.note}` : '';
+            if (e.kind === 'recitation' && e.rec) {
+              return {
+                detail: `${n}${e.label}: ${e.detail}${note}`,
+                hesitation: e.rec.promptCount,
+                mistakes: e.rec.hifzErrors,
+                rating: `${e.score}٪ (${e.verdict})`,
+              };
+            }
+            if (e.kind === 'serd' || e.kind === 'exam') {
+              return { detail: `${n}${e.label}: ${e.detail}${note}`, rating: `${e.score}٪` };
+            }
+            if (e.kind === 'postponed') {
+              return { placeholderText: `${n}${e.note || 'مؤجَّل'}`, placeholderClass: 'neutral' };
+            }
+            return { placeholderText: `${n}لم يسمع${note}`, placeholderClass: 'not-recited' };
           });
-        } else if (this.sameDayActivities(st.id, s.date, s.circleId).length > 0) {
-          segments = this.sameDayActivities(st.id, s.date, s.circleId).map((e) => ({
-            detail: e.label,
-            rating: `${e.score}٪`,
-          }));
-        } else if (this.recsOf(st.id).some((r) => r.postponed)) {
-          const note = this.recsOf(st.id)
-            .find((r) => r.postponed)
-            ?.notes?.trim();
-          segments = [{ placeholderText: note || 'مؤجَّل', placeholderClass: 'neutral' }];
         } else if (a?.status === 'absent') {
           segments = [{ placeholderText: 'غائب', placeholderClass: 'absent' }];
         } else if (a?.status === 'present' || a?.status === 'late') {
@@ -1375,10 +1558,6 @@ export class SessionPage {
   /** كلّ سجلّات تسميع هذا الطالب في هذه الجلسة — قد تكون أكثر من واحد (حفظ جديد + مراجعة مثلًا). */
   recsOf(studentId: string): RecitationRecord[] {
     return this.recitations()?.filter((r) => r.studentId === studentId) ?? [];
-  }
-  /** ما زال هناك نوع تسميع واحد على الأقلّ لم يُسجَّل بعد لهذا الطالب في هذه الجلسة. */
-  canAddKind(studentId: string): boolean {
-    return this.recsOf(studentId).length < Object.keys(this.kindLabels).length;
   }
   private attOf(studentId: string): AttendanceRecord | null {
     return this.attendance()?.find((a) => a.studentId === studentId) ?? null;

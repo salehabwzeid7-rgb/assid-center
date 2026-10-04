@@ -2,6 +2,7 @@ import { Component, computed, inject, input, signal } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { isIosSafariTab } from '../core/platform';
 import { NotifyService } from '../core/notify.service';
+import { closeOnBack } from '../core/back-stack.service';
 
 /** مقطع تسميع واحد داخل صفّ الطالب — أو نائب حالة («لم يسمع»/«غائب») بدل مقطع فعليّ. */
 export interface ReportImageSegment {
@@ -471,6 +472,13 @@ export class ReportImageComponent {
   readonly saving = signal<number | null>(null);
   /** الصورة المعروضة حاليًّا بالحجم الكامل (نافذة معاينة) — أو null إن لم تُفتَح أيّ صورة. */
   readonly lightboxImg = signal<{ pageNumber: number; dataUrl: string } | null>(null);
+
+  constructor() {
+    closeOnBack(
+      () => !!this.lightboxImg(),
+      () => this.closeLightbox(),
+    );
+  }
 
   readonly canShareFiles = computed(() => {
     const nav = navigator as Navigator & { canShare?: (d?: ShareData) => boolean };

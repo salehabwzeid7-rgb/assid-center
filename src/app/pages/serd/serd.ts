@@ -1,4 +1,5 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { closeOnBack } from '../../core/back-stack.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
@@ -333,6 +334,11 @@ export class SerdPage {
   readonly score = signal(90);
   readonly batchScore = signal(90);
   readonly recording = signal<Recording | null>(null);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => !!this.recording(),
+    () => this.recording.set(null),
+  );
   readonly saving = signal(false);
   date = today();
   notes = '';

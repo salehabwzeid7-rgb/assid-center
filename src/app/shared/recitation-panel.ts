@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -13,6 +14,7 @@ import { RouterLink } from '@angular/router';
 import { DataService } from '../core/data.service';
 import { NotifyService } from '../core/notify.service';
 import {
+  NOTE_MAX,
   RECITATION_KIND_LABELS,
   TASMIE_PASS,
   expectedRecitationSec,
@@ -147,13 +149,9 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
               type="button"
               class="chip"
               [class.active]="m.kind === k"
-              [class.has-entry]="!!entryForKind(k)"
               (click)="selectKind(k)"
             >
               {{ kindLabels[k] }}
-              @if (entryForKind(k)) {
-                <span class="rp-kind-dot">●</span>
-              }
             </button>
           }
         </div>
@@ -325,13 +323,14 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
       }
 
       <div class="rp-field">
-        <label>ملاحظات المعلّم</label>
-        <textarea
-          rows="2"
+        <label>ملاحظة قصيرة (تظهر في التقرير)</label>
+        <input
+          type="text"
+          [maxlength]="noteMax"
           [(ngModel)]="m.notes"
           [ngModelOptions]="{ standalone: true }"
-          placeholder="ملاحظات حول الأداء والتجويد…"
-        ></textarea>
+          placeholder="مثال: تردّد في الآيات الأخيرة"
+        />
       </div>
 
       <div class="rp-actions">
@@ -339,9 +338,7 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
           ✦ تقييم يوميّ
         </a>
         <button class="btn btn-primary" type="button" [disabled]="saving()" (click)="save()">
-          {{
-            saving() ? 'جارٍ الحفظ…' : entryForKind(m.kind) ? 'حفظ تعديل التسميع' : 'حفظ التسميع'
-          }}
+          {{ saving() ? 'جارٍ الحفظ…' : entry() ? 'حفظ تعديل المحاولة' : 'حفظ التسميع' }}
         </button>
       </div>
     </div>
@@ -460,12 +457,6 @@ function nextAyahAfter(toSurah: number, toAyah: number): { surah: number; ayah: 
       .rp-perpage {
         font-weight: 500;
       }
-      .rp-kind-dot {
-        font-size: 6px;
-        margin-inline-start: 4px;
-        color: var(--green);
-        vertical-align: middle;
-      }
       .rp-hint {
         margin: 0;
         padding: 8px 10px;
@@ -573,12 +564,14 @@ export class RecitationPanelComponent implements OnInit {
   readonly circleId = input.required<string>();
   readonly date = input.required<string>();
   /**
-   * كلّ سجلّات تسميع هذا الطالب في هذه الجلسة (v1.22.0) — سجلّ واحد ممكن لكلّ
-   * نوع (حفظ جديد/مراجعة قريبة/مراجعة بعيدة)، فقد يحمل حتى ثلاثة عناصر.
-   * تبديل «نوع التسميع» داخل اللوحة يُحمِّل حقول النموذج من العنصر المطابق
-   * (إن وُجد) بدل استبدال سجلّ واحد ثابت كما كان سابقًا.
+   * المحاولة المُعدَّلة — `null` لمحاولة جديدة. الطالب قد يسمّع أكثر من مرّة في
+   * الجلسة نفسها (حتى من النوع ذاته)، فكلّ حفظ بلا `entry` سجلٌّ مستقلّ جديد.
    */
-  readonly existingEntries = input<RecitationRecord[]>([]);
+  readonly entry = input<RecitationRecord | null>(null);
+  /** يُطلَق بعد حفظ ناجح — لتعيد الجلسة اللوحة لمحاولة جديدة فارغة. */
+  readonly saved = output<void>();
+  /** حدّ الملاحظة القصيرة (نحو ثلاث كلمات). */
+  readonly noteMax = NOTE_MAX;
 
   readonly kinds: RecitationKind[] = ['new', 'near_review', 'far_review'];
   readonly kindLabels = RECITATION_KIND_LABELS;
@@ -645,7 +638,7 @@ export class RecitationPanelComponent implements OnInit {
     // وفقط إن كانت الحقول لا تزال بقيمها الافتراضيّة (لم يبدأ المعلّم الكتابة
     // يدويًّا بعد).
     effect(() => {
-      if (this.smartPrefillDone || this.existingEntries().length > 0) {
+      if (this.smartPrefillDone || this.entry() !== null) {
         this.smartPrefillDone = true;
         return;
       }
@@ -702,13 +695,9 @@ export class RecitationPanelComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // عند فتح اللوحة نعرض أوّل ما هو مسجَّل فعلًا (يُفضَّل «حفظ جديد» إن
-    // وُجد، وإلا أوّل نوع مسجَّل)، أو نموذجًا فارغًا بنوع «حفظ جديد» افتراضيًّا
-    // إن لم يُسجَّل للطالب أيّ تسميع بعد في هذه الجلسة.
-    const entries = this.existingEntries();
-    const first = entries.find((r) => r.kind === 'new') ?? entries[0] ?? null;
-    this.m.kind = first?.kind ?? 'new';
-    this.hydrateFrom(first);
+    const e = this.entry();
+    this.m.kind = e?.kind ?? 'new';
+    this.hydrateFrom(e);
     // استعادة مؤقّت جارٍ بعد قفل الشاشة/إعادة التحميل
     try {
       const raw = sessionStorage.getItem(this.key());
@@ -728,11 +717,6 @@ export class RecitationPanelComponent implements OnInit {
       /* التخزين محجوب */
     }
     this.destroyRef.onDestroy(() => this.clearTick());
-  }
-
-  /** سجلّ الطالب المسجَّل لهذا النوع في هذه الجلسة إن وُجد، وإلا null. */
-  entryForKind(kind: RecitationKind): RecitationRecord | null {
-    return this.existingEntries().find((r) => r.kind === kind) ?? null;
   }
 
   /**
@@ -769,10 +753,9 @@ export class RecitationPanelComponent implements OnInit {
     if (r.durationSec) this.elapsedSec.set(r.durationSec);
   }
 
-  /** تبديل نوع التسميع المعروض داخل اللوحة — يحمّل سجلّ هذا النوع إن وُجد، وإلا نموذجًا فارغًا. */
+  /** نوع التسميع لهذه المحاولة — لا يمسّ بقيّة الحقول. */
   selectKind(kind: RecitationKind): void {
     this.m.kind = kind;
-    this.hydrateFrom(this.entryForKind(kind));
   }
 
   maxAyah(n: number | string): number {
@@ -900,12 +883,13 @@ export class RecitationPanelComponent implements OnInit {
     const ok = await this.notify.run(
       () =>
         this.data
-          .upsertSessionRecitation(this.sessionId(), this.studentId(), payload)
+          .upsertSessionRecitation(this.sessionId(), this.studentId(), payload, this.entry()?.id)
           .then(() => true),
       { success: 'حُفظ التسميع', error: 'تعذّر حفظ التسميع' },
     );
     this.saving.set(false);
     if (!ok) return;
+    this.saved.emit();
 
     // «حفظ جديد» يُضيف السور تلقائيًّا إلى مقرّر الطالب وينبّه عند اكتمال جزء.
     // التسميع نفسه حُفظ بنجاح بالفعل (التوست أعلاه) — فشل هذه الخطوة الثانويّة

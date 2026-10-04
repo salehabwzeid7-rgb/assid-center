@@ -1,4 +1,5 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { closeOnBack } from '../../core/back-stack.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
@@ -354,6 +355,11 @@ export class CirclePage {
 
   /** نافذة إضافة حصّة بتاريخ مخصّص — أيّ سنة ماضية أو قادمة، بلا قيود. */
   readonly addingSession = signal(false);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => this.addingSession(),
+    () => this.addingSession.set(false),
+  );
   readonly creatingSession = signal(false);
   newSessionDate = this.todayIso;
 

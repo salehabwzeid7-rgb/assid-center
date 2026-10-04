@@ -4,14 +4,10 @@ import {
   ATTENDANCE_LABELS,
   EXAM_PASS,
   EXAM_SCOPE_LABELS,
-  RECITATION_KIND_LABELS,
   SARD_PASS,
   SERD_SCOPE_LABELS,
   passLabel,
-  ratingLabel,
-  scoreOf,
 } from '../core/models';
-import { surahName } from '../core/quran-data';
 import { periodLabel } from '../core/report-period';
 import type { ReportAudience } from '../core/report-text';
 import {
@@ -493,36 +489,19 @@ export class StudentReportCardComponent {
   /* ---------- السِجلّ اليوميّ ---------- */
 
   private viewOf(d: StudentDay): DayView {
-    const items: DayItem[] = [];
-
-    for (const r of d.recitations) {
-      const s = scoreOf(r);
-      items.push({
-        kind: RECITATION_KIND_LABELS[r.kind],
-        detail: `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah} · ${r.pages} وجه`,
-        score: `${s}٪`,
-        verdict: ratingLabel(s, r.rating),
-        fail: s < 90,
-      });
-    }
-    for (const s of d.serd) {
-      items.push({
-        kind: SERD_SCOPE_LABELS[s.scope] ?? 'سرد',
-        detail: `الجزء ${s.juz}`,
-        score: `${s.score}٪`,
-        verdict: passLabel(s.score, SARD_PASS),
-        fail: s.score < SARD_PASS,
-      });
-    }
-    for (const e of d.exams) {
-      items.push({
-        kind: EXAM_SCOPE_LABELS[e.scope ?? 'juz'] ?? 'اختبار',
-        detail: `الجزء ${e.juz}`,
-        score: `${e.score}٪`,
-        verdict: passLabel(e.score, EXAM_PASS),
-        fail: e.score < EXAM_PASS,
-      });
-    }
+    // كلّ محاولة صفّ مستقلّ بترتيبها الزمنيّ، مرقَّمة حين تتعدّد في اليوم.
+    const multi = d.entries.length > 1;
+    const items: DayItem[] = d.entries.map((e, i) => {
+      const pages = e.rec && e.kind === 'recitation' ? ` · ${e.rec.pages} وجه` : '';
+      const base = e.detail ? e.detail + pages : '';
+      return {
+        kind: multi ? `${i + 1}. ${e.label}` : e.label,
+        detail: base && e.note ? `${base} — ${e.note}` : base || e.note,
+        score: e.score === null ? '' : `${e.score}٪`,
+        verdict: e.verdict,
+        fail: e.fail,
+      };
+    });
 
     return {
       date: d.date,
@@ -534,7 +513,7 @@ export class StudentReportCardComponent {
         d.outcome === 'absent' || d.outcome === 'excused'
           ? (d.note ?? '')
           : d.note || DAY_OUTCOME_LABELS[d.outcome],
-      gap: d.outcome === 'not_recited' || d.outcome === 'no_record',
+      gap: d.outcome === 'no_record',
     };
   }
 

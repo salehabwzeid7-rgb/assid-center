@@ -1,6 +1,8 @@
-import { Component, DestroyRef, computed, inject } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
+import { NotifyService } from '../../core/notify.service';
+import { closeOnBack } from '../../core/back-stack.service';
 import {
   ATTENDANCE_LABELS,
   SARD_PASS,
@@ -211,6 +213,67 @@ import { PageHeaderComponent } from '../../shared/page-header';
             </div>
           }
         }
+
+        <!-- منطقة الخطر: مسح سجلّ السرد/الاختبارات كاملًا للبدء من جديد -->
+        <div class="section-title">منطقة الخطر</div>
+        <div class="card danger-zone">
+          <p class="muted dz-hint">
+            يمسح كلّ سجلّات النوع المختار لهذا الطالب لتبدأ إدخالها من جديد. يمكن التراجع عن المسح
+            من «سجلّ الحركات».
+          </p>
+          <button
+            class="btn btn-danger btn-block"
+            type="button"
+            [disabled]="!serdTotal()"
+            (click)="beginWipe('serd')"
+          >
+            🗑 مسح سجلّ السرد كاملًا ({{ serdTotal() }})
+          </button>
+          <button
+            class="btn btn-danger btn-block"
+            type="button"
+            style="margin-top:8px"
+            [disabled]="!examTotal()"
+            (click)="beginWipe('exam')"
+          >
+            🗑 مسح سجلّ الاختبارات كاملًا ({{ examTotal() }})
+          </button>
+        </div>
+
+        @if (wipeKind(); as kind) {
+          <div class="modal-backdrop" (click)="cancelWipe()">
+            <div class="modal" (click)="$event.stopPropagation()">
+              <h3 style="margin:0 0 8px">
+                تأكيد نهائيّ: مسح {{ kind === 'serd' ? 'سجلّ السرد' : 'سجلّ الاختبارات' }}
+              </h3>
+              <p style="margin:0 0 10px;font-size:.9rem">
+                سيُمسح {{ kind === 'serd' ? serdTotal() : examTotal() }} سجلًّا. للتأكيد، اكتب اسم
+                الطالب بالضبط:
+                <b>{{ s.name }}</b>
+              </p>
+              <input
+                type="text"
+                [value]="wipeConfirmName()"
+                (input)="wipeConfirmName.set($any($event.target).value)"
+                placeholder="اكتب اسم الطالب هنا…"
+                autocomplete="off"
+                style="margin-bottom:10px"
+              />
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-ghost" type="button" (click)="cancelWipe()">إلغاء</button>
+                <button
+                  class="btn btn-danger"
+                  style="flex:1"
+                  type="button"
+                  [disabled]="wipeConfirmName().trim() !== s.name.trim() || wiping()"
+                  (click)="confirmWipe(kind)"
+                >
+                  {{ wiping() ? 'جارٍ المسح…' : 'مسح نهائيًّا' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        }
       } @else {
         <div class="spinner"></div>
       }
@@ -218,6 +281,13 @@ import { PageHeaderComponent } from '../../shared/page-header';
   `,
   styles: [
     `
+      .danger-zone {
+        border: 1px solid var(--danger-bg);
+      }
+      .dz-hint {
+        margin: 0 0 10px;
+        font-size: 0.84rem;
+      }
       .id-meta {
         display: flex;
         align-items: center;
@@ -336,6 +406,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
 export class StudentPage {
   private route = inject(ActivatedRoute);
   private data = inject(DataService);
+  private notify = inject(NotifyService);
   private destroyRef = inject(DestroyRef);
 
   readonly id = this.route.snapshot.paramMap.get('id')!;
@@ -364,6 +435,48 @@ export class StudentPage {
   readonly attendance = this.data.studentAttendance(this.id, this.destroyRef);
   private readonly serds = this.data.serdByStudent(this.id, this.destroyRef);
   private readonly exams = this.data.examsByStudent(this.id, this.destroyRef);
+  readonly serdTotal = computed(() => this.serds()?.length ?? 0);
+  readonly examTotal = computed(() => this.exams()?.length ?? 0);
+
+  // ---- مسح السجلّ: تأكيد أوّل (تحذير) ثمّ تأكيد ثانٍ بكتابة اسم الطالب ----
+  readonly wipeKind = signal<'serd' | 'exam' | null>(null);
+  readonly wipeConfirmName = signal('');
+  readonly wiping = signal(false);
+  private readonly backClose = closeOnBack(
+    () => this.wipeKind() !== null,
+    () => this.cancelWipe(),
+  );
+
+  async beginWipe(kind: 'serd' | 'exam'): Promise<void> {
+    const label = kind === 'serd' ? 'سجلّ السرد' : 'سجلّ الاختبارات';
+    const n = kind === 'serd' ? this.serdTotal() : this.examTotal();
+    const ok = await this.notify.confirm(`مسح ${label} كاملًا؟`, {
+      message: `سيُحذف ${n} سجلًّا لـ«${this.student()?.name ?? ''}» ويبدأ إدخاله من جديد. ستُطلب كتابة اسم الطالب في الخطوة التالية.`,
+      confirmText: 'متابعة',
+      danger: true,
+    });
+    if (!ok) return;
+    this.wipeConfirmName.set('');
+    this.wipeKind.set(kind);
+  }
+
+  cancelWipe(): void {
+    this.wipeKind.set(null);
+    this.wipeConfirmName.set('');
+  }
+
+  async confirmWipe(kind: 'serd' | 'exam'): Promise<void> {
+    const name = this.student()?.name ?? '';
+    if (this.wipeConfirmName().trim() !== name.trim() || this.wiping()) return;
+    this.wiping.set(true);
+    const done = await this.notify.run(() => this.data.wipeStudentHistory(this.id, kind), {
+      loading: 'جارٍ المسح…',
+      success: kind === 'serd' ? 'مُسح سجلّ السرد' : 'مُسح سجلّ الاختبارات',
+      error: 'تعذّر المسح',
+    });
+    this.wiping.set(false);
+    if (done !== undefined) this.cancelWipe();
+  }
 
   private readonly memorized = computed(() => new Set(this.student()?.memorizedSurahs ?? []));
   readonly memoCount = computed(() => this.memorized().size);

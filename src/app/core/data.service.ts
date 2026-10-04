@@ -842,91 +842,66 @@ export class DataService {
   }
 
   /**
-   * تسميع الطالب ضمن جلسة — سجل واحد لكل (جلسة، طالب، نوع) — v1.22.0: كان
-   * سابقًا سجلًّا واحدًا فقط لكل (جلسة، طالب) بمعرّف `{sessionId}_{studentId}`
-   * بلا نوع، فمنع هذا تسجيل أكثر من تسميع للطالب في نفس الجلسة (حفظ جديد ثمّ
-   * مراجعة مثلًا) — الثاني كان يستبدل الأوّل بصمت. المعرّف الآن
-   * `{sessionId}_{studentId}_{kind}` فيتيح حتى ٣ سجلّات مستقلّة لكلّ طالب في
-   * الجلسة (واحد لكلّ نوع)، كلٌّ قابل للتعديل بمعزل عن الآخرين.
+   * محاولة واحدة للطالب ضمن جلسة — تسميع أو «لم يسمّع» أو تأجيل. الطالب قد
+   * يحاول أكثر من مرّة في الجلسة نفسها (لم يسمّع ثمّ سمّع، أو تسميعان من النوع
+   * نفسه)، فكلّ محاولة سجلّ مستقلّ:
+   *  · بلا `docId` ← محاولة جديدة بمعرّف فريد `{sessionId}_{studentId}_{ختم}`.
+   *  · مع `docId` ← تعديل تلك المحاولة بعينها (سجلّات قديمة بمعرّف
+   *    `{sessionId}_{studentId}` أو `…_{kind}` تُعدَّل بمعرّفها كما هو).
    *
-   * توافقيّة مع السجلّات القديمة (بلا هجرة يدويّة منفصلة): إن لم يوجد مستند
-   * بالمعرّف الجديد، يُفحص المعرّف القديم — إن وُجد وكان نوعه مطابقًا لما
-   * يُحفَظ الآن، يُعامَل كـ«قبل» التعديل ثمّ يُهاجَر تلقائيًّا (يُنسخ محتواه
-   * الجديد للمعرّف الجديد ويُحذف القديم) بنفس هذه الكتابة. إن كان نوعه
-   * مختلفًا (الطالب يسجّل نوعًا جديدًا بجانب نوع قديم مسجَّل من قبل التحديث)
-   * يبقى القديم كما هو سليمًا، وتُنشأ نتيجة جديدة منفصلة بجانبه فقط.
+   * `createdAt` يُحفَظ من السجلّ الأصليّ عند التعديل، فلا ينقلب ترتيب المحاولات
+   * في التقارير لمجرّد تصحيح درجة.
    */
   async upsertSessionRecitation(
     sessionId: string,
     studentId: string,
     input: NewRecitation,
-  ): Promise<void> {
-    const id = `${sessionId}_${studentId}_${input.kind}`;
+    docId?: string,
+  ): Promise<string> {
+    const id =
+      docId ??
+      `${sessionId}_${studentId}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const ref = this.ref(COL.recitations, id);
-    const legacyId = `${sessionId}_${studentId}`;
-    const legacyRef = this.ref(COL.recitations, legacyId);
-    const payload = this.owned({ ...clean(input), createdAt: Date.now() });
     let before: RecitationRecord | null = null;
-    let migrateLegacy = false;
-    try {
-      // معاملة ذرّيّة: تحمي من فقدان تعديل حين يحفظ جهازان متّصلان بالإنترنت
-      // لنفس السجلّ في اللحظة نفسها تقريبًا (كلّ من يقرأ قبل الآخر يكتب فوقه
-      // بصمت في المسار العاديّ). المعاملات لا تعمل بلا اتصال إطلاقًا (خلافًا
-      // للكتابة العاديّة المخزَّنة محلّيًّا)، فنتراجع تلقائيًّا للمسار المعتاد
-      // أدناه عند فشلها لأيّ سبب — يبقى الحفظ يعمل دائمًا بلا اتصال كالمعتاد.
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(ref);
-        if (snap.exists()) {
-          before =
-            this.inScope([{ id: snap.id, ...(snap.data() as object) }] as RecitationRecord[])[0] ??
-            null;
-        } else {
-          const legacySnap = await tx.get(legacyRef);
-          if (legacySnap.exists()) {
-            const legacy =
-              this.inScope([
-                { id: legacySnap.id, ...(legacySnap.data() as object) },
-              ] as RecitationRecord[])[0] ?? null;
-            if (legacy && legacy.kind === input.kind) {
-              before = legacy;
-              migrateLegacy = true;
-            }
-          }
-        }
-        tx.set(ref, payload);
-        if (migrateLegacy) tx.delete(legacyRef);
-      });
-    } catch (e) {
-      console.warn('تعذّرت الكتابة الذرّيّة للتسميع (على الأرجح بلا اتصال) — الكتابة المعتادة:', e);
-      before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
-      if (!before) {
-        const legacy = await this.getOneForAudit<RecitationRecord>(COL.recitations, legacyId);
-        if (legacy && legacy.kind === input.kind) {
-          before = legacy;
-          migrateLegacy = true;
-        }
+    if (docId) {
+      try {
+        // معاملة ذرّيّة تحمي من فقدان تعديل حين يحفظ جهازان السجلّ نفسه معًا؛
+        // لا تعمل بلا اتصال، فنتراجع للكتابة المعتادة (المخزَّنة محلّيًّا) عند فشلها.
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(ref);
+          before = snap.exists()
+            ? (this.inScope([
+                { id: snap.id, ...(snap.data() as object) },
+              ] as RecitationRecord[])[0] ?? null)
+            : null;
+          tx.set(ref, this.owned({ ...clean(input), createdAt: before?.createdAt ?? Date.now() }));
+        });
+      } catch (e) {
+        console.warn(
+          'تعذّرت الكتابة الذرّيّة للتسميع (على الأرجح بلا اتصال) — الكتابة المعتادة:',
+          e,
+        );
+        before = await this.getOneForAudit<RecitationRecord>(COL.recitations, id);
+        await setDoc(
+          ref,
+          this.owned({ ...clean(input), createdAt: before?.createdAt ?? Date.now() }),
+        );
       }
-      await setDoc(ref, payload);
-      if (migrateLegacy) {
-        try {
-          await deleteDoc(legacyRef);
-        } catch (e2) {
-          console.warn('تعذّر حذف السجلّ القديم بعد الهجرة (لا يزال سليمًا، سيُعاد لاحقًا):', e2);
-        }
-      }
+    } else {
+      await setDoc(ref, this.owned({ ...clean(input), createdAt: Date.now() }));
     }
 
-    // عدّاد لوحة المالك: تسميع جديد فعليًّا فقط (لا تعديل، لا هجرة سجلّ قديم).
-    if (!before) {
+    // عدّاد لوحة المالك: تسميع فعليّ جديد فقط (لا تعديل، ولا «لم يسمّع»/تأجيل).
+    if (!before && !input.notRecited && !input.postponed) {
       void this.bumpPlatformStat('recitationCount', 'totalRecitations', 1);
     }
 
-    // سجلّ التدقيق — فشل أيّ خطوة هنا (قراءة اسم الطالب بلا اتصال مثلًا) يجب
-    // ألّا يظهر للمعلّم كفشل في حفظ التسميع نفسه، فهو محفوظ فعلًا في هذه اللحظة.
-    if (before) {
+    // سجلّ التدقيق — فشله لا يجب أن يظهر كفشل حفظ، فالتسميع محفوظ فعلًا الآن.
+    const prev = before as RecitationRecord | null;
+    if (prev) {
       try {
         const changes = diffFields(
-          before as unknown as Record<string, unknown>,
+          prev as unknown as Record<string, unknown>,
           input as unknown as Record<string, unknown>,
           RECITATION_DIFF_FIELDS,
         );
@@ -941,7 +916,7 @@ export class DataService {
               {
                 collectionName: COL.recitations,
                 id,
-                data: before as unknown as Record<string, unknown>,
+                data: prev as unknown as Record<string, unknown>,
               },
             ],
             studentName: student?.name,
@@ -952,6 +927,7 @@ export class DataService {
         console.warn('تعذّر تسجيل حركة تعديل التسميع في سجل التدقيق (التسميع نفسه محفوظ):', e);
       }
     }
+    return id;
   }
 
   // ---------- سجلات الطالب (للملف الشخصي) ----------
@@ -1513,6 +1489,46 @@ export class DataService {
         studentName: student?.name,
       });
     }
+  }
+
+  /** تعديل محاولة سرد/اختبار مسجَّلة (الجزء والدرجة والملاحظة) من داخل الجلسة. */
+  async updateSerdOrExam(
+    kind: 'serd' | 'exam',
+    id: string,
+    patch: { juz: number; score: number; notes: string },
+  ): Promise<void> {
+    await updateDoc(this.ref(kind === 'serd' ? COL.serd : COL.exams, id), {
+      juz: patch.juz,
+      score: patch.score,
+      notes: patch.notes.trim() || deleteField(),
+    });
+  }
+
+  /**
+   * يمسح سجلّ السرد أو الاختبارات **كاملًا** لطالب واحد، ليبدأ المعلّم إدخاله
+   * من جديد. كلّ السجلّات الممسوحة تُحفَظ لقطاتٍ في حركة واحدة بسجلّ الحركات،
+   * فيمكن التراجع عن المسح كلّه بضغطة «استعادة» واحدة.
+   */
+  async wipeStudentHistory(studentId: string, kind: 'serd' | 'exam'): Promise<number> {
+    const collectionName = kind === 'serd' ? COL.serd : COL.exams;
+    const snap = await getDocs(this.scopedCol(collectionName, where('studentId', '==', studentId)));
+    if (snap.empty) return 0;
+    const snapshots: ActivitySnapshot[] = snap.docs.map((d) => ({
+      collectionName,
+      id: d.id,
+      data: d.data() as Record<string, unknown>,
+    }));
+    await this.runBatched(snap.docs.map((d) => ({ kind: 'delete' as const, ref: d.ref })));
+    const student = await this.getStudent(studentId).catch(() => null);
+    const label = kind === 'serd' ? 'السرد' : 'الاختبارات';
+    await this.logActivity({
+      action: 'delete',
+      target: kind,
+      summary: `مسح سجلّ ${label} كاملًا لـ${student?.name ?? ''} (${snap.size} سجلًّا)`,
+      snapshots,
+      studentName: student?.name,
+    });
+    return snap.size;
   }
 
   // ---------- الاختبار (اختبار مستقلّ لكلّ جزء محفوظ) ----------

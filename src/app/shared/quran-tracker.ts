@@ -1,4 +1,5 @@
 import { Component, computed, model, signal } from '@angular/core';
+import { closeOnBack } from '../core/back-stack.service';
 import { JUZ_SURAHS, surahName } from '../core/quran-data';
 
 /**
@@ -305,6 +306,11 @@ export class QuranTrackerComponent {
   readonly value = model<number[]>([]);
 
   readonly open = signal(false);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => this.open(),
+    () => this.close(),
+  );
   readonly view = signal<'grid' | 'juz'>('grid');
   readonly activeJuz = signal(1);
 

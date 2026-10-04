@@ -1,4 +1,5 @@
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { closeOnBack } from '../../core/back-stack.service';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { DataService, today } from '../../core/data.service';
@@ -227,6 +228,11 @@ export class TajweedExamsPage {
   readonly fmt12 = fmt12;
 
   readonly creating = signal(false);
+  /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
+  private readonly backClose = closeOnBack(
+    () => this.creating(),
+    () => this.creating.set(false),
+  );
   readonly saving = signal(false);
   m = {
     name: '',

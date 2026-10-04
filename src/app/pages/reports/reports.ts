@@ -614,14 +614,17 @@ export class ReportsPage {
     return d.outcome === 'absent' || d.outcome === 'not_recited' || d.outcome === 'no_record';
   }
 
+  /** محاولات اليوم بترتيبها: «لم يسمّع (تأخّر) · حفظ جديد ٩٥٪». */
   dayDetail(d: StudentTimeline['days'][number]): string {
-    if (d.recitations.length > 0) {
-      const pages = d.recitations.reduce((a, r) => a + (r.pages || 0), 0);
-      const best = Math.max(...d.recitations.map((r) => r.score ?? 0));
-      return `${pages} وجه — ${best}٪`;
+    if (d.entries.length > 0) {
+      return d.entries
+        .map((e) => {
+          const score = e.score === null ? '' : ` ${e.score}٪`;
+          const note = e.note ? ` (${e.note})` : '';
+          return `${e.label}${score}${note}`;
+        })
+        .join(' · ');
     }
-    if (d.serd.length > 0) return `سرد — الجزء ${d.serd[0].juz}`;
-    if (d.exams.length > 0) return `اختبار — الجزء ${d.exams[0].juz}`;
     return d.note || DAY_OUTCOME_LABELS[d.outcome];
   }
 }

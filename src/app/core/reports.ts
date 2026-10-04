@@ -20,7 +20,13 @@
 import {
   ATTENDANCE_LABELS,
   EXAM_PASS,
+  EXAM_SCOPE_LABELS,
+  RECITATION_KIND_LABELS,
   SARD_PASS,
+  SERD_SCOPE_LABELS,
+  TASMIE_PASS,
+  passLabel,
+  ratingLabel,
   isActualRecitation,
   isTajweedCircle,
   scoreOf,
@@ -38,6 +44,7 @@ import {
   type TajweedExam,
   type TajweedExamResult,
 } from './models';
+import { surahName } from './quran-data';
 import { inPeriod, todayISO, type Period } from './report-period';
 
 /* --------------------------------------------------------------------------
@@ -306,6 +313,115 @@ function dayOutcomeFrom(
    صفوف الطلّاب
    -------------------------------------------------------------------------- */
 
+/**
+ * محاولة واحدة في يوم الطالب — تسميع أو «لم يسمّع» أو تأجيل أو سرد أو اختبار.
+ * الطالب قد يحاول أكثر من مرّة في اليوم نفسه (لم يسمّع ثمّ سمّع، أو تسميعان)،
+ * وكلّ محاولة تُعرَض بترتيبها الزمنيّ مع ملاحظتها القصيرة الخاصّة بها.
+ */
+export interface DayEntry {
+  /** معرّف السجلّ الأصليّ (تسميع أو سرد أو اختبار) — للتعديل والحذف. */
+  id: string;
+  kind: 'recitation' | 'not_recited' | 'postponed' | 'serd' | 'exam';
+  /** «حفظ جديد» · «لم يسمّع» · «تأجيل» · «سرد جزء» · «اختبار جزء» */
+  label: string;
+  /** المقطع أو الجزء — فارغ لـ«لم يسمّع» و«تأجيل». */
+  detail: string;
+  /** الدرجة المئويّة — `null` حين لا درجة. */
+  score: number | null;
+  /** «ممتاز» / «ناجح» / «إعادة» أو فارغ. */
+  verdict: string;
+  /** رسوب أو «لم يسمّع» — يُلوَّن تحذيريًّا. */
+  fail: boolean;
+  /** ملاحظة المعلّم القصيرة على هذه المحاولة. */
+  note: string;
+  createdAt: number;
+  /** السجلّ الأصليّ للتسميع (لأعداد الأخطاء والأوجه). */
+  rec?: RecitationRecord;
+}
+
+const juzDetail = (juz: number, scope: string | undefined, juzList?: number[]) =>
+  scope === 'block' ? `الأجزاء ${(juzList ?? [juz]).join('، ')}` : `الجزء ${juz}`;
+
+/** محاولات يوم واحد مرتّبة زمنيًّا — المصدر الواحد لكلّ تقارير اليوم والجلسة. */
+export function buildDayEntries(
+  recs: readonly RecitationRecord[],
+  serd: readonly SerdRecord[],
+  exams: readonly ExamRecord[],
+): DayEntry[] {
+  const out: DayEntry[] = [];
+  for (const r of recs) {
+    const note = r.notes?.trim() ?? '';
+    if (r.notRecited) {
+      out.push({
+        id: r.id,
+        kind: 'not_recited',
+        label: 'لم يسمّع',
+        detail: '',
+        score: null,
+        verdict: '',
+        fail: true,
+        note,
+        createdAt: r.createdAt,
+        rec: r,
+      });
+    } else if (r.postponed) {
+      out.push({
+        id: r.id,
+        kind: 'postponed',
+        label: 'تأجيل',
+        detail: '',
+        score: null,
+        verdict: '',
+        fail: false,
+        note,
+        createdAt: r.createdAt,
+        rec: r,
+      });
+    } else {
+      const s = scoreOf(r);
+      out.push({
+        id: r.id,
+        kind: 'recitation',
+        label: RECITATION_KIND_LABELS[r.kind],
+        detail: `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
+        score: s,
+        verdict: ratingLabel(s, r.rating),
+        fail: s < TASMIE_PASS,
+        note,
+        createdAt: r.createdAt,
+        rec: r,
+      });
+    }
+  }
+  for (const s of serd) {
+    out.push({
+      id: s.id,
+      kind: 'serd',
+      label: SERD_SCOPE_LABELS[s.scope] ?? 'سرد',
+      detail: juzDetail(s.juz, s.scope, s.juzList),
+      score: s.score,
+      verdict: passLabel(s.score, SARD_PASS),
+      fail: s.score < SARD_PASS,
+      note: s.notes?.trim() ?? '',
+      createdAt: s.createdAt,
+    });
+  }
+  for (const e of exams) {
+    out.push({
+      id: e.id,
+      kind: 'exam',
+      label: EXAM_SCOPE_LABELS[e.scope ?? 'juz'] ?? 'اختبار',
+      detail: juzDetail(e.juz, e.scope, e.juzList),
+      score: e.score,
+      verdict: passLabel(e.score, EXAM_PASS),
+      fail: e.score < EXAM_PASS,
+      note: e.notes?.trim() ?? '',
+      createdAt: e.createdAt,
+    });
+  }
+  return out.sort((a, b) => a.createdAt - b.createdAt);
+}
+
 /** يوم واحد في سِجلّ طالب — أساس التقرير المرجعيّ التفصيليّ. */
 export interface StudentDay {
   date: string;
@@ -315,7 +431,9 @@ export interface StudentDay {
   recitations: RecitationRecord[];
   serd: SerdRecord[];
   exams: ExamRecord[];
-  /** ملاحظة الحضور أو ملاحظة التأجيل — تُطبَع كما هي. */
+  /** كلّ محاولات اليوم بترتيبها الزمنيّ — ما تعرضه التقارير. */
+  entries: DayEntry[];
+  /** ملاحظة الحضور — ملاحظات المحاولات داخل `entries`. */
   note: string;
 }
 
@@ -732,8 +850,6 @@ export function buildStudentTimeline(
           ? 'excused'
           : 'absent';
     const a = hifzAtt ?? tajweedAtt;
-    const postponedNote = dayRecs.find((r) => r.postponed)?.notes?.trim();
-    const notRecitedNote = dayRecs.find((r) => r.notRecited)?.notes?.trim();
     return {
       date,
       status: a?.status ?? null,
@@ -741,7 +857,8 @@ export function buildStudentTimeline(
       recitations: dayRecs.filter(isActualRecitation),
       serd: daySerd,
       exams: dayExams,
-      note: a?.note?.trim() || postponedNote || notRecitedNote || '',
+      entries: buildDayEntries(dayRecs, daySerd, dayExams),
+      note: a?.note?.trim() ?? '',
     };
   });
 
