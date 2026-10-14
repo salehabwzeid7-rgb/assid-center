@@ -10,6 +10,18 @@ import {
   type ReportSource,
 } from '../core/reports';
 import {
+  EMPTY_MARKS,
+  buildMarksReport,
+  hasMarksContent,
+  marksPdf,
+  marksPdfSections,
+  marksReportText,
+  marksTextLines,
+  marksTitle,
+  type ReportContent,
+  type ReportMarks,
+} from '../core/report-marks';
+import {
   circleReportText,
   overviewReportText,
   studentsReportText,
@@ -22,6 +34,7 @@ import {
   type PdfMeta,
 } from '../core/report-pdf-build';
 import type { PdfDoc } from '../core/report-pdf';
+import { MarksReportCardComponent } from './marks-report-card';
 import { OverviewReportCardComponent } from './overview-report-card';
 import { PeriodPickerComponent, PeriodState } from './period-picker';
 import { ReportCardComponent } from './report-card';
@@ -49,6 +62,7 @@ type Subject = 'circle' | 'students';
     ReportCardComponent,
     OverviewReportCardComponent,
     StudentReportCardComponent,
+    MarksReportCardComponent,
   ],
   template: `
     <div class="rd-backdrop" (click)="close.emit()"></div>
@@ -111,7 +125,46 @@ type Subject = 'circle' | 'students';
           }
         </section>
 
-        <!-- ٣) الجمهور -->
+        <!-- ٣) محتوى التقرير: النشاط · المقرر · الإنذارات بأيّ تركيبة -->
+        <section class="rd-sec">
+          <h3>محتوى التقرير</h3>
+          <div class="chips">
+            <button
+              type="button"
+              class="chip"
+              [class.active]="content().activity"
+              (click)="toggleContent('activity')"
+            >
+              الحضور والتسميع والسجلّ
+            </button>
+            <button
+              type="button"
+              class="chip"
+              [class.active]="content().course"
+              (click)="toggleContent('course')"
+            >
+              المقرر
+            </button>
+            <button
+              type="button"
+              class="chip chip-danger"
+              [class.active]="content().warnings"
+              (click)="toggleContent('warnings')"
+            >
+              الإنذارات
+            </button>
+          </div>
+          @if (content().course && !hasCourseMarks()) {
+            <p class="rd-hint">
+              لم تُعلَّم أيّ حالة مقرر بعد — علّمها من تبويب «المقرر والإنذارات».
+            </p>
+          }
+          @if (content().warnings && !hasWarningMarks()) {
+            <p class="rd-hint">لم يُعلَّم أيّ إنذار بعد — علّمه من تبويب «المقرر والإنذارات».</p>
+          }
+        </section>
+
+        <!-- ٤) الجمهور -->
         <section class="rd-sec">
           <h3>نوع التقرير</h3>
           <div class="chips">
@@ -141,7 +194,7 @@ type Subject = 'circle' | 'students';
           </p>
         </section>
 
-        <!-- ٤) الموضوع -->
+        <!-- ٥) الموضوع -->
         <section class="rd-sec">
           <h3>التقرير عن</h3>
           <div class="chips">
@@ -193,7 +246,7 @@ type Subject = 'circle' | 'students';
           }
         </section>
 
-        <!-- ٥) المخرَجات -->
+        <!-- ٦) المخرَجات -->
         @if (!ready()) {
           <section class="rd-sec">
             <p class="rd-empty">{{ notReadyText() }}</p>
@@ -221,26 +274,37 @@ type Subject = 'circle' | 'students';
               [fileName]="fileName()"
               [shareTitle]="shareTitle()"
               [pdfModel]="pdfModel()"
+              (exported)="exported.emit(!!marksOn())"
             >
-              @if (subject() === 'students') {
-                @for (tl of studentsReport().students; track tl.studentId) {
-                  <app-student-report-card
-                    [timeline]="tl"
+              <!-- كتلة المقرر/الإنذار تتقدّم النشاط ليراها وليّ الأمر أوّلًا. -->
+              @if (marksOn(); as mk) {
+                <app-marks-report-card
+                  [report]="mk"
+                  [period]="period.period()"
+                  [teacherName]="teacherName()"
+                />
+              }
+              @if (content().activity) {
+                @if (subject() === 'students') {
+                  @for (tl of studentsReport().students; track tl.studentId) {
+                    <app-student-report-card
+                      [timeline]="tl"
+                      [teacherName]="teacherName()"
+                      [audience]="audience()"
+                    />
+                  }
+                } @else if (singleCircle(); as rep) {
+                  <app-report-card
+                    [report]="rep"
                     [teacherName]="teacherName()"
                     [audience]="audience()"
                   />
+                } @else {
+                  <app-overview-report-card
+                    [overview]="overviewReport()"
+                    [teacherName]="teacherName()"
+                  />
                 }
-              } @else if (singleCircle(); as rep) {
-                <app-report-card
-                  [report]="rep"
-                  [teacherName]="teacherName()"
-                  [audience]="audience()"
-                />
-              } @else {
-                <app-overview-report-card
-                  [overview]="overviewReport()"
-                  [teacherName]="teacherName()"
-                />
               }
             </app-report-export>
           </section>
@@ -334,6 +398,11 @@ type Subject = 'circle' | 'students';
         font-weight: 700;
         color: var(--text-soft, #888);
       }
+      .chip-danger.active {
+        background: var(--danger, #b3261e);
+        border-color: var(--danger, #b3261e);
+        color: #fff;
+      }
       .rd-hint {
         margin: 8px 0 0;
         font-size: 0.76rem;
@@ -372,8 +441,17 @@ export class ReportDialogComponent {
   /** المدى والحلقات اللذان كانت اللوحة تعرضهما — نقطة انطلاق فقط. */
   readonly initialPeriod = input<PeriodState | null>(null);
   readonly initialCircleIds = input<readonly string[]>([]);
+  /** العلامات المؤقّتة (المقرر/الإنذار) التي علّمها المعلّم في الصفحة خلف النافذة. */
+  readonly marks = input<ReportMarks>(EMPTY_MARKS);
+  /** هل يبدأ التقرير بالنشاط؟ يُمرَّر `false` حين تُفتَح النافذة من تبويب المقرر والإنذارات. */
+  readonly initialActivity = input<boolean>(true);
 
   readonly close = output<void>();
+  /**
+   * أُنشئ تقرير فعلًا (نسخ نصّ، أو توليد صورة، أو حفظ PDF). القيمة: هل ضمّ المقرر
+   * أو الإنذار؟ — فالصفحة لا تُسقط العلامات إلّا إن طُبعت في تقرير.
+   */
+  readonly exported = output<boolean>();
 
   readonly period = new PeriodState();
   readonly audience = signal<ReportAudience>('parents');
@@ -393,6 +471,35 @@ export class ReportDialogComponent {
       const p = this.initialPeriod();
       if (p) this.period.cloneFrom(p);
     });
+  }
+
+  /* ---------- المحتوى ---------- */
+
+  private readonly contentOverride = signal<ReportContent | null>(null);
+
+  readonly hasCourseMarks = computed(() => Object.keys(this.marks().course).length > 0);
+  readonly hasWarningMarks = computed(() => Object.keys(this.marks().warnings).length > 0);
+
+  /**
+   * بلا اختيار صريح: المقرر/الإنذار يُفعَّلان إن كان قد عُلِّم شيء منهما، والنشاط
+   * يتبع مصدر فتح النافذة. ولا تُترَك النافذة بلا أيّ جزء — يُرجَع للنشاط.
+   */
+  readonly content = computed<ReportContent>(() => {
+    const manual = this.contentOverride();
+    if (manual) return manual;
+    const c: ReportContent = {
+      activity: this.initialActivity(),
+      course: this.hasCourseMarks(),
+      warnings: this.hasWarningMarks(),
+    };
+    return c.activity || c.course || c.warnings ? c : { ...c, activity: true };
+  });
+
+  toggleContent(key: keyof ReportContent): void {
+    const next = { ...this.content(), [key]: !this.content()[key] };
+    // جزء واحد على الأقلّ دائمًا — تقرير بلا محتوى لا معنى له.
+    if (!next.activity && !next.course && !next.warnings) return;
+    this.contentOverride.set(next);
   }
 
   /* ---------- الحلقات ---------- */
@@ -477,26 +584,52 @@ export class ReportDialogComponent {
     buildStudentsReport(this.source(), this.studentIds(), this.period.period(), this.circleIds()),
   );
 
-  readonly ready = computed(() =>
-    this.subject() === 'students' ? this.studentIds().length > 0 : this.circleIds().length > 0,
+  /** كتلة المقرر/الإنذار — تُحسَب على الحلقات المختارة (والطلّاب المحدَّدين إن اختيروا). */
+  readonly marksReport = computed(() =>
+    buildMarksReport(
+      this.source(),
+      this.circleIds(),
+      this.subject() === 'students' ? this.studentIds() : null,
+      this.marks(),
+      this.content(),
+    ),
   );
 
+  /** كتلة المقرر/الإنذار إن اختيرت، وإلّا `null`. */
+  readonly marksOn = computed(() => (hasMarksContent(this.content()) ? this.marksReport() : null));
+
+  readonly ready = computed(() => {
+    // المقرر/الإنذار وحدهما يكفيهما حلقة مختارة؛ النشاط في وضع الطلّاب يحتاج طالبًا.
+    if (this.content().activity && this.subject() === 'students') {
+      return this.studentIds().length > 0;
+    }
+    return this.circleIds().length > 0;
+  });
+
   notReadyText(): string {
-    return this.subject() === 'students'
+    return this.content().activity && this.subject() === 'students'
       ? 'اختر طالبًا واحدًا على الأقلّ.'
       : 'اختر حلقة واحدة على الأقلّ.';
   }
 
   /* ---------- النصّ ---------- */
 
-  private readonly meta = computed(() => ({
-    teacherName: this.teacherName(),
-    intro: this.intro(),
-    outro: this.outro(),
-  }));
+  private readonly meta = computed(() => {
+    const mk = this.marksOn();
+    return {
+      teacherName: this.teacherName(),
+      intro: this.intro(),
+      outro: this.outro(),
+      marksLines: mk ? marksTextLines(mk) : undefined,
+    };
+  });
 
   readonly reportText = computed<string>(() => {
     if (!this.ready()) return '';
+    const mk = this.marksOn();
+    if (!this.content().activity && mk) {
+      return marksReportText(mk, this.period.period(), this.meta(), this.audience());
+    }
     if (this.subject() === 'students') {
       return studentsReportText(this.studentsReport(), this.meta(), this.audience());
     }
@@ -510,7 +643,8 @@ export class ReportDialogComponent {
   private readonly stateKey = computed(
     () =>
       `${this.period.period().from}|${this.period.period().to}|${this.circleIds().join(',')}` +
-      `|${this.audience()}|${this.subject()}|${this.studentIds().join(',')}`,
+      `|${this.audience()}|${this.subject()}|${this.studentIds().join(',')}` +
+      `|${JSON.stringify(this.content())}|${JSON.stringify(this.marks())}`,
   );
 
   readonly edited = computed(() => this.override()?.key === this.stateKey());
@@ -528,6 +662,7 @@ export class ReportDialogComponent {
     try {
       await navigator.clipboard.writeText(text);
       this.notify.success('نُسخ نصّ التقرير');
+      this.exported.emit(!!this.marksOn());
     } catch {
       this.notify.error('تعذّر النسخ — انسخ النصّ يدويًّا');
     }
@@ -536,6 +671,8 @@ export class ReportDialogComponent {
   /* ---------- التصدير ---------- */
 
   readonly shareTitle = computed(() => {
+    const mk = this.marksOn();
+    if (!this.content().activity && mk) return `تقرير ${marksTitle(mk)}`;
     if (this.subject() === 'students') {
       const n = this.studentIds().length;
       return n === 1 ? (this.studentsReport().students[0]?.name ?? 'تقرير') : `تقرير ${n} طلّاب`;
@@ -550,22 +687,42 @@ export class ReportDialogComponent {
   readonly pdfModel = computed<PdfDoc | null>(() => {
     if (!this.ready()) return null;
     const meta: PdfMeta = { teacherName: this.teacherName(), audience: this.audience() };
-    if (this.subject() === 'students') return buildStudentsPdf(this.studentsReport(), meta);
-    const single = this.singleCircle();
-    if (single) return buildCirclePdf(single, meta);
-    return buildOverviewPdf(this.overviewReport(), meta);
+    const mk = this.marksOn();
+    if (!this.content().activity && mk) {
+      return marksPdf(mk, this.period.period(), this.teacherName());
+    }
+    let doc: PdfDoc;
+    if (this.subject() === 'students') doc = buildStudentsPdf(this.studentsReport(), meta);
+    else {
+      const single = this.singleCircle();
+      doc = single ? buildCirclePdf(single, meta) : buildOverviewPdf(this.overviewReport(), meta);
+    }
+    if (!mk) return doc;
+    // المقرر/الإنذار أوّلًا ثمّ النشاط، بعنوان يفصل بينهما.
+    return {
+      ...doc,
+      sections: [
+        ...marksPdfSections(mk),
+        { kind: 'heading', text: 'الحضور والنشاط' },
+        ...doc.sections,
+      ],
+    };
   });
 
   readonly fileName = computed(() => {
     const p = this.period.period();
     const tag = p.from === p.to ? p.from : `${p.from}_${p.to}`;
     let raw: string;
-    if (this.subject() === 'students') {
+    const mk = this.marksOn();
+    if (!this.content().activity && mk) {
+      raw = marksTitle(mk);
+    } else if (this.subject() === 'students') {
       const list = this.studentsReport().students;
       raw = list.length === 1 ? list[0].name : `${list.length}-طلاب`;
     } else {
       raw = this.singleCircle()?.circleName ?? 'عام';
     }
+    if (mk && this.content().activity) raw += `-${marksTitle(mk)}`;
     return `تقرير-${raw.replace(/[\\/:*?"<>|\s]+/g, '-')}-${tag}`;
   });
 }

@@ -13,6 +13,7 @@ import type { ReportAudience } from '../core/report-text';
 import {
   DAY_OUTCOME_LABELS,
   achievementDays,
+  attFraction,
   type StudentDay,
   type StudentTimeline,
 } from '../core/reports';
@@ -466,7 +467,7 @@ export class StudentReportCardComponent {
 
   readonly stats = computed<{ value: string; label: string }[]>(() => {
     const tl = this.timeline();
-    const att = { value: tl.att.rate === null ? '—' : tl.att.rate + '٪', label: 'الحضور' };
+    const att = { value: attFraction(tl.att, tl.held), label: 'الحضور' };
     if (!tl.hasHifz) {
       const sat = tl.tajweed.filter((c) => c.score !== null);
       const max = sat.reduce((a, c) => a + c.totalScore, 0);

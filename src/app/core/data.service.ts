@@ -1029,7 +1029,11 @@ export class DataService {
     });
   }
 
-  /** كل سجلات الحضور (لحساب معدّل الحضور العام في البانر) — مقعد واحد لكلّ (طالب، تاريخ). */
+  /**
+   * كل سجلات الحضور للتقارير — سجلّ واحد لكلّ (طالب، حلقة، تاريخ). الحلقة جزء من
+   * المفتاح: طالب التحفيظ والتجويد قد يحضر حصّتين في اليوم نفسه، ولكلّ حصّة سجلّها؛
+   * دمجهما بـ(طالب، تاريخ) فقط كان يُسقط إحداهما فينقص كسر الحضور «٤/٥» ظلمًا.
+   */
   allAttendance(destroyRef?: DestroyRef): Signal<AttendanceRecord[] | undefined> {
     const raw = this.live<AttendanceRecord>(this.scopedCol(COL.attendance), destroyRef);
     return computed(() => {
@@ -1037,7 +1041,7 @@ export class DataService {
       if (list === undefined) return undefined;
       const byKey = new Map<string, AttendanceRecord>();
       for (const a of list) {
-        const key = `${a.studentId}_${a.date}`;
+        const key = `${a.studentId}_${a.circleId}_${a.date}`;
         const existing = byKey.get(key);
         if (!existing || a.createdAt > existing.createdAt) byKey.set(key, a);
       }

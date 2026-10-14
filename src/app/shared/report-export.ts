@@ -1,4 +1,13 @@
-import { Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import { isIosSafariTab } from '../core/platform';
 import { NotifyService } from '../core/notify.service';
@@ -289,6 +298,12 @@ export class ReportExportComponent {
    */
   readonly pdfModel = input<PdfDoc | null>(null);
 
+  /**
+   * يُصدَر عند أوّل مخرَج فعليّ (صور مولَّدة أو PDF محفوظ) — تستعمله نافذة
+   * التقرير لتعرف أنّ التقرير «أُنشئ» فتُسقط العلامات المؤقّتة (المقرر/الإنذار).
+   */
+  readonly exported = output<void>();
+
   readonly busy = signal(false);
   readonly pdfBusy = signal(false);
   readonly generated = signal(false);
@@ -362,6 +377,7 @@ export class ReportExportComponent {
       }
       this.images.set(out);
       this.generated.set(true);
+      this.exported.emit();
     } catch (e) {
       console.error('[report-export] فشل توليد الصور:', e);
       this.notify.error(`تعذّر توليد الصورة (${this.errText(e)})`);
@@ -664,12 +680,14 @@ export class ReportExportComponent {
         // تحرير الرابط بعد أن يلتقطه المتصفّح فعليًّا.
         setTimeout(() => URL.revokeObjectURL(url), 10000);
         this.notify.success('نُزّل ملفّ PDF');
+        this.exported.emit();
         return;
       }
 
       const res = await this.nativeSaveAndShare(blob, name);
       if (res.ok) {
         this.notify.success('جاهز — اختر أين تحفظ الملفّ أو لمن ترسله.');
+        this.exported.emit();
         return;
       }
 

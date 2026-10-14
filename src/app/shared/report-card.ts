@@ -2,11 +2,13 @@ import { Component, computed, input } from '@angular/core';
 import { dmy } from '../core/format';
 import { periodLabel } from '../core/report-period';
 import type { ReportAudience } from '../core/report-text';
-import type {
-  CircleReport,
-  HifzStudentRow,
-  TajweedExamCell,
-  TajweedStudentRow,
+import {
+  attFraction,
+  type AttendanceTally,
+  type CircleReport,
+  type HifzStudentRow,
+  type TajweedExamCell,
+  type TajweedStudentRow,
 } from '../core/reports';
 
 /* ==========================================================================
@@ -92,7 +94,7 @@ interface CardPage {
                   <tr>
                     <td class="c-idx">{{ r.index }}</td>
                     <td class="c-name">{{ r.row.name }}</td>
-                    <td>{{ r.row.att.rate === null ? '—' : r.row.att.rate + '٪' }}</td>
+                    <td>{{ fraction(r.row) }}</td>
                     <td>{{ r.row.pages }}</td>
                     <td>{{ r.row.avgScore === null ? '—' : r.row.avgScore + '٪' }}</td>
                     <td>{{ r.row.sardCount }} / {{ r.row.examCount }}</td>
@@ -114,7 +116,7 @@ interface CardPage {
                   <tr>
                     <td class="c-idx">{{ r.index }}</td>
                     <td class="c-name">{{ r.row.name }}</td>
-                    <td>{{ r.row.att.rate === null ? '—' : r.row.att.rate + '٪' }}</td>
+                    <td>{{ fraction(r.row) }}</td>
                   </tr>
                 }
               </tbody>
@@ -143,7 +145,7 @@ interface CardPage {
                   <tr>
                     <td class="c-idx">{{ r.index }}</td>
                     <td class="c-name">{{ r.row.name }}</td>
-                    <td>{{ r.row.att.rate === null ? '—' : r.row.att.rate + '٪' }}</td>
+                    <td>{{ fraction(r.row) }}</td>
                     <!-- العمود يُربَط بمُعرّف الاختبار لا بترتيب الخلايا: طالب غير
                          مستهدَف باختبار ما لا يملك خليّة له، فالاعتماد على الترتيب
                          يُزيح كلّ أعمدته ويعرض درجات في غير مواضعها. -->
@@ -340,6 +342,11 @@ export class ReportCardComponent {
 
   readonly dmy = dmy;
   readonly periodText = computed(() => periodLabel(this.report().period));
+
+  /** حضور الطالب كسرًا «٤/٥». */
+  fraction(row: { att: AttendanceTally; held: number }): string {
+    return attFraction(row.att, row.held);
+  }
 
   /** خليّة الطالب في اختبار بعينه — `undefined` إن لم يكن مستهدَفًا به أصلًا. */
   cellOf(row: TajweedStudentRow, examId: string): TajweedExamCell | undefined {

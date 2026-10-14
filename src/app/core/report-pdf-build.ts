@@ -25,6 +25,8 @@ import {
   DAY_OUTCOME_LABELS,
   INACTIVE_DAYS,
   achievementDays,
+  attFraction,
+  type AttendanceTally,
   type CircleReport,
   type DayEntry,
   type OverviewReport,
@@ -42,6 +44,11 @@ export interface PdfMeta {
 const num = (v: number | string): PdfCell => ({ text: String(v), dir: 'ltr' });
 const pct = (v: number | null): PdfCell =>
   v === null ? { text: '—', dir: 'ltr' } : { text: String(v), dir: 'ltr' };
+/** الحضور كسرًا «٤/٥» — يُرسَم `ltr` فلا ينقلب ترتيب الطرفين. */
+const frac = (att: AttendanceTally, held: number): PdfCell => ({
+  text: attFraction(att, held),
+  dir: 'ltr',
+});
 const name = (t: string): PdfCell => ({ text: t, bold: true, dir: 'rtl' });
 
 /* --------------------------------------------------------------------------
@@ -68,7 +75,7 @@ export function buildCirclePdf(rep: CircleReport, meta: PdfMeta): PdfDoc {
       columns: [
         { header: '#', weight: 0.5, dir: 'ltr' },
         { header: 'اسم الطالب', weight: 4, align: 'start' },
-        { header: 'الحضور ٪', weight: 1.4 },
+        { header: 'الحضور', weight: 1.4 },
         { header: 'الأوجه', weight: 1.2 },
         { header: 'حفظ جديد', weight: 1.4 },
         { header: 'المتوسّط ٪', weight: 1.4 },
@@ -78,7 +85,7 @@ export function buildCirclePdf(rep: CircleReport, meta: PdfMeta): PdfDoc {
       rows: rep.rows.map((r, i) => [
         num(i + 1),
         name(r.name),
-        pct(r.att.rate),
+        frac(r.att, r.held),
         num(r.pages),
         num(r.newPages),
         pct(r.avgScore),
@@ -123,9 +130,9 @@ export function buildCirclePdf(rep: CircleReport, meta: PdfMeta): PdfDoc {
         columns: [
           { header: '#', weight: 0.5, dir: 'ltr' },
           { header: 'اسم الطالب', weight: 5, align: 'start' },
-          { header: 'الحضور ٪', weight: 1.6 },
+          { header: 'الحضور', weight: 1.6 },
         ],
-        rows: rep.rows.map((r, i) => [num(i + 1), name(r.name), pct(r.att.rate)]),
+        rows: rep.rows.map((r, i) => [num(i + 1), name(r.name), frac(r.att, r.held)]),
       });
       sections.push({ kind: 'note', text: 'لا اختبارات تجويد في هذه الفترة.' });
     } else {
@@ -142,14 +149,14 @@ export function buildCirclePdf(rep: CircleReport, meta: PdfMeta): PdfDoc {
         const columns = [
           { header: '#', weight: 0.5, dir: 'ltr' as const },
           { header: 'اسم الطالب', weight: 3.4, align: 'start' as const },
-          { header: 'الحضور ٪', weight: 1.2 },
+          { header: 'الحضور', weight: 1.2 },
           // بلا أقواس عمدًا: القوس في نصّ عربيّ يحتاج انعكاس صورته، وتفاديه
           // أبسط وأسلم من معالجته في كلّ موضع.
           ...group.map((e) => ({ header: `${e.name} — من ${e.totalScore}`, weight: 1.6 })),
           ...(last ? [{ header: 'المجموع', weight: 1.6 }] : []),
         ];
         const rows = rep.rows.map((r, i) => {
-          const cells: PdfCell[] = [num(i + 1), name(r.name), pct(r.att.rate)];
+          const cells: PdfCell[] = [num(i + 1), name(r.name), frac(r.att, r.held)];
           for (const e of group) {
             const cell = cellOf(r, e.id);
             cells.push(
@@ -197,7 +204,7 @@ function cellOf(row: TajweedStudentRow, examId: string): TajweedExamCell | undef
 function studentSections(tl: StudentTimeline, meta: PdfMeta): PdfSection[] {
   const sections: PdfSection[] = [];
 
-  const attRate = { label: 'الحضور ٪', value: tl.att.rate === null ? '—' : String(tl.att.rate) };
+  const attRate = { label: 'الحضور', value: attFraction(tl.att, tl.held) };
   if (tl.hasHifz) {
     sections.push({
       kind: 'stats',
@@ -431,7 +438,7 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
           columns: [
             { header: '#', weight: 0.5, dir: 'ltr' },
             { header: 'اسم الطالب', weight: 4, align: 'start' },
-            { header: 'الحضور ٪', weight: 1.4 },
+            { header: 'الحضور', weight: 1.4 },
             { header: 'الأوجه', weight: 1.2 },
             { header: 'المتوسّط ٪', weight: 1.4 },
             { header: 'سرد', weight: 1 },
@@ -440,7 +447,7 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
           rows: rep.students.map((s, i) => [
             num(i + 1),
             name(s.name),
-            pct(s.att.rate),
+            frac(s.att, s.held),
             num(s.pages),
             pct(s.avgScore),
             num(s.serd.length),
@@ -467,7 +474,7 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
           columns: [
             { header: '#', weight: 0.5, dir: 'ltr' },
             { header: 'اسم الطالب', weight: 4, align: 'start' },
-            { header: 'الحضور ٪', weight: 1.4 },
+            { header: 'الحضور', weight: 1.4 },
             { header: 'حضر', weight: 1.1 },
             { header: 'اختبارات', weight: 1.3 },
             { header: 'المجموع', weight: 1.6 },
@@ -477,7 +484,7 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
             return [
               num(i + 1),
               name(s.name),
-              pct(s.att.rate),
+              frac(s.att, s.held),
               num(s.att.present + s.att.late),
               num(s.tajweed.length),
               { text: sum.max ? `${sum.achieved} / ${sum.max}` : '—', dir: 'ltr' as const },

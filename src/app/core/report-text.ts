@@ -18,9 +18,11 @@ import { ATTENDANCE_LABELS } from './models';
 import { periodLabel } from './report-period';
 import {
   DAY_OUTCOME_LABELS,
+  attFraction,
   achievementDays,
   INACTIVE_DAYS,
   tallyLabel,
+  type AttendanceTally,
   type CircleReport,
   type HifzCircleReport,
   type HifzStudentRow,
@@ -40,9 +42,19 @@ export interface ReportTextMeta {
   intro?: string;
   /** خاتمة المعلّم — لتقارير الأهالي فقط. */
   outro?: string;
+  /**
+   * كتلة المقرر/الإنذار (من `marksTextLines`) — تُدرَج بعد الترويسة مباشرةً
+   * وقبل أرقام النشاط ليراها وليّ الأمر أوّلًا. غائبة = لا شيء يُدرَج.
+   */
+  marksLines?: string[];
 }
 
 const RULE = '━━━━━━━━━━━━';
+
+/** يُدرِج كتلة المقرر/الإنذار (إن وُجدت) بعد الترويسة، مفصولةً بخطّ فاصل. */
+function pushMarks(lines: string[], meta: ReportTextMeta): void {
+  if (meta.marksLines?.length) lines.push(...meta.marksLines, RULE);
+}
 
 /** يحذف الأسطر الفارغة المتتالية الزائدة الناتجة عن أقسام مطويّة. */
 function join(lines: readonly string[]): string {
@@ -60,6 +72,14 @@ function pagesLabel(n: number): string {
   return `${n} أوجه`;
 }
 
+/** سطر الحضور: «٤/٥ (٣ حاضر · ١ متأخّر · ١ غائب)» — الكسر أوّلًا ثمّ التفصيل. */
+function attLine(att: AttendanceTally, held: number): string {
+  const frac = attFraction(att, held);
+  if (frac === '—') return 'الحضور: لا سجلّ حضور';
+  // طالب بلا أيّ سجلّ في جلسات منعقدة: «٠/٥» وحدها تكفي، بلا تفصيل فارغ.
+  return att.recorded === 0 ? `الحضور: ${frac}` : `الحضور: ${frac} (${tallyLabel(att)})`;
+}
+
 /** «١٨ / ٢٠» — العلامة الفعليّة لاختبار التجويد، بلا نسبة مئويّة. */
 function rawScore(score: number | null, total: number): string {
   return score === null ? `— / ${total}` : `${score} / ${total}`;
@@ -71,7 +91,7 @@ function rawScore(score: number | null, total: number): string {
 
 function hifzStudentLines(row: HifzStudentRow, audience: ReportAudience): string[] {
   const out: string[] = [`• ${row.name}`];
-  out.push(`  الحضور: ${tallyLabel(row.att)}${row.att.rate === null ? '' : ` (${row.att.rate}٪)`}`);
+  out.push(`  ${attLine(row.att, row.held)}`);
 
   if (row.recitationCount > 0) {
     const score = row.avgScore === null ? '' : ` — متوسّط ${row.avgScore}٪`;
@@ -98,7 +118,7 @@ function hifzStudentLines(row: HifzStudentRow, audience: ReportAudience): string
 
 function tajweedStudentLines(row: TajweedStudentRow, audience: ReportAudience): string[] {
   const out: string[] = [`• ${row.name}`];
-  out.push(`  الحضور: ${tallyLabel(row.att)}${row.att.rate === null ? '' : ` (${row.att.rate}٪)`}`);
+  out.push(`  ${attLine(row.att, row.held)}`);
 
   if (row.cells.length === 0) {
     out.push('  لا اختبارات في هذه الفترة');
@@ -153,6 +173,7 @@ export function circleReportText(
   lines.push(`📋 ${rep.circleTitle}`, periodLabel(rep.period));
   if (meta.teacherName) lines.push(`معلّم الحلقة: ${meta.teacherName}`);
   lines.push(RULE);
+  pushMarks(lines, meta);
 
   lines.push(...(rep.kind === 'hifz' ? hifzHeaderLines(rep, audience) : tajweedHeaderLines(rep)));
   lines.push(RULE, '');
@@ -231,8 +252,9 @@ export function studentTimelineText(
   lines.push(`📋 تقرير الطالب: ${tl.name}`, periodLabel(tl.period));
   if (meta.teacherName) lines.push(`المعلّم: ${meta.teacherName}`);
   lines.push(RULE);
+  pushMarks(lines, meta);
 
-  lines.push(`الحضور: ${tallyLabel(tl.att)}${tl.att.rate === null ? '' : ` (${tl.att.rate}٪)`}`);
+  lines.push(attLine(tl.att, tl.held));
   if (tl.hasHifz) {
     lines.push(`مجموع الأوجه: ${tl.pages}${tl.newPages ? ` (حفظ جديد ${tl.newPages})` : ''}`);
   }
@@ -276,7 +298,9 @@ export function studentTimelineText(
 export function overviewReportText(ov: OverviewReport, meta: ReportTextMeta): string {
   const lines: string[] = [`📋 تقرير عامّ`, periodLabel(ov.period)];
   if (meta.teacherName) lines.push(`المعلّم: ${meta.teacherName}`);
-  lines.push(RULE, '');
+  lines.push(RULE);
+  pushMarks(lines, meta);
+  lines.push('');
 
   if (ov.hifz.length > 0) {
     const t = ov.hifzTotals;
@@ -341,6 +365,7 @@ export function studentsReportText(
   lines.push(`📋 تقرير ${t.students} طلّاب`, periodLabel(rep.period));
   if (meta.teacherName) lines.push(`المعلّم: ${meta.teacherName}`);
   lines.push(RULE);
+  pushMarks(lines, meta);
 
   lines.push(`الحضور العامّ: ${t.att.rate === null ? '—' : t.att.rate + '٪'}`);
   if (t.hasHifz && (t.pages > 0 || t.avgScore !== null)) {

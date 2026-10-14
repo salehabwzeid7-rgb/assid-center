@@ -201,6 +201,18 @@ export function tallyLabel(t: AttendanceTally): string {
   return parts.join(' · ') || 'لا سجلّ حضور';
 }
 
+/**
+ * الحضور كسرًا: «٤/٥» = جلسات حضرها (حاضر + متأخّر) من الجلسات المنعقدة في المدى.
+ * المأذون له غائب في هذا العدّ. المقام هو عدد جلسات الحلقة التي انعقدت فعلًا،
+ * ولا ينزل عن عدد السجلّات المسجَّلة للطالب حتى لا يظهر بسط أكبر من المقام.
+ * بلا فراغات حول «/» عمدًا: الفراغ داخل نصّ عربيّ قد يقلب ترتيب الطرفين.
+ */
+export function attFraction(att: AttendanceTally, held: number): string {
+  const attended = att.present + att.late;
+  const total = Math.max(held, att.recorded);
+  return total === 0 ? '—' : `${attended}/${total}`;
+}
+
 /** متوسّط مقرَّب، أو `null` إن كانت القائمة فارغة — لا نُرجِع صفرًا، فالصفر يُقرأ رسوبًا. */
 function avg(values: readonly number[]): number | null {
   if (!values.length) return null;
@@ -442,6 +454,8 @@ export interface HifzStudentRow {
   studentId: string;
   name: string;
   att: AttendanceTally;
+  /** جلسات الحلقة المنعقدة في المدى — مقام كسر الحضور. */
+  held: number;
   /** مجموع الأوجه المسمَّعة فعليًّا (يستبعد «لم يسمّع» و«المؤجَّل»). */
   pages: number;
   /** أوجه الحفظ الجديد وحدها — مؤشّر التقدّم الحقيقيّ. */
@@ -485,6 +499,8 @@ export interface TajweedStudentRow {
   studentId: string;
   name: string;
   att: AttendanceTally;
+  /** جلسات الحلقة المنعقدة في المدى — مقام كسر الحضور. */
+  held: number;
   cells: TajweedExamCell[];
   /** مجموع ما أحرزه فعليًّا في اختبارات المدى. */
   achieved: number;
@@ -544,7 +560,7 @@ export type CircleReport = HifzCircleReport | TajweedCircleReport;
 export const INACTIVE_DAYS = 14;
 
 /** «اسم الحلقة — تحفيظ» / «… — تجويد تمهيديّة». مكرّر هنا لإبقاء الطبقة نقيّة. */
-function circleTitleOf(c: Circle): string {
+export function circleTitleOf(c: Circle): string {
   if (c.type === 'tajweed') {
     const lvl =
       c.tajweedLevel === 'intro'
@@ -611,6 +627,7 @@ function buildHifzRow(st: Student, d: ScopedData, asOf: string): HifzStudentRow 
     studentId: st.id,
     name: st.name,
     att: tallyOf(att),
+    held: d.heldSessions.length,
     pages: pagesOf(['new', 'near_review', 'far_review']),
     newPages: pagesOf(['new']),
     reviewPages: pagesOf(['near_review', 'far_review']),
@@ -678,6 +695,7 @@ function buildTajweedRow(
     studentId: st.id,
     name: st.name,
     att: tallyOf(att),
+    held: d.heldSessions.length,
     cells,
     // المجموع الخام: مجموع المحرَز على مجموع الكلّيّ. الاختبار الأكبر يزن أكثر
     // تلقائيًّا — وهو السلوك الصحيح — ويصل لوليّ الأمر بصيغة يفهمها بلا شرح.
@@ -744,6 +762,8 @@ export interface StudentTimeline {
   period: Period;
   days: StudentDay[];
   att: AttendanceTally;
+  /** جلسات الحلقات ضمن النطاق التي انعقدت في المدى — مقام كسر الحضور. */
+  held: number;
   pages: number;
   newPages: number;
   avgScore: number | null;
@@ -862,6 +882,11 @@ export function buildStudentTimeline(
     };
   });
 
+  // المقام: الجلسات المنعقدة فعلًا في حلقات النطاق خلال المدى (المجدولة لم تُعقَد).
+  const held = src.sessions.filter(
+    (s) => s.status !== 'scheduled' && scopeCircleIds.has(s.circleId) && inPeriod(s.date, period),
+  ).length;
+
   const actual = recs.filter(isActualRecitation);
   return {
     studentId: student.id,
@@ -869,6 +894,7 @@ export function buildStudentTimeline(
     period,
     days,
     att: tallyOf(att),
+    held,
     pages: actual.reduce((a, r) => a + (r.pages || 0), 0),
     newPages: actual.filter((r) => r.kind === 'new').reduce((a, r) => a + (r.pages || 0), 0),
     avgScore: avg(actual.map((r) => scoreOf(r))),
