@@ -45,7 +45,7 @@ import {
   type TajweedExamResult,
 } from './models';
 import { surahName } from './quran-data';
-import { inPeriod, todayISO, type Period } from './report-period';
+import { inPeriod, isoOf, todayISO, type Period } from './report-period';
 
 /* --------------------------------------------------------------------------
    المدخلات
@@ -208,9 +208,79 @@ export function tallyLabel(t: AttendanceTally): string {
  * بلا فراغات حول «/» عمدًا: الفراغ داخل نصّ عربيّ قد يقلب ترتيب الطرفين.
  */
 export function attFraction(att: AttendanceTally, held: number): string {
-  const attended = att.present + att.late;
-  const total = Math.max(held, att.recorded);
-  return total === 0 ? '—' : `${attended}/${total}`;
+  return fracText(fracOf(att, held));
+}
+
+/** كسر الحضور بطرفيه — يُجمَع للإجماليّات (مجموع ما حضروه من مجموع المستحَقّ). */
+export interface AttFrac {
+  attended: number;
+  total: number;
+}
+
+export function fracOf(att: AttendanceTally, held: number): AttFrac {
+  return { attended: att.present + att.late, total: Math.max(held, att.recorded) };
+}
+
+export function sumFrac(list: readonly AttFrac[]): AttFrac {
+  return list.reduce((a, f) => ({ attended: a.attended + f.attended, total: a.total + f.total }), {
+    attended: 0,
+    total: 0,
+  });
+}
+
+/** «١٤٢/١٦٠» أو «—» حين لا حصص ولا سجلّات. */
+export function fracText(f: AttFrac): string {
+  return f.total === 0 ? '—' : `${f.attended}/${f.total}`;
+}
+
+/**
+ * عدد الحصص المنعقدة فعلًا — حصّة واحدة لكلّ (حلقة، تاريخ). حصص قديمة أُنشئت
+ * بمعرّف عشوائيّ قد تتعايش مع حصّة بالمعرّف الثابت لليوم نفسه (راجع
+ * `DataService.studentAttendance`)، فعدّ المستندات كما هي يضخّم المقام: «٤/١١».
+ * المجدولة لم تُعقَد بعد فلا تدخل.
+ */
+export function countHeldSessions(
+  sessions: readonly Session[],
+  keep: (s: Session) => boolean = () => true,
+): number {
+  const keys = new Set<string>();
+  for (const s of sessions) {
+    if (s.status !== 'scheduled' && keep(s)) keys.add(`${s.circleId}_${s.date.slice(0, 10)}`);
+  }
+  return keys.size;
+}
+
+/**
+ * تاريخ بدء عدّ الحصص لطالب في سياق «كلّ المدّة» (ملفّه، إحصائيّات الحلقة):
+ * يوم إضافته للنظام، أو أوّل سجلّ حضور له إن كان أقدم. فارغ = لا قصّ.
+ * (تقارير الفترات لا تقصّ: المقام فيها كلّ حصص الفترة، بطلب صريح.)
+ */
+export function joinDateOf(
+  student: Pick<Student, 'createdAt'>,
+  records: readonly { date: string }[],
+): string {
+  const dates = records.map((r) => r.date.slice(0, 10));
+  if (student.createdAt) dates.push(isoOf(new Date(student.createdAt)));
+  return dates.length ? dates.sort()[0] : '';
+}
+
+/**
+ * كسر حضور طالب على «كلّ المدّة» داخل حلقات بعينها، من يوم التحاقه:
+ * حضر (حاضر + متأخّر) من الحصص المنعقدة في حلقاته منذ `joinDateOf`.
+ */
+export function lifetimeAttFrac(
+  student: Pick<Student, 'createdAt'>,
+  records: readonly AttendanceRecord[],
+  sessions: readonly Session[],
+  circleIds: readonly string[],
+): AttFrac {
+  const from = joinDateOf(student, records);
+  const ids = new Set(circleIds);
+  const held = countHeldSessions(
+    sessions,
+    (s) => ids.has(s.circleId) && (!from || s.date.slice(0, 10) >= from),
+  );
+  return fracOf(tallyOf(records), held);
 }
 
 /** متوسّط مقرَّب، أو `null` إن كانت القائمة فارغة — لا نُرجِع صفرًا، فالصفر يُقرأ رسوبًا. */
@@ -236,6 +306,8 @@ interface ScopedData {
   sessions: Session[];
   /** الجلسات التي انعقدت فعلًا (مفتوحة أو مغلقة) — المجدولة لم تُعقَد بعد. */
   heldSessions: Session[];
+  /** الحصص المنعقدة بلا تكرار (حلقة، تاريخ) — مقام كسر الحضور. */
+  heldCount: number;
   attendance: AttendanceRecord[];
   recitations: RecitationRecord[];
   serd: SerdRecord[];
@@ -292,6 +364,7 @@ function scope(src: ReportSource, circle: Circle, period: Period, asOf: string):
     students: scopedStudents(src, cid, seen),
     sessions,
     heldSessions: sessions.filter((s) => s.status !== 'scheduled'),
+    heldCount: countHeldSessions(sessions),
     attendance,
     recitations,
     serd,
@@ -533,6 +606,8 @@ interface CircleReportBase {
 export interface HifzCircleReport extends CircleReportBase {
   kind: 'hifz';
   rows: HifzStudentRow[];
+  /** مجموع كسور حضور الطلّاب — «١٤٢/١٦٠». */
+  attFrac: AttFrac;
   totalPages: number;
   totalNewPages: number;
   avgScore: number | null;
@@ -547,6 +622,8 @@ export interface HifzCircleReport extends CircleReportBase {
 export interface TajweedCircleReport extends CircleReportBase {
   kind: 'tajweed';
   rows: TajweedStudentRow[];
+  /** مجموع كسور حضور الطلّاب — «١٤٢/١٦٠». */
+  attFrac: AttFrac;
   /** اختبارات التجويد الواقعة في المدى، مرتّبة بالتاريخ. */
   exams: TajweedExam[];
   /** مجموع المحرَز على مجموع الكلّيّ لكامل الحلقة — بالعلامة الفعليّة. */
@@ -627,7 +704,7 @@ function buildHifzRow(st: Student, d: ScopedData, asOf: string): HifzStudentRow 
     studentId: st.id,
     name: st.name,
     att: tallyOf(att),
-    held: d.heldSessions.length,
+    held: d.heldCount,
     pages: pagesOf(['new', 'near_review', 'far_review']),
     newPages: pagesOf(['new']),
     reviewPages: pagesOf(['near_review', 'far_review']),
@@ -651,6 +728,7 @@ function buildHifzBranch(base: CircleReportBase, d: ScopedData, asOf: string): H
     ...base,
     kind: 'hifz',
     rows,
+    attFrac: sumFrac(rows.map((r) => fracOf(r.att, r.held))),
     totalPages: rows.reduce((a, r) => a + r.pages, 0),
     totalNewPages: rows.reduce((a, r) => a + r.newPages, 0),
     avgScore: avg(allScores),
@@ -695,7 +773,7 @@ function buildTajweedRow(
     studentId: st.id,
     name: st.name,
     att: tallyOf(att),
-    held: d.heldSessions.length,
+    held: d.heldCount,
     cells,
     // المجموع الخام: مجموع المحرَز على مجموع الكلّيّ. الاختبار الأكبر يزن أكثر
     // تلقائيًّا — وهو السلوك الصحيح — ويصل لوليّ الأمر بصيغة يفهمها بلا شرح.
@@ -714,6 +792,7 @@ function buildTajweedBranch(base: CircleReportBase, d: ScopedData): TajweedCircl
     ...base,
     kind: 'tajweed',
     rows,
+    attFrac: sumFrac(rows.map((r) => fracOf(r.att, r.held))),
     exams,
     achieved: rows.reduce((a, r) => a + r.achieved, 0),
     maxScore: rows.reduce((a, r) => a + r.maxScore, 0),
@@ -736,8 +815,9 @@ export function buildCircleReport(
     circleName: circle.name,
     circleTitle: circleTitleOf(circle),
     period,
-    sessionCount: d.sessions.length,
-    heldCount: d.heldSessions.length,
+    // بلا تكرار (حلقة، تاريخ) كالمنعقدة — وإلّا قالت «١٠ من ١١» عن حصّة قديمة مكرّرة.
+    sessionCount: new Set(d.sessions.map((s) => `${s.circleId}_${s.date.slice(0, 10)}`)).size,
+    heldCount: d.heldCount,
     studentCount: d.students.length,
     att: tallyOf(d.attendance),
   };
@@ -883,9 +963,10 @@ export function buildStudentTimeline(
   });
 
   // المقام: الجلسات المنعقدة فعلًا في حلقات النطاق خلال المدى (المجدولة لم تُعقَد).
-  const held = src.sessions.filter(
-    (s) => s.status !== 'scheduled' && scopeCircleIds.has(s.circleId) && inPeriod(s.date, period),
-  ).length;
+  const held = countHeldSessions(
+    src.sessions,
+    (s) => scopeCircleIds.has(s.circleId) && inPeriod(s.date, period),
+  );
 
   const actual = recs.filter(isActualRecitation);
   return {
@@ -915,6 +996,7 @@ export interface HifzTotals {
   students: number;
   heldSessions: number;
   att: AttendanceTally;
+  attFrac: AttFrac;
   pages: number;
   newPages: number;
   avgScore: number | null;
@@ -927,6 +1009,7 @@ export interface TajweedTotals {
   students: number;
   heldSessions: number;
   att: AttendanceTally;
+  attFrac: AttFrac;
   exams: number;
   achieved: number;
   maxScore: number;
@@ -976,6 +1059,7 @@ export function buildOverviewReport(
       students: hifz.reduce((a, r) => a + r.studentCount, 0),
       heldSessions: hifz.reduce((a, r) => a + r.heldCount, 0),
       att: sumTallies(hifz.map((r) => r.att)),
+      attFrac: sumFrac(hifz.map((r) => r.attFrac)),
       pages: hifz.reduce((a, r) => a + r.totalPages, 0),
       newPages: hifz.reduce((a, r) => a + r.totalNewPages, 0),
       avgScore: avg(hifzScores),
@@ -987,6 +1071,7 @@ export function buildOverviewReport(
       students: tajweed.reduce((a, r) => a + r.studentCount, 0),
       heldSessions: tajweed.reduce((a, r) => a + r.heldCount, 0),
       att: sumTallies(tajweed.map((r) => r.att)),
+      attFrac: sumFrac(tajweed.map((r) => r.attFrac)),
       exams: tajweed.reduce((a, r) => a + r.exams.length, 0),
       achieved: tajweed.reduce((a, r) => a + r.achieved, 0),
       maxScore: tajweed.reduce((a, r) => a + r.maxScore, 0),
@@ -1002,6 +1087,7 @@ export function buildOverviewReport(
 export interface StudentsTotals {
   students: number;
   att: AttendanceTally;
+  attFrac: AttFrac;
   pages: number;
   newPages: number;
   avgScore: number | null;
@@ -1053,6 +1139,7 @@ export function buildStudentsReport(
     totals: {
       students: students.length,
       att: sumTallies(students.map((t) => t.att)),
+      attFrac: sumFrac(students.map((t) => fracOf(t.att, t.held))),
       pages: students.reduce((a, t) => a + t.pages, 0),
       newPages: students.reduce((a, t) => a + t.newPages, 0),
       avgScore: avg(scores),

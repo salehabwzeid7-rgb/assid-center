@@ -949,6 +949,10 @@ export class DataService {
    * معًا» في نفس اليوم. نُبقي هنا الأحدث كتابةً (`createdAt`) لكلّ تاريخ فقط،
    * فلا يظهر تعارض أبدًا مهما كان أصل البيانات. آمنة تمامًا حين لا يوجد
    * تكرار أصلًا (الحالة الطبيعيّة) — لا تُغيّر شيئًا حينها.
+   *
+   * المفتاح (حلقة، تاريخ) لا التاريخ وحده: التكرار القديم يقع داخل الحلقة نفسها،
+   * أمّا طالب التحفيظ والتجويد فقد يحضر حصّتين حقيقيّتين في اليوم نفسه — ودمجهما
+   * كان يُسقط إحداهما من كسر حضوره.
    */
   studentAttendance(
     studentId: string,
@@ -961,8 +965,9 @@ export class DataService {
       if (list === undefined) return undefined;
       const byDate = new Map<string, AttendanceRecord>();
       for (const a of list) {
-        const existing = byDate.get(a.date);
-        if (!existing || a.createdAt > existing.createdAt) byDate.set(a.date, a);
+        const key = `${a.circleId}_${a.date}`;
+        const existing = byDate.get(key);
+        if (!existing || a.createdAt > existing.createdAt) byDate.set(key, a);
       }
       return [...byDate.values()].sort(this.byDateDesc);
     });

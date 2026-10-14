@@ -16,6 +16,7 @@ import {
 } from '../../core/models';
 import { dmy } from '../../core/format';
 import { JUZ_SURAHS, completedJuz } from '../../core/quran-data';
+import { fracText, lifetimeAttFrac } from '../../core/reports';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 /**
@@ -153,8 +154,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="label">مجموع الأوجه</div>
           </div>
           <div class="stat">
-            <div class="num">{{ presentRate() }}٪</div>
-            <div class="label">نسبة الحضور</div>
+            <div class="num">{{ attFrac() }}</div>
+            <div class="label">الحضور</div>
           </div>
           <div class="stat">
             <div class="num">{{ sessionsCount() }}</div>
@@ -207,8 +208,11 @@ import { PageHeaderComponent } from '../../shared/page-header';
           @for (a of attendance(); track a.id) {
             <div class="list-item is-static">
               <span class="grow"
-                ><span class="primary">{{ dmy(a.date) }}</span></span
-              >
+                ><span class="primary">{{ dmy(a.date) }}</span>
+                @if (studentCircles().length > 1) {
+                  <span class="secondary">{{ circleName(a.circleId) }}</span>
+                }
+              </span>
               <span [class]="'badge b-' + a.status">{{ attLabels[a.status] }}</span>
             </div>
           }
@@ -561,12 +565,24 @@ export class StudentPage {
     return Math.round(sum * 10) / 10;
   });
   readonly sessionsCount = computed(() => this.attendance()?.length ?? 0);
-  readonly presentRate = computed(() => {
-    const list = this.attendance() ?? [];
-    if (list.length === 0) return 0;
-    const ok = list.filter((a) => a.status === 'present' || a.status === 'late').length;
-    return Math.round((ok / list.length) * 100);
+  /** حصص الحلقات كلّها — مقام كسر الحضور (حلقات الطالب وحدها، من يوم التحاقه). */
+  private readonly sessions = this.data.allSessions(this.destroyRef);
+
+  /**
+   * الحضور كسرًا «١٨/٢٠»: حضر (حاضر + متأخّر) من الحصص المنعقدة في حلقاته منذ
+   * التحاقه — نفس منطق التقارير، مقصوصًا بتاريخ الالتحاق لأنّ الملفّ بلا فترة.
+   */
+  readonly attFrac = computed(() => {
+    const st = this.student();
+    if (!st) return '—';
+    const att = this.attendance() ?? [];
+    const circleIds = [...new Set([...studentCircleIds(st), ...att.map((a) => a.circleId)])];
+    return fracText(lifetimeAttFrac(st, att, this.sessions() ?? [], circleIds));
   });
+
+  circleName(id: string): string {
+    return (this.allCircles() ?? []).find((c) => c.id === id)?.name ?? '';
+  }
 
   attCount(status: string): number {
     return this.attendance()?.filter((a) => a.status === status).length ?? 0;

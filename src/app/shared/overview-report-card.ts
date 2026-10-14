@@ -1,6 +1,12 @@
 import { Component, computed, input } from '@angular/core';
 import { periodLabel } from '../core/report-period';
-import type { HifzCircleReport, OverviewReport, TajweedCircleReport } from '../core/reports';
+import {
+  fracText,
+  type AttFrac,
+  type HifzCircleReport,
+  type OverviewReport,
+  type TajweedCircleReport,
+} from '../core/reports';
 
 /* ==========================================================================
    بطاقة التقرير العامّ المصوَّرة — عدّة حلقات دفعةً واحدة.
@@ -69,7 +75,7 @@ interface OverviewPage {
                     <td class="c-name">{{ c.circleName }}</td>
                     <td>{{ c.studentCount }}</td>
                     <td>{{ c.heldCount }}</td>
-                    <td>{{ c.att.rate === null ? '—' : c.att.rate + '٪' }}</td>
+                    <td>{{ frac(c.attFrac) }}</td>
                     <td>{{ c.totalPages }}</td>
                     <td>{{ c.avgScore === null ? '—' : c.avgScore + '٪' }}</td>
                     <td>{{ c.sardCount }} / {{ c.examCount }}</td>
@@ -95,7 +101,7 @@ interface OverviewPage {
                     <td class="c-name">{{ c.circleName }}</td>
                     <td>{{ c.studentCount }}</td>
                     <td>{{ c.heldCount }}</td>
-                    <td>{{ c.att.rate === null ? '—' : c.att.rate + '٪' }}</td>
+                    <td>{{ frac(c.attFrac) }}</td>
                     <td>{{ c.exams.length }}</td>
                     <td class="c-total">
                       {{ c.maxScore > 0 ? c.achieved + ' / ' + c.maxScore : '—' }}
@@ -220,6 +226,11 @@ interface OverviewPage {
   ],
 })
 export class OverviewReportCardComponent {
+  /** حضور الحلقة كسرًا «١٤٢/١٦٠». */
+  frac(f: AttFrac): string {
+    return fracText(f);
+  }
+
   readonly overview = input.required<OverviewReport>();
   readonly teacherName = input<string>('');
 
@@ -234,7 +245,7 @@ export class OverviewReportCardComponent {
       const stats = [
         { value: String(t.circles), label: 'حلقة' },
         { value: String(t.students), label: 'طالب' },
-        { value: t.att.rate === null ? '—' : t.att.rate + '٪', label: 'الحضور' },
+        { value: fracText(t.attFrac), label: 'الحضور' },
         { value: String(t.pages), label: 'وجه' },
         { value: t.avgScore === null ? '—' : t.avgScore + '٪', label: 'المتوسّط' },
       ];
@@ -248,7 +259,7 @@ export class OverviewReportCardComponent {
       const stats = [
         { value: String(t.circles), label: 'حلقة' },
         { value: String(t.students), label: 'طالب' },
-        { value: t.att.rate === null ? '—' : t.att.rate + '٪', label: 'الحضور' },
+        { value: fracText(t.attFrac), label: 'الحضور' },
         { value: String(t.exams), label: 'اختبار' },
         { value: t.maxScore > 0 ? `${t.achieved} / ${t.maxScore}` : '—', label: 'المجموع' },
       ];

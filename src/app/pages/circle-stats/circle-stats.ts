@@ -2,6 +2,7 @@ import { Component, DestroyRef, computed, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { TASMIE_PASS, isActualRecitation, scoreOf } from '../../core/models';
+import { fracText, lifetimeAttFrac, sumFrac } from '../../core/reports';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -24,8 +25,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="label">عدد الطلاب</div>
           </div>
           <div class="stat">
-            <div class="num">{{ attendanceRate() }}٪</div>
-            <div class="label">نسبة الحضور العامة</div>
+            <div class="num">{{ attendanceText() }}</div>
+            <div class="label">الحضور العام</div>
           </div>
           <div class="stat">
             <div class="num">{{ recitationCount() }}</div>
@@ -69,7 +70,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
               <span class="grow">
                 <span class="primary">{{ row.name }}</span>
                 <span class="secondary">
-                  حضور {{ row.rate }}٪ · تسميع {{ row.recites }} · {{ row.pages }} وجه
+                  حضور {{ row.att }} · تسميع {{ row.recites }} · {{ row.pages }} وجه
                 </span>
               </span>
             </div>
@@ -129,12 +130,8 @@ export class CircleStatsPage {
     const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
   });
-  readonly attendanceRate = computed(() => {
-    const list = this.attendance() ?? [];
-    if (!list.length) return 0;
-    const ok = list.filter((a) => a.status === 'present' || a.status === 'late').length;
-    return Math.round((ok / list.length) * 100);
-  });
+  /** مجموع كسور حضور الطلّاب «١٤٢/١٦٠» — نفس منطق التقارير. */
+  readonly attendanceText = computed(() => fracText(sumFrac(this.perStudent().map((r) => r.frac))));
   readonly avgScore = computed<number | null>(() => {
     const list = this.actualRecitations();
     if (!list.length) return null;
@@ -156,13 +153,16 @@ export class CircleStatsPage {
       .filter((s) => s.active)
       .map((s) => {
         const mine = att.filter((a) => a.studentId === s.id);
-        const ok = mine.filter((a) => a.status === 'present' || a.status === 'late').length;
+        // حضر من الحصص المنعقدة في الحلقة منذ التحاقه (الصفحة بلا فترة).
+        const frac = lifetimeAttFrac(s, mine, this.sessions() ?? [], [this.id]);
         const myRec = rec.filter((r) => r.studentId === s.id);
         const pages = myRec.reduce((t, r) => t + (Number(r.pages) || 0), 0);
         return {
           id: s.id,
           name: s.name,
-          rate: mine.length ? Math.round((ok / mine.length) * 100) : 0,
+          frac,
+          att: fracText(frac),
+          rate: frac.total ? frac.attended / frac.total : 0,
           recites: myRec.length,
           pages: Math.round(pages * 10) / 10,
         };

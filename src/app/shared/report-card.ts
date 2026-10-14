@@ -4,6 +4,7 @@ import { periodLabel } from '../core/report-period';
 import type { ReportAudience } from '../core/report-text';
 import {
   attFraction,
+  fracText,
   type AttendanceTally,
   type CircleReport,
   type HifzStudentRow,
@@ -356,7 +357,7 @@ export class ReportCardComponent {
   /** بطاقات الملخّص — مختلفة بنيويًّا بين الفرعين، لا مجرّد تسميات مختلفة. */
   readonly stats = computed<{ value: string; label: string }[]>(() => {
     const rep = this.report();
-    const rate = rep.att.rate === null ? '—' : rep.att.rate + '٪';
+    const rate = fracText(rep.attFrac);
     if (rep.kind === 'hifz') {
       return [
         { value: String(rep.heldCount), label: 'جلسة' },

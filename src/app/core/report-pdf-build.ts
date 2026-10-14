@@ -26,6 +26,7 @@ import {
   INACTIVE_DAYS,
   achievementDays,
   attFraction,
+  fracText,
   type AttendanceTally,
   type CircleReport,
   type DayEntry,
@@ -63,7 +64,7 @@ export function buildCirclePdf(rep: CircleReport, meta: PdfMeta): PdfDoc {
       kind: 'stats',
       items: [
         { label: 'جلسة', value: String(rep.heldCount) },
-        { label: 'الحضور ٪', value: rep.att.rate === null ? '—' : String(rep.att.rate) },
+        { label: 'الحضور', value: fracText(rep.attFrac) },
         { label: 'وجه', value: String(rep.totalPages) },
         { label: 'متوسّط التسميع ٪', value: rep.avgScore === null ? '—' : String(rep.avgScore) },
       ],
@@ -115,7 +116,7 @@ export function buildCirclePdf(rep: CircleReport, meta: PdfMeta): PdfDoc {
   } else {
     const stats = [
       { label: 'جلسة', value: String(rep.heldCount) },
-      { label: 'الحضور ٪', value: rep.att.rate === null ? '—' : String(rep.att.rate) },
+      { label: 'الحضور', value: fracText(rep.attFrac) },
       { label: 'اختبار', value: String(rep.exams.length) },
     ];
     if (rep.maxScore > 0) {
@@ -427,7 +428,7 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
           kind: 'stats',
           items: [
             { label: 'طالب', value: String(t.students) },
-            { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
+            { label: 'الحضور', value: fracText(t.attFrac) },
             { label: 'وجه', value: String(t.pages) },
             { label: 'متوسّط التسميع ٪', value: t.avgScore === null ? '—' : String(t.avgScore) },
           ],
@@ -460,7 +461,7 @@ export function buildStudentsPdf(rep: StudentsReport, meta: PdfMeta): PdfDoc {
           kind: 'stats',
           items: [
             { label: 'طالب', value: String(t.students) },
-            { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
+            { label: 'الحضور', value: fracText(t.attFrac) },
             { label: 'اختبارات التجويد', value: String(t.tajweedCount) },
             {
               label: 'مجموع العلامات',
@@ -523,7 +524,7 @@ export function buildOverviewPdf(ov: OverviewReport, meta: PdfMeta): PdfDoc {
       items: [
         { label: 'حلقة', value: String(t.circles) },
         { label: 'طالب', value: String(t.students) },
-        { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
+        { label: 'الحضور', value: fracText(t.attFrac) },
         { label: 'وجه', value: String(t.pages) },
         { label: 'المتوسّط ٪', value: t.avgScore === null ? '—' : String(t.avgScore) },
       ],
@@ -534,7 +535,7 @@ export function buildOverviewPdf(ov: OverviewReport, meta: PdfMeta): PdfDoc {
         { header: 'الحلقة', weight: 3.4, align: 'start' },
         { header: 'طلّاب', weight: 1.1 },
         { header: 'جلسات', weight: 1.2 },
-        { header: 'الحضور ٪', weight: 1.4 },
+        { header: 'الحضور', weight: 1.4 },
         { header: 'الأوجه', weight: 1.2 },
         { header: 'المتوسّط ٪', weight: 1.4 },
         { header: 'سرد', weight: 1 },
@@ -544,7 +545,7 @@ export function buildOverviewPdf(ov: OverviewReport, meta: PdfMeta): PdfDoc {
         name(c.circleName),
         num(c.studentCount),
         num(c.heldCount),
-        pct(c.att.rate),
+        { text: fracText(c.attFrac), dir: 'ltr' as const },
         num(c.totalPages),
         pct(c.avgScore),
         num(c.sardCount),
@@ -561,7 +562,7 @@ export function buildOverviewPdf(ov: OverviewReport, meta: PdfMeta): PdfDoc {
       items: [
         { label: 'حلقة', value: String(t.circles) },
         { label: 'طالب', value: String(t.students) },
-        { label: 'الحضور ٪', value: t.att.rate === null ? '—' : String(t.att.rate) },
+        { label: 'الحضور', value: fracText(t.attFrac) },
         { label: 'اختبار', value: String(t.exams) },
         { label: 'المجموع', value: t.maxScore > 0 ? `${t.achieved} / ${t.maxScore}` : '—' },
       ],
@@ -572,7 +573,7 @@ export function buildOverviewPdf(ov: OverviewReport, meta: PdfMeta): PdfDoc {
         { header: 'الحلقة', weight: 3.6, align: 'start' },
         { header: 'طلّاب', weight: 1.2 },
         { header: 'جلسات', weight: 1.3 },
-        { header: 'الحضور ٪', weight: 1.5 },
+        { header: 'الحضور', weight: 1.5 },
         { header: 'اختبارات', weight: 1.5 },
         { header: 'المجموع', weight: 1.9 },
       ],
@@ -580,7 +581,7 @@ export function buildOverviewPdf(ov: OverviewReport, meta: PdfMeta): PdfDoc {
         name(c.circleName),
         num(c.studentCount),
         num(c.heldCount),
-        pct(c.att.rate),
+        { text: fracText(c.attFrac), dir: 'ltr' as const },
         num(c.exams.length),
         {
           text: c.maxScore > 0 ? `${c.achieved} / ${c.maxScore}` : '—',

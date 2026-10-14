@@ -16,8 +16,10 @@ import {
   DAY_OUTCOME_LABELS,
   INACTIVE_DAYS,
   attFraction,
+  fracText,
   buildOverviewReport,
   buildStudentTimeline,
+  type AttFrac,
   type HifzCircleReport,
   type HifzStudentRow,
   type StudentTimeline,
@@ -269,7 +271,7 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
                   <div class="label">جلسة</div>
                 </div>
                 <div class="stat">
-                  <div class="num">{{ pct(ov().hifzTotals.att.rate) }}</div>
+                  <div class="num">{{ frac(ov().hifzTotals.attFrac) }}</div>
                   <div class="label">الحضور</div>
                 </div>
                 <div class="stat">
@@ -349,7 +351,7 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
                   <div class="label">جلسة</div>
                 </div>
                 <div class="stat">
-                  <div class="num">{{ pct(ov().tajweedTotals.att.rate) }}</div>
+                  <div class="num">{{ frac(ov().tajweedTotals.attFrac) }}</div>
                   <div class="label">الحضور</div>
                 </div>
                 <div class="stat">
@@ -885,6 +887,11 @@ export class ReportsPage {
   /** حضور الطالب كسرًا «٤/٥». */
   fraction(row: HifzStudentRow | TajweedStudentRow): string {
     return attFraction(row.att, row.held);
+  }
+
+  /** إجماليّ الحضور كسرًا «١٤٢/١٦٠». */
+  frac(f: AttFrac): string {
+    return fracText(f);
   }
 
   /** «٩٢٪» أو «—» — لا صفر، فالصفر يُقرأ رسوبًا لا غياب بيانات. */

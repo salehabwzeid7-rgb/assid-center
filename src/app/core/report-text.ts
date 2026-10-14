@@ -19,6 +19,7 @@ import { periodLabel } from './report-period';
 import {
   DAY_OUTCOME_LABELS,
   attFraction,
+  fracText,
   achievementDays,
   INACTIVE_DAYS,
   tallyLabel,
@@ -139,7 +140,7 @@ function tajweedStudentLines(row: TajweedStudentRow, audience: ReportAudience): 
 function hifzHeaderLines(rep: HifzCircleReport, audience: ReportAudience): string[] {
   const out = [
     `الجلسات: ${rep.heldCount}${rep.sessionCount > rep.heldCount ? ` من ${rep.sessionCount}` : ''}`,
-    `الحضور العامّ: ${rep.att.rate === null ? '—' : rep.att.rate + '٪'}`,
+    `الحضور العامّ: ${fracText(rep.attFrac)}`,
     `مجموع الأوجه: ${rep.totalPages}${rep.totalNewPages ? ` (حفظ جديد ${rep.totalNewPages})` : ''}`,
   ];
   if (rep.avgScore !== null) out.push(`متوسّط التسميع: ${rep.avgScore}٪`);
@@ -153,7 +154,7 @@ function hifzHeaderLines(rep: HifzCircleReport, audience: ReportAudience): strin
 function tajweedHeaderLines(rep: TajweedCircleReport): string[] {
   const out = [
     `الجلسات: ${rep.heldCount}${rep.sessionCount > rep.heldCount ? ` من ${rep.sessionCount}` : ''}`,
-    `الحضور العامّ: ${rep.att.rate === null ? '—' : rep.att.rate + '٪'}`,
+    `الحضور العامّ: ${fracText(rep.attFrac)}`,
     `الاختبارات: ${rep.exams.length}`,
   ];
   if (rep.maxScore > 0) out.push(`مجموع علامات الحلقة: ${rep.achieved} / ${rep.maxScore}`);
@@ -306,7 +307,7 @@ export function overviewReportText(ov: OverviewReport, meta: ReportTextMeta): st
     const t = ov.hifzTotals;
     lines.push(`◈ حلقات التحفيظ (${t.circles})`);
     lines.push(`  الطلّاب: ${t.students} · الجلسات: ${t.heldSessions}`);
-    lines.push(`  الحضور: ${t.att.rate === null ? '—' : t.att.rate + '٪'}`);
+    lines.push(`  الحضور: ${fracText(t.attFrac)}`);
     lines.push(`  الأوجه: ${t.pages}${t.newPages ? ` (حفظ جديد ${t.newPages})` : ''}`);
     if (t.avgScore !== null) lines.push(`  متوسّط التسميع: ${t.avgScore}٪`);
     if (t.sardCount || t.examCount)
@@ -315,7 +316,7 @@ export function overviewReportText(ov: OverviewReport, meta: ReportTextMeta): st
     for (const c of ov.hifz) {
       const avgTxt = c.avgScore === null ? '' : ` · متوسّط ${c.avgScore}٪`;
       lines.push(
-        `  • ${c.circleName}: ${c.studentCount} طالب · حضور ${c.att.rate ?? '—'}٪ · ${c.totalPages} وجه${avgTxt}`,
+        `  • ${c.circleName}: ${c.studentCount} طالب · حضور ${fracText(c.attFrac)} · ${c.totalPages} وجه${avgTxt}`,
       );
     }
     lines.push('');
@@ -325,14 +326,14 @@ export function overviewReportText(ov: OverviewReport, meta: ReportTextMeta): st
     const t = ov.tajweedTotals;
     lines.push(RULE, `◈ حلقات التجويد (${t.circles})`);
     lines.push(`  الطلّاب: ${t.students} · الجلسات: ${t.heldSessions}`);
-    lines.push(`  الحضور: ${t.att.rate === null ? '—' : t.att.rate + '٪'}`);
+    lines.push(`  الحضور: ${fracText(t.attFrac)}`);
     lines.push(`  الاختبارات: ${t.exams}`);
     if (t.maxScore > 0) lines.push(`  مجموع العلامات: ${t.achieved} / ${t.maxScore}`);
     lines.push('');
     for (const c of ov.tajweed) {
       const marks = c.maxScore > 0 ? ` · ${c.achieved} / ${c.maxScore}` : '';
       lines.push(
-        `  • ${c.circleName}: ${c.studentCount} طالب · حضور ${c.att.rate ?? '—'}٪ · ${c.exams.length} اختبار${marks}`,
+        `  • ${c.circleName}: ${c.studentCount} طالب · حضور ${fracText(c.attFrac)} · ${c.exams.length} اختبار${marks}`,
       );
     }
   }
@@ -367,7 +368,7 @@ export function studentsReportText(
   lines.push(RULE);
   pushMarks(lines, meta);
 
-  lines.push(`الحضور العامّ: ${t.att.rate === null ? '—' : t.att.rate + '٪'}`);
+  lines.push(`الحضور العامّ: ${fracText(t.attFrac)}`);
   if (t.hasHifz && (t.pages > 0 || t.avgScore !== null)) {
     lines.push(`مجموع الأوجه: ${t.pages}${t.newPages ? ` (حفظ جديد ${t.newPages})` : ''}`);
     if (t.avgScore !== null) lines.push(`متوسّط التسميع: ${t.avgScore}٪`);

@@ -414,7 +414,7 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
               <div class="stat-grid" style="grid-template-columns:1fr 1fr">
                 <div class="stat">
                   <div class="num">{{ presentTotal() }}/{{ students()!.length }}</div>
-                  <div class="label">الحضور ({{ presentRate() }}٪)</div>
+                  <div class="label">حاضرون</div>
                 </div>
                 <div class="stat">
                   <div class="num">{{ countAtt('absent') }}</div>
@@ -425,7 +425,7 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
               <div class="stat-grid">
                 <div class="stat">
                   <div class="num">{{ presentTotal() }}/{{ students()!.length }}</div>
-                  <div class="label">الحضور ({{ presentRate() }}٪)</div>
+                  <div class="label">حاضرون</div>
                 </div>
                 <div class="stat">
                   <div class="num">{{ recitedTotal() }}</div>
@@ -1199,10 +1199,6 @@ export class SessionPage {
   );
   /** عدد سجلّات التسميع الفعليّة (لا الطلّاب) — أساس نسبة النجاح/الرسوب أدناه. */
   private readonly recitedRecordsTotal = computed(() => this.actualRecitations().length);
-  readonly presentRate = computed(() => {
-    const n = this.students()?.length ?? 0;
-    return n ? Math.round((this.presentTotal() / n) * 100) : 0;
-  });
   readonly totalPages = computed(() => {
     const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
     return Math.round(sum * 10) / 10;
