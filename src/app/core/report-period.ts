@@ -11,7 +11,7 @@
 import { dmy, weekdayAr } from './format';
 
 /** نوع المدى — يحدّد شكل مُنتقي المدى في الواجهة وصياغة تسميته. */
-export type PeriodKind = 'day' | 'week' | 'month' | 'year' | 'custom';
+export type PeriodKind = 'day' | 'week' | 'month' | 'year' | 'custom' | 'all';
 
 /** مدى زمنيّ مغلق الطرفين: `from` و`to` داخلان في المدى. */
 export interface Period {
@@ -94,7 +94,7 @@ export function customPeriod(from: string, to: string): Period {
  * الحدّان نصّان خارج أيّ تاريخ واقعيّ، فيمرّ كلّ شيء عبر `inPeriod` بلا استثناء.
  */
 export function allTimePeriod(): Period {
-  return { kind: 'custom', from: '0000-01-01', to: '9999-12-31' };
+  return { kind: 'all', from: '0000-01-01', to: '9999-12-31' };
 }
 
 /** هل التاريخ «YYYY-MM-DD» داخل المدى؟ مقارنة نصّيّة بحتة. */
@@ -124,6 +124,8 @@ export function periodLabel(p: Period): string {
       return `شهر ${p.from.slice(5, 7)}/${p.from.slice(0, 4)}`;
     case 'year':
       return `سنة ${p.from.slice(0, 4)}`;
+    case 'all':
+      return 'منذ البداية';
     default:
       return p.from === p.to ? dmy(p.from) : `من ${dmy(p.from)} إلى ${dmy(p.to)}`;
   }
@@ -133,6 +135,7 @@ export function periodLabel(p: Period): string {
 export function periodFileTag(p: Period): string {
   if (p.kind === 'month') return p.from.slice(0, 7);
   if (p.kind === 'year') return p.from.slice(0, 4);
+  if (p.kind === 'all') return 'منذ-البداية';
   if (p.from === p.to) return p.from;
   return `${p.from}_${p.to}`;
 }
@@ -161,6 +164,8 @@ export function shiftPeriod(p: Period, delta: number): Period {
       return monthPeriod(shiftMonth(p.from.slice(0, 7), delta));
     case 'year':
       return yearPeriod(Number(p.from.slice(0, 4)) + delta);
+    case 'all':
+      return p;
     default: {
       // مدى مخصّص: يُزاح بطوله كاملًا حتى لا تتداخل المدَيات المتتالية.
       const len = periodDays(p);

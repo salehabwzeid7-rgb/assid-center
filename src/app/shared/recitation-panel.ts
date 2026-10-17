@@ -297,7 +297,7 @@ function surahOfIndex(index: number): number {
                 type="button"
                 class="rp-step"
                 (click)="bumpRecited(-0.25)"
-                [disabled]="recitedPages() <= 0"
+                [disabled]="range().allRepeated || recitedPages() <= 0"
                 aria-label="إنقاص ربع وجه"
               >
                 −
@@ -309,6 +309,7 @@ function surahOfIndex(index: number): number {
                 min="0"
                 step="0.25"
                 [value]="recitedPages()"
+                [disabled]="range().allRepeated"
                 (input)="onRecited($event)"
                 aria-label="الأوجه المسمّعة"
               />
@@ -316,6 +317,7 @@ function surahOfIndex(index: number): number {
                 type="button"
                 class="rp-step"
                 (click)="bumpRecited(0.25)"
+                [disabled]="range().allRepeated"
                 aria-label="زيادة ربع وجه"
               >
                 +
@@ -327,6 +329,12 @@ function surahOfIndex(index: number): number {
                 </button>
               }
             </div>
+            @if (range().allRepeated) {
+              <p class="rp-warn-note">
+                كلّ آيات هذا المقطع محفوظة سابقًا فلا أوجه جديدة تُحسب. إن كان تسميع مراجعة فاختر
+                «مراجعة».
+              </p>
+            }
             <p class="rp-recited-note">
               {{ range().total }} آية
               @if (range().repeated > 0) {
@@ -889,13 +897,17 @@ export class RecitationPanelComponent implements OnInit {
       valid: idx.length > 0,
       total: idx.length,
       repeated: idx.length - fresh.fresh.length,
+      /** كلّ آيات المقطع محفوظة سابقًا: لا شيء جديد يُحسَب فتُقفَل خانة الأوجه على صفر. */
+      allRepeated: idx.length > 0 && fresh.fresh.length === 0,
       freshPages: fresh.pages,
       allPages: pagesFromLines(linesOf(idx)),
     };
   });
 
   /** الأوجه المسمّعة المعتمدة: رقم المعلّم إن عدّل، وإلّا المحسوب من الآيات الجديدة. */
-  readonly recitedPages = computed(() => this.recitedOverride() ?? this.range().freshPages);
+  readonly recitedPages = computed(() =>
+    this.range().allRepeated ? 0 : (this.recitedOverride() ?? this.range().freshPages),
+  );
 
   /** قيود الآيات بحسب السور المختارة فعليًّا. */
   readonly maxFromAyah = computed(() => ayahCount(this.fromSurah()));
@@ -1237,6 +1249,7 @@ export class RecitationPanelComponent implements OnInit {
   }
 
   private setRecited(v: number): void {
+    if (this.range().allRepeated) return;
     const n = Math.max(0, v);
     this.recitedOverride.set(n === this.range().freshPages ? null : n);
   }
@@ -1394,7 +1407,7 @@ export class RecitationPanelComponent implements OnInit {
       pages: Number(this.pages()) || 0,
       // رقم المعلّم لأوجه الحفظ الجديد يُحفَظ فقط إن عدّله — وإلّا تُحسب من الآيات عند كلّ تقرير.
       recitedPages:
-        this.kind() === 'new' && this.recitedOverride() !== null
+        this.kind() === 'new' && this.recitedOverride() !== null && !this.range().allRepeated
           ? (this.recitedOverride() as number)
           : undefined,
       score: this.score(),

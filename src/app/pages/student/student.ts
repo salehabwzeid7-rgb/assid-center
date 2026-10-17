@@ -15,7 +15,7 @@ import {
   type SerdRecord,
 } from '../../core/models';
 import { dmy } from '../../core/format';
-import { juzIndexes } from '../../core/mushaf';
+import { juzIndexes, linesOf, pagesFromLines } from '../../core/mushaf';
 import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
 import { fracText, lifetimeAttFrac } from '../../core/reports';
 import { pagesText } from '../../core/mushaf';
@@ -153,8 +153,12 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="label">لم يسمّع</div>
           </div>
           <div class="stat">
+            <div class="num">{{ initialPages() > 0 ? pagesText(initialPages()) : '—' }}</div>
+            <div class="label">محفوظ أولي</div>
+          </div>
+          <div class="stat">
             <div class="num">{{ pagesText(totalPages()) }}</div>
-            <div class="label">أوجه الحفظ الجديد</div>
+            <div class="label">حفظه في الحلقات</div>
           </div>
           <div class="stat">
             <div class="num">{{ attFrac() }}</div>
@@ -568,6 +572,10 @@ export class StudentPage {
    * تكرار، على مصحف المدينة. المحفوظ الأوّليّ والمراجعة لا يدخلان.
    */
   readonly totalPages = computed(() => creditNewPages(this.recitations() ?? []).pages);
+  /** ما كان محفوظًا عند تسجيله (سور/أجزاء البيانات الأوّليّة) بالأوجه — لا يدخل في أوجه الحلقات. */
+  readonly initialPages = computed(() =>
+    pagesFromLines(linesOf(memorizedAyahs(this.student(), []))),
+  );
   readonly sessionsCount = computed(() => this.attendance()?.length ?? 0);
   /** حصص الحلقات كلّها — مقام كسر الحضور (حلقات الطالب وحدها، من يوم التحاقه). */
   private readonly sessions = this.data.allSessions(this.destroyRef);

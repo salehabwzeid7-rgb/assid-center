@@ -3,7 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { TASMIE_PASS, isActualRecitation, scoreOf } from '../../core/models';
 import { fracText, lifetimeAttFrac, sumFrac } from '../../core/reports';
-import { pagesFromLines, pagesText } from '../../core/mushaf';
+import { pagesText } from '../../core/mushaf';
 import { creditNewPages } from '../../core/new-memorization';
 import { PageHeaderComponent } from '../../shared/page-header';
 
@@ -132,10 +132,8 @@ export class CircleStatsPage {
   readonly sessionCount = computed(() => this.sessions()?.length ?? 0);
   readonly studentCount = computed(() => this.students()?.filter((s) => s.active).length ?? 0);
   readonly recitationCount = computed(() => this.actualRecitations().length);
-  /** أوجه الحفظ الجديد للحلقة: من مجموع أسطر طلّابها لا من مجموع أرقامهم المقرَّبة. */
-  readonly totalPages = computed(() =>
-    pagesFromLines(this.perStudent().reduce((a, r) => a + r.pageLines, 0)),
-  );
+  /** أوجه الحفظ الجديد للحلقة: مجموع أرقام طلّابها (كلّ تسميع مقرَّب على حدة). */
+  readonly totalPages = computed(() => this.perStudent().reduce((a, r) => a + r.pages, 0));
   /** مجموع كسور حضور الطلّاب «١٤٢/١٦٠» — نفس منطق التقارير. */
   readonly attendanceText = computed(() => fracText(sumFrac(this.perStudent().map((r) => r.frac))));
   readonly avgScore = computed<number | null>(() => {

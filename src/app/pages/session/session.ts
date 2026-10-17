@@ -32,7 +32,7 @@ import { dmy, weekdayAr } from '../../core/format';
 import { fmt12, isValidHHMM, nowHHMM } from '../../core/time';
 import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
 import { buildDayEntries, type DayEntry } from '../../core/reports';
-import { pagesFromLines, pagesText } from '../../core/mushaf';
+import { pagesText } from '../../core/mushaf';
 import { creditNewPages } from '../../core/new-memorization';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { RecitationPanelComponent } from '../../shared/recitation-panel';
@@ -1204,16 +1204,16 @@ export class SessionPage {
     const all = this.allRecs() ?? [];
     const inSession = this.actualRecitations();
     const byRecord = new Map<string, number>();
-    let lines = 0;
+    let pages = 0;
     for (const sid of new Set(inSession.map((r) => r.studentId))) {
       const credit = creditNewPages(
         all.filter((r) => r.studentId === sid),
         (r) => r.sessionId === this.id,
       );
-      lines += credit.lines;
-      for (const [k, v] of credit.byRecord) byRecord.set(k, v);
+      pages += credit.pages;
+      for (const [k, v] of credit.pagesByRecord) byRecord.set(k, v);
     }
-    return { pages: pagesFromLines(lines), byRecord };
+    return { pages, byRecord };
   });
   readonly totalPages = computed(() => this.sessionCredit().pages);
   readonly avgScore = computed<number | null>(() => {
@@ -1312,7 +1312,7 @@ export class SessionPage {
           // أوجه الحفظ الجديد المعتمدة لهذه المحاولة فقط (الناجحة وللآيات الجديدة).
           const credited = this.sessionCredit().byRecord.get(r.id);
           const pagesTxt =
-            credited === undefined ? '' : ` — ${pagesText(pagesFromLines(credited), true)}`;
+            credited === undefined ? '' : ` — ${pagesText(credited, true)}`;
           lines.push(
             `• ${n}التسميع (${e.label}): ${e.score}٪ (${e.verdict}) (${e.detail})${pagesTxt}${note}`,
           );

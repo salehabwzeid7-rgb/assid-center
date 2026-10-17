@@ -104,10 +104,15 @@ function chronological(a: RecitationRecord, b: RecitationRecord): number {
 export interface NewPagesCredit {
   /** مجموع الأسطر المعتمدة (لم يُقرَّب بعد). */
   lines: number;
-  /** الأوجه بعد التقريب: عدد صحيح + (٠ أو ربع أو نصف) أو وجه إضافيّ. */
+  /**
+   * مجموع أوجه التسميعات، كلّ تسميع مقرَّب على حدة (أو رقم المعلّم كما هو) ثمّ تُجمع —
+   * فيطابق المجموعُ في التقرير الأرقامَ التي رآها المعلّم في كلّ تسميع (ربع + نصف = ٣ أرباع).
+   */
   pages: number;
   /** الأسطر المعتمدة لكلّ تسميع على حدة (معرّف السجلّ ← أسطر) — لا يحوي إلّا ما اعتُمد فعلًا. */
   byRecord: Map<string, number>;
+  /** أوجه كلّ تسميع على حدة بعد التقريب (أو رقم المعلّم) — المعروض في التقارير. */
+  pagesByRecord: Map<string, number>;
 }
 
 /**
@@ -123,19 +128,22 @@ export function creditNewPages(
 ): NewPagesCredit {
   const seen = new Set<number>();
   const byRecord = new Map<string, number>();
+  const pagesByRecord = new Map<string, number>();
   let lines = 0;
+  let pages = 0;
   for (const r of [...all].filter(isPassingNew).sort(chronological)) {
     const fresh = recitationIndexes(r).filter((i) => !seen.has(i));
     for (const i of recitationIndexes(r)) seen.add(i);
     if (fresh.length === 0 || !include(r)) continue;
-    const credited =
-      typeof r.recitedPages === 'number' && r.recitedPages >= 0
-        ? r.recitedPages * LINES_PER_PAGE
-        : linesOf(fresh);
+    const teacher = typeof r.recitedPages === 'number' && r.recitedPages >= 0;
+    const credited = teacher ? (r.recitedPages as number) * LINES_PER_PAGE : linesOf(fresh);
+    const recPages = teacher ? (r.recitedPages as number) : pagesFromLines(credited);
     byRecord.set(r.id, credited);
+    pagesByRecord.set(r.id, recPages);
     lines += credited;
+    pages += recPages;
   }
-  return { lines, pages: pagesFromLines(lines), byRecord };
+  return { lines, pages, byRecord, pagesByRecord };
 }
 
 /**

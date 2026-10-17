@@ -43,7 +43,7 @@ import {
   type TajweedExam,
   type TajweedExamResult,
 } from './models';
-import { pagesFromLines, segmentsText } from './mushaf';
+import { segmentsText } from './mushaf';
 import { creditNewPages } from './new-memorization';
 import { surahName } from './quran-data';
 import { inPeriod, isoOf, todayISO, type Period } from './report-period';
@@ -309,6 +309,8 @@ interface ScopedData {
   heldSessions: Session[];
   /** الحصص المنعقدة بلا تكرار (حلقة، تاريخ) — مقام كسر الحضور. */
   heldCount: number;
+  /** المدى «منذ البداية»: المقام يبدأ من يوم التحاق كلّ طالب لا من أوّل حصّة في الحلقة. */
+  isAll: boolean;
   attendance: AttendanceRecord[];
   recitations: RecitationRecord[];
   /**
@@ -371,6 +373,7 @@ function scope(src: ReportSource, circle: Circle, period: Period, asOf: string):
     sessions,
     heldSessions: sessions.filter((s) => s.status !== 'scheduled'),
     heldCount: countHeldSessions(sessions),
+    isAll: period.kind === 'all',
     attendance,
     recitations,
     allRecitations: src.recitations,
@@ -664,6 +667,13 @@ export function circleTitleOf(c: Circle): string {
   return `${c.name} — تحفيظ`;
 }
 
+/** مقام كسر الحضور لطالب: حصص الحلقة في المدى، ومنذ التحاقه إن كان المدى «منذ البداية». */
+function heldFor(d: ScopedData, st: Student, att: readonly AttendanceRecord[]): number {
+  if (!d.isAll) return d.heldCount;
+  const from = joinDateOf(st, att);
+  return countHeldSessions(d.sessions, (s) => !from || s.date.slice(0, 10) >= from);
+}
+
 function buildHifzRow(st: Student, d: ScopedData, asOf: string): HifzStudentRow {
   const mine = <T extends { studentId: string }>(rows: readonly T[]): T[] =>
     rows.filter((r) => r.studentId === st.id);
@@ -720,7 +730,7 @@ function buildHifzRow(st: Student, d: ScopedData, asOf: string): HifzStudentRow 
     studentId: st.id,
     name: st.name,
     att: tallyOf(att),
-    held: d.heldCount,
+    held: heldFor(d, st, att),
     pages: credit.pages,
     pageLines: credit.lines,
     avgScore: avg(actual.map((r) => scoreOf(r))),
@@ -744,7 +754,7 @@ function buildHifzBranch(base: CircleReportBase, d: ScopedData, asOf: string): H
     kind: 'hifz',
     rows,
     attFrac: sumFrac(rows.map((r) => fracOf(r.att, r.held))),
-    totalPages: pagesFromLines(rows.reduce((a, r) => a + r.pageLines, 0)),
+    totalPages: rows.reduce((a, r) => a + r.pages, 0),
     totalLines: rows.reduce((a, r) => a + r.pageLines, 0),
     avgScore: avg(allScores),
     sardCount: d.serd.length,
@@ -788,7 +798,7 @@ function buildTajweedRow(
     studentId: st.id,
     name: st.name,
     att: tallyOf(att),
-    held: d.heldCount,
+    held: heldFor(d, st, att),
     cells,
     // المجموع الخام: مجموع المحرَز على مجموع الكلّيّ. الاختبار الأكبر يزن أكثر
     // تلقائيًّا — وهو السلوك الصحيح — ويصل لوليّ الأمر بصيغة يفهمها بلا شرح.
@@ -1004,9 +1014,14 @@ export function buildStudentTimeline(
   });
 
   // المقام: الجلسات المنعقدة فعلًا في حلقات النطاق خلال المدى (المجدولة لم تُعقَد).
+  // «منذ البداية»: من يوم التحاق الطالب، فلا يُحسَب عليه ما سبق وجوده.
+  const joined = joinDateOf(student, att);
   const held = countHeldSessions(
     src.sessions,
-    (s) => scopeCircleIds.has(s.circleId) && inPeriod(s.date, period),
+    (s) =>
+      scopeCircleIds.has(s.circleId) &&
+      inPeriod(s.date, period) &&
+      (period.kind !== 'all' || !joined || s.date.slice(0, 10) >= joined),
   );
 
   const actual = recs.filter(isActualRecitation);
@@ -1107,7 +1122,7 @@ export function buildOverviewReport(
       heldSessions: hifz.reduce((a, r) => a + r.heldCount, 0),
       att: sumTallies(hifz.map((r) => r.att)),
       attFrac: sumFrac(hifz.map((r) => r.attFrac)),
-      pages: pagesFromLines(hifz.reduce((a, r) => a + r.totalLines, 0)),
+      pages: hifz.reduce((a, r) => a + r.totalPages, 0),
       avgScore: avg(hifzScores),
       sardCount: hifz.reduce((a, r) => a + r.sardCount, 0),
       examCount: hifz.reduce((a, r) => a + r.examCount, 0),
@@ -1186,7 +1201,7 @@ export function buildStudentsReport(
       students: students.length,
       att: sumTallies(students.map((t) => t.att)),
       attFrac: sumFrac(students.map((t) => fracOf(t.att, t.held))),
-      pages: pagesFromLines(students.reduce((a, t) => a + t.pageLines, 0)),
+      pages: students.reduce((a, t) => a + t.pages, 0),
       avgScore: avg(scores),
       sardCount: students.reduce((a, t) => a + t.serd.length, 0),
       examCount: students.reduce((a, t) => a + t.exams.length, 0),

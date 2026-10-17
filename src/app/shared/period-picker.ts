@@ -1,6 +1,7 @@
 import { Component, computed, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  allTimePeriod,
   customPeriod,
   dayPeriod,
   monthPeriod,
@@ -39,6 +40,8 @@ export class PeriodState {
         return { kind: 'year', from: `${a.slice(0, 4)}-01-01`, to: `${a.slice(0, 4)}-12-31` };
       case 'custom':
         return customPeriod(this.from(), this.to());
+      case 'all':
+        return allTimePeriod();
       default:
         return monthPeriod(a.slice(0, 7));
     }
@@ -58,7 +61,7 @@ export class PeriodState {
   /** يستعيد لقطة محفوظة — يتجاهل أيّ حقل غير صالح بدل أن يكسر الواجهة. */
   restore(s: Partial<PeriodSnapshot> | null | undefined): void {
     if (!s) return;
-    const kinds: PeriodKind[] = ['day', 'week', 'month', 'year', 'custom'];
+    const kinds: PeriodKind[] = ['day', 'week', 'month', 'year', 'custom', 'all'];
     const iso = /^\d{4}-\d{2}-\d{2}$/;
     if (s.kind && kinds.includes(s.kind)) this.kind.set(s.kind);
     if (s.anchor && iso.test(s.anchor)) this.anchor.set(s.anchor);
@@ -113,6 +116,10 @@ export class PeriodState {
           />
         </div>
       </div>
+    } @else if (state().kind() === 'all') {
+      <div class="pp-nav">
+        <span class="pp-label">{{ state().label() }} — كلّ ما سُجِّل</span>
+      </div>
     } @else {
       <div class="pp-nav">
         <button type="button" class="chip" (click)="state().step(-1)" aria-label="السابق">›</button>
@@ -150,5 +157,6 @@ export class PeriodPickerComponent {
     { id: 'month', label: 'شهر' },
     { id: 'year', label: 'سنة' },
     { id: 'custom', label: 'مخصّص' },
+    { id: 'all', label: 'منذ البداية' },
   ];
 }
