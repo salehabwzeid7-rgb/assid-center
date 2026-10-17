@@ -30,7 +30,6 @@ import { Capacitor } from '@capacitor/core';
 import { db } from './firebase';
 import { AuthService } from './auth.service';
 import { NotifyService } from './notify.service';
-import { completedJuz } from './quran-data';
 import {
   COL,
   PLATFORM_COL,
@@ -85,7 +84,8 @@ const RECITATION_DIFF_FIELDS: DiffField[] = [
   { key: 'fromAyah', label: 'من آية' },
   { key: 'toSurah', label: 'إلى سورة' },
   { key: 'toAyah', label: 'إلى آية' },
-  { key: 'pages', label: 'عدد الأوجه' },
+  { key: 'pages', label: 'أوجه المؤقّت' },
+  { key: 'recitedPages', label: 'أوجه الحفظ الجديد (رقم المعلّم)' },
   { key: 'score', label: 'النسبة' },
   { key: 'hifzErrors', label: 'أخطاء الحفظ' },
   { key: 'tajweedErrors', label: 'أخطاء التجويد' },
@@ -1422,34 +1422,31 @@ export class DataService {
 
   /**
    * يضمّ سورًا إلى سجلّ المقرّر القرآنيّ للطالب (دمج بلا تكرار).
-   * يُستدعى تلقائيًّا عند تسجيل «حفظ جديد» في الجلسة/التسميع.
-   * يُرجع عدد السور المضافة والأجزاء التي اكتملت حفظًا بهذه الإضافة.
+   * يُستدعى تلقائيًّا بعد تسميع «حفظ جديد» ناجح، **بالسور التي اكتملت كلّ آياتها فقط** — لا
+   * بكلّ سورة لمسها المقطع (كانت سورة كاملة تُضاف من تسميع جزئيّ أو راسب). يُرجع عدد المضاف.
    */
   /**
    * يضمّ سورًا لمقرّر الطالب بكتابة ذرّيّة (`arrayUnion`) بدل قراءة-تعديل-كتابة
    * كاملة الصفيف — لا تُفقد أيّ سورة أضافتها كتابة متزامنة أخرى (جهازان/جلستان
    * تحفظان لنفس الطالب في نفس اللحظة)، ولا تتعطّل الكتابة نفسها بلا اتصال.
-   * قراءة «قبل» هنا (لحساب added/completedJuz فقط، للتنبيه في الواجهة) تتسامح
-   * مع الفشل — قد تُقدَّر الأرقام المُعادة تقريبيًّا حينها، لكن البيانات
-   * الفعليّة تبقى صحيحة دائمًا بفضل arrayUnion.
+   * قراءة «قبل» هنا (لحساب added فقط، للتنبيه في الواجهة) تتسامح مع الفشل —
+   * قد يُقدَّر الرقم المُعاد تقريبيًّا حينها، لكن البيانات الفعليّة تبقى صحيحة
+   * دائمًا بفضل arrayUnion.
    */
   async mergeStudentMemorizedSurahs(
     studentId: string,
     surahs: number[],
-  ): Promise<{ added: number; completedJuz: number[] }> {
+  ): Promise<{ added: number }> {
     const valid = surahs.filter((n) => Number.isInteger(n) && n >= 1 && n <= 114);
-    if (valid.length === 0) return { added: 0, completedJuz: [] };
+    if (valid.length === 0) return { added: 0 };
     const before = await this.getOneForAudit<Student>(COL.students, studentId);
     const prev = before?.memorizedSurahs ?? [];
     const prevSet = new Set(prev);
     const newOnes = valid.filter((n) => !prevSet.has(n));
     await updateDoc(this.ref(COL.students, studentId), { memorizedSurahs: arrayUnion(...valid) });
-    if (newOnes.length === 0) return { added: 0, completedJuz: [] };
+    if (newOnes.length === 0) return { added: 0 };
     void this.bumpPlatformStat('memorizedCount', null, newOnes.length);
-    const next = [...new Set([...prev, ...newOnes])];
-    const wasComplete = new Set(completedJuz(prev));
-    const newlyComplete = completedJuz(next).filter((j) => !wasComplete.has(j));
-    return { added: newOnes.length, completedJuz: newlyComplete };
+    return { added: newOnes.length };
   }
 
   // ---------- السرد (مراجعة الأجزاء المحفوظة) ----------

@@ -36,7 +36,6 @@ import {
   type AttendanceStatus,
   type Circle,
   type ExamRecord,
-  type RecitationKind,
   type RecitationRecord,
   type SerdRecord,
   type Session,
@@ -44,6 +43,8 @@ import {
   type TajweedExam,
   type TajweedExamResult,
 } from './models';
+import { pagesFromLines, segmentsText } from './mushaf';
+import { creditNewPages } from './new-memorization';
 import { surahName } from './quran-data';
 import { inPeriod, isoOf, todayISO, type Period } from './report-period';
 
@@ -310,6 +311,11 @@ interface ScopedData {
   heldCount: number;
   attendance: AttendanceRecord[];
   recitations: RecitationRecord[];
+  /**
+   * كلّ تسميعات الأقسام (كلّ الحلقات والمدد) — لازمة لمعرفة ما سبق حفظه فلا يُحسَب
+   * مرّتين؛ أمّا `recitations` فمرشَّحة بالحلقة والمدى لما يُعرَض.
+   */
+  allRecitations: readonly RecitationRecord[];
   serd: SerdRecord[];
   exams: ExamRecord[];
   tajweedExams: TajweedExam[];
@@ -367,6 +373,7 @@ function scope(src: ReportSource, circle: Circle, period: Period, asOf: string):
     heldCount: countHeldSessions(sessions),
     attendance,
     recitations,
+    allRecitations: src.recitations,
     serd,
     exams,
     tajweedExams,
@@ -468,7 +475,10 @@ export function buildDayEntries(
         id: r.id,
         kind: 'recitation',
         label: RECITATION_KIND_LABELS[r.kind],
-        detail: `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
+        // ترتيب سور عكسيّ أو معدَّل: «النبأ 1-40، المرسلات 1-50» — وإلّا «النبأ 1 ← النبأ 20».
+        detail: r.segments?.length
+          ? segmentsText(r.segments, surahName)
+          : `${surahName(r.fromSurah)} ${r.fromAyah} ← ${surahName(r.toSurah)} ${r.toAyah}`,
         score: s,
         verdict: ratingLabel(s, r.rating),
         fail: s < TASMIE_PASS,
@@ -529,12 +539,13 @@ export interface HifzStudentRow {
   att: AttendanceTally;
   /** جلسات الحلقة المنعقدة في المدى — مقام كسر الحضور. */
   held: number;
-  /** مجموع الأوجه المسمَّعة فعليًّا (يستبعد «لم يسمّع» و«المؤجَّل»). */
+  /**
+   * أوجه **الحفظ الجديد الناجح** (٩٠٪ فأكثر) للآيات الجديدة فقط بلا تكرار — بعد التقريب
+   * (عدد صحيح + ربع/نصف). المراجعة والسرد والاختبار لا تدخل. راجع core/new-memorization.ts.
+   */
   pages: number;
-  /** أوجه الحفظ الجديد وحدها — مؤشّر التقدّم الحقيقيّ. */
-  newPages: number;
-  /** أوجه المراجعة (قريبة + بعيدة). */
-  reviewPages: number;
+  /** الأسطر المعتمدة قبل التقريب — أساس جمع الإجماليّات بدقّة. */
+  pageLines: number;
   /** متوسّط درجات التسميع الفعليّة، أو `null` إن لم يسمّع إطلاقًا. */
   avgScore: number | null;
   recitationCount: number;
@@ -608,8 +619,9 @@ export interface HifzCircleReport extends CircleReportBase {
   rows: HifzStudentRow[];
   /** مجموع كسور حضور الطلّاب — «١٤٢/١٦٠». */
   attFrac: AttFrac;
+  /** أوجه الحفظ الجديد لكامل الحلقة (من مجموع الأسطر لا من مجموع المقرَّب). */
   totalPages: number;
-  totalNewPages: number;
+  totalLines: number;
   avgScore: number | null;
   sardCount: number;
   examCount: number;
@@ -662,8 +674,12 @@ function buildHifzRow(st: Student, d: ScopedData, asOf: string): HifzStudentRow 
   const exams = mine(d.exams);
   const actual = recs.filter(isActualRecitation);
 
-  const pagesOf = (kinds: readonly RecitationKind[]) =>
-    actual.filter((r) => kinds.includes(r.kind)).reduce((a, r) => a + (r.pages || 0), 0);
+  // أوجه الحفظ الجديد: تاريخ الطالب كلّه يحدّد ما حُفِظ سابقًا، والمعروض ما في الحلقة والمدى.
+  const shown = new Set(recs.map((r) => r.id));
+  const credit = creditNewPages(
+    d.allRecitations.filter((r) => r.studentId === st.id),
+    (r) => shown.has(r.id),
+  );
 
   // كلّ يوم ظهر فيه للطالب أثر — حضور أو أيّ نشاط.
   const days = new Set<string>([
@@ -705,9 +721,8 @@ function buildHifzRow(st: Student, d: ScopedData, asOf: string): HifzStudentRow 
     name: st.name,
     att: tallyOf(att),
     held: d.heldCount,
-    pages: pagesOf(['new', 'near_review', 'far_review']),
-    newPages: pagesOf(['new']),
-    reviewPages: pagesOf(['near_review', 'far_review']),
+    pages: credit.pages,
+    pageLines: credit.lines,
     avgScore: avg(actual.map((r) => scoreOf(r))),
     recitationCount: actual.length,
     productiveDays,
@@ -729,8 +744,8 @@ function buildHifzBranch(base: CircleReportBase, d: ScopedData, asOf: string): H
     kind: 'hifz',
     rows,
     attFrac: sumFrac(rows.map((r) => fracOf(r.att, r.held))),
-    totalPages: rows.reduce((a, r) => a + r.pages, 0),
-    totalNewPages: rows.reduce((a, r) => a + r.newPages, 0),
+    totalPages: pagesFromLines(rows.reduce((a, r) => a + r.pageLines, 0)),
+    totalLines: rows.reduce((a, r) => a + r.pageLines, 0),
     avgScore: avg(allScores),
     sardCount: d.serd.length,
     examCount: d.exams.length,
@@ -844,8 +859,9 @@ export interface StudentTimeline {
   att: AttendanceTally;
   /** جلسات الحلقات ضمن النطاق التي انعقدت في المدى — مقام كسر الحضور. */
   held: number;
+  /** أوجه الحفظ الجديد الناجح بلا تكرار (مقرَّبة) — راجع `HifzStudentRow.pages`. */
   pages: number;
-  newPages: number;
+  pageLines: number;
   avgScore: number | null;
   serd: SerdRecord[];
   exams: ExamRecord[];
@@ -864,6 +880,31 @@ export function achievementDays(tl: StudentTimeline): StudentDay[] {
   return tl.days.filter(
     (d) => d.recitations.length || d.serd.length || d.exams.length || d.outcome === 'tajweed',
   );
+}
+
+/** محاولات التسميع وحدها (لا سرد ولا اختبار) — ما يعرضه «سجلّ التسميع». */
+export const isRecitationEntry = (e: DayEntry): boolean =>
+  e.kind === 'recitation' || e.kind === 'not_recited' || e.kind === 'postponed';
+
+/**
+ * أيّام السجلّ اليوميّ بحسب المفاتيح والجمهور (مشتركة بين النصّ وPDF والصورة):
+ *   • مع «سجلّ التسميع»: الأهالي يرون أيّام التسميع الفعليّ، والمرجعيّ كلّ الأيّام
+ *     (أو أيّام المحاولات فقط حين لا حضور).
+ *   • الحضور وحده: المرجعيّ كلّ الأيّام، والأهالي أيّام الحضور الفعليّ.
+ */
+export function logDays(
+  tl: StudentTimeline,
+  audience: 'parents' | 'reference',
+  f: { attendance: boolean; recitation: boolean },
+): StudentDay[] {
+  const withRecitation = f.recitation && tl.hasHifz;
+  if (audience === 'reference') {
+    return withRecitation && !f.attendance
+      ? tl.days.filter((d) => d.entries.some(isRecitationEntry))
+      : tl.days;
+  }
+  if (withRecitation) return tl.days.filter((d) => d.recitations.length > 0);
+  return tl.days.filter((d) => d.status === 'present' || d.status === 'late');
 }
 
 /**
@@ -969,6 +1010,12 @@ export function buildStudentTimeline(
   );
 
   const actual = recs.filter(isActualRecitation);
+  // أوجه الحفظ الجديد: كلّ تسميعات الطالب تحدّد ما حُفِظ سابقًا، والمعروض ضمن النطاق والمدى.
+  const shownIds = new Set(recs.map((r) => r.id));
+  const credit = creditNewPages(
+    src.recitations.filter((r) => r.studentId === student.id),
+    (r) => shownIds.has(r.id),
+  );
   return {
     studentId: student.id,
     name: student.name,
@@ -976,8 +1023,8 @@ export function buildStudentTimeline(
     days,
     att: tallyOf(att),
     held,
-    pages: actual.reduce((a, r) => a + (r.pages || 0), 0),
-    newPages: actual.filter((r) => r.kind === 'new').reduce((a, r) => a + (r.pages || 0), 0),
+    pages: credit.pages,
+    pageLines: credit.lines,
     avgScore: avg(actual.map((r) => scoreOf(r))),
     serd,
     exams,
@@ -997,8 +1044,8 @@ export interface HifzTotals {
   heldSessions: number;
   att: AttendanceTally;
   attFrac: AttFrac;
+  /** أوجه الحفظ الجديد (من مجموع الأسطر). */
   pages: number;
-  newPages: number;
   avgScore: number | null;
   sardCount: number;
   examCount: number;
@@ -1060,8 +1107,7 @@ export function buildOverviewReport(
       heldSessions: hifz.reduce((a, r) => a + r.heldCount, 0),
       att: sumTallies(hifz.map((r) => r.att)),
       attFrac: sumFrac(hifz.map((r) => r.attFrac)),
-      pages: hifz.reduce((a, r) => a + r.totalPages, 0),
-      newPages: hifz.reduce((a, r) => a + r.totalNewPages, 0),
+      pages: pagesFromLines(hifz.reduce((a, r) => a + r.totalLines, 0)),
       avgScore: avg(hifzScores),
       sardCount: hifz.reduce((a, r) => a + r.sardCount, 0),
       examCount: hifz.reduce((a, r) => a + r.examCount, 0),
@@ -1088,8 +1134,8 @@ export interface StudentsTotals {
   students: number;
   att: AttendanceTally;
   attFrac: AttFrac;
+  /** أوجه الحفظ الجديد (من مجموع الأسطر). */
   pages: number;
-  newPages: number;
   avgScore: number | null;
   sardCount: number;
   examCount: number;
@@ -1140,8 +1186,7 @@ export function buildStudentsReport(
       students: students.length,
       att: sumTallies(students.map((t) => t.att)),
       attFrac: sumFrac(students.map((t) => fracOf(t.att, t.held))),
-      pages: students.reduce((a, t) => a + t.pages, 0),
-      newPages: students.reduce((a, t) => a + t.newPages, 0),
+      pages: pagesFromLines(students.reduce((a, t) => a + t.pageLines, 0)),
       avgScore: avg(scores),
       sardCount: students.reduce((a, t) => a + t.serd.length, 0),
       examCount: students.reduce((a, t) => a + t.exams.length, 0),

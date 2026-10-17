@@ -30,8 +30,10 @@ import {
 } from '../../core/models';
 import { dmy, weekdayAr } from '../../core/format';
 import { fmt12, isValidHHMM, nowHHMM } from '../../core/time';
-import { completedJuz } from '../../core/quran-data';
+import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
 import { buildDayEntries, type DayEntry } from '../../core/reports';
+import { pagesFromLines, pagesText } from '../../core/mushaf';
+import { creditNewPages } from '../../core/new-memorization';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { RecitationPanelComponent } from '../../shared/recitation-panel';
 import {
@@ -355,7 +357,7 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                         <p class="muted" style="margin:8px 0 0">
                           {{
                             currentOutcome() === 'exam'
-                              ? 'لا يوجد جزء اجتاز السرد بعد ليُختبَر.'
+                              ? 'لا يوجد جزء محفوظ بعد ليُختبَر.'
                               : 'لا يوجد جزء محفوظ بعد ليُسرَد.'
                           }}
                         </p>
@@ -432,8 +434,8 @@ type Outcome = 'recite' | 'notrecited' | 'serd' | 'exam' | 'postponed';
                   <div class="label">عدد المسمّعين</div>
                 </div>
                 <div class="stat">
-                  <div class="num">{{ totalPages() }}</div>
-                  <div class="label">مجموع الأوجه</div>
+                  <div class="num">{{ pagesText(totalPages()) }}</div>
+                  <div class="label">أوجه الحفظ الجديد</div>
                 </div>
                 <div class="stat">
                   <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
@@ -866,6 +868,9 @@ export class SessionPage {
   });
   readonly attendance = this.data.sessionAttendance(this.id, this.destroyRef);
   readonly recitations = this.data.sessionRecitations(this.id, this.destroyRef);
+  /** كلّ التسميعات — لمعرفة ما سبق حفظه فلا يُحسب في أوجه هذه الجلسة مرّتين. */
+  private readonly allRecs = this.data.allRecitations(this.destroyRef);
+  readonly pagesText = pagesText;
   /** تسميعات فعليّة فقط — تستثني سجلّات «لم يسمّع» من كلّ حسابات المتوسّط والصفحات والنجاح. */
   private readonly actualRecitations = computed(() =>
     (this.recitations() ?? []).filter(isActualRecitation),
@@ -917,22 +922,14 @@ export class SessionPage {
   /** يُعاد إنشاء لوحة التسميع بتغييره — لتبدأ فارغة بعد كلّ حفظ أو تبديل محاولة. */
   readonly panelKey = signal(0);
 
-  private readonly memorizedJuz = computed(() =>
-    completedJuz(this.activeStudent()?.memorizedSurahs ?? []),
-  );
-  private readonly sardPassedJuzSet = computed(() => {
-    const sid = this.activeStudentId();
-    const set = new Set<number>();
-    for (const r of this.allSerds() ?? [])
-      if (r.studentId === sid && (r.scope ?? 'juz') === 'juz' && r.score >= SARD_PASS)
-        set.add(r.juz);
-    return set;
+  private readonly memorizedJuz = computed(() => {
+    const st = this.activeStudent();
+    const mine = (this.allRecs() ?? []).filter((r) => r.studentId === st?.id);
+    return completedJuzOf(memorizedAyahs(st, mine));
   });
+  /** سرد أو اختبار: أيّ جزء مكتمل الحفظ — لا ترابط بينهما ولا قفل. */
   readonly manualJuzOptions = computed(() => {
-    const base =
-      this.currentOutcome() === 'exam'
-        ? this.memorizedJuz().filter((j) => this.sardPassedJuzSet().has(j))
-        : this.memorizedJuz();
+    const base = this.memorizedJuz();
     // جزء المحاولة المُعدَّلة يبقى متاحًا ولو خرج من الشرط لاحقًا.
     const e = this.editing();
     const juz = e && (e.kind === 'serd' || e.kind === 'exam') ? this.serdOrExamOf(e)?.juz : null;
@@ -1199,10 +1196,26 @@ export class SessionPage {
   );
   /** عدد سجلّات التسميع الفعليّة (لا الطلّاب) — أساس نسبة النجاح/الرسوب أدناه. */
   private readonly recitedRecordsTotal = computed(() => this.actualRecitations().length);
-  readonly totalPages = computed(() => {
-    const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
-    return Math.round(sum * 10) / 10;
+  /**
+   * أوجه الحفظ الجديد في هذه الجلسة: الناجح منها (٩٠٪ فأكثر) للآيات الجديدة فقط بلا تكرار،
+   * على مصحف المدينة، وبرقم المعلّم إن عدّله. مع الأسطر المعتمدة لكلّ تسميع على حدة.
+   */
+  private readonly sessionCredit = computed(() => {
+    const all = this.allRecs() ?? [];
+    const inSession = this.actualRecitations();
+    const byRecord = new Map<string, number>();
+    let lines = 0;
+    for (const sid of new Set(inSession.map((r) => r.studentId))) {
+      const credit = creditNewPages(
+        all.filter((r) => r.studentId === sid),
+        (r) => r.sessionId === this.id,
+      );
+      lines += credit.lines;
+      for (const [k, v] of credit.byRecord) byRecord.set(k, v);
+    }
+    return { pages: pagesFromLines(lines), byRecord };
   });
+  readonly totalPages = computed(() => this.sessionCredit().pages);
   readonly avgScore = computed<number | null>(() => {
     const list = this.actualRecitations();
     if (!list.length) return null;
@@ -1296,8 +1309,12 @@ export class SessionPage {
         const note = e.note ? ` — ${e.note}` : '';
         if (e.kind === 'recitation' && e.rec) {
           const r = e.rec;
+          // أوجه الحفظ الجديد المعتمدة لهذه المحاولة فقط (الناجحة وللآيات الجديدة).
+          const credited = this.sessionCredit().byRecord.get(r.id);
+          const pagesTxt =
+            credited === undefined ? '' : ` — ${pagesText(pagesFromLines(credited), true)}`;
           lines.push(
-            `• ${n}التسميع (${e.label}): ${r.pages} وجه — ${e.score}٪ (${e.verdict}) (${e.detail})${note}`,
+            `• ${n}التسميع (${e.label}): ${e.score}٪ (${e.verdict}) (${e.detail})${pagesTxt}${note}`,
           );
           if (r.hifzErrors || r.tajweedErrors || r.promptCount) {
             lines.push(
@@ -1583,12 +1600,13 @@ export class SessionPage {
     }
   }
   /** ملخّص السرد لطالب: الأجزاء المكتملة، وكم منها سُرِد، وكم بانتظار السرد. */
-  serdOf(st: { id: string; memorizedSurahs?: number[] }): {
+  serdOf(st: Student): {
     completed: number;
     revised: number;
     pending: number;
   } {
-    const done = completedJuz(st.memorizedSurahs ?? []);
+    const mine = (this.allRecs() ?? []).filter((r) => r.studentId === st.id);
+    const done = completedJuzOf(memorizedAyahs(st, mine));
     const byJuz = new Map<number, SerdRecord[]>();
     for (const r of this.allSerds() ?? []) {
       if (r.studentId !== st.id || r.scope !== 'juz') continue;

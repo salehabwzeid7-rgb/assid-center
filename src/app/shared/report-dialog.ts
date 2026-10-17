@@ -1,7 +1,18 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
+import { Router } from '@angular/router';
 import { closeOnBack } from '../core/back-stack.service';
 import { NotifyService } from '../core/notify.service';
-import { isTajweedCircle, studentCircleIds, type Student } from '../core/models';
+import { circleLabel, isTajweedCircle, studentCircleIds, type Student } from '../core/models';
 import {
   buildCircleReport,
   buildOverviewReport,
@@ -10,15 +21,28 @@ import {
   type ReportSource,
 } from '../core/reports';
 import {
-  EMPTY_MARKS,
-  buildMarksReport,
+  ACTIVITY_LABELS,
+  DEFAULT_ACTIVITY,
+  activityOf,
+  hasActivity,
   hasMarksContent,
+  type ActivityFlags,
+  type ReportContent,
+} from '../core/report-content';
+import type { DialogDraft } from '../core/report-draft.service';
+import {
+  COURSE_STATUS_LABELS,
+  COURSE_STATUS_ORDER,
+  EMPTY_MARKS,
+  WARNING_NOTE_MAX,
+  buildMarksReport,
+  courseKey,
   marksPdf,
   marksPdfSections,
   marksReportText,
   marksTextLines,
   marksTitle,
-  type ReportContent,
+  type CourseStatus,
   type ReportMarks,
 } from '../core/report-marks';
 import {
@@ -34,12 +58,9 @@ import {
   type PdfMeta,
 } from '../core/report-pdf-build';
 import type { PdfDoc } from '../core/report-pdf';
-import { MarksReportCardComponent } from './marks-report-card';
-import { OverviewReportCardComponent } from './overview-report-card';
 import { PeriodPickerComponent, PeriodState } from './period-picker';
-import { ReportCardComponent } from './report-card';
 import { ReportExportComponent } from './report-export';
-import { StudentReportCardComponent } from './student-report-card';
+import { SectionsReportCardComponent } from './sections-report-card';
 
 /* ==========================================================================
    نافذة «إنشاء تقرير» — كلّ مُدخلات التصدير مجموعة في مكان واحد.
@@ -50,20 +71,28 @@ import { StudentReportCardComponent } from './student-report-card';
 
    **مدى النافذة وحلقاتها مستقلّان عن اللوحة** (نسخة مبدئيّة منهما عند الفتح،
    ثمّ تتحرّك وحدها) — فتعديل مرشّح هنا لا يقلب ما يراه المعلّم خلف النافذة.
+
+   **التقرير متكيّف بالكامل**: سبعة مفاتيح مستقلّة لمحتواه (الحضور · سجلّ التسميع · عدد
+   الأوجه · السرد · الاختبارات · المقرر · الإنذارات) بأيّ تركيبة، ومنها يُبنى نموذج مستند
+   واحد يصدر عنه PDF والصورة، فيتطابقان — والنصّ يُبنى من المفاتيح نفسها.
+
+   **المسودّة**: كلّ ما يضبطه المعلّم هنا يُحفَظ (راجع `report-draft.service.ts`) فلا يضيع
+   إن خرج ليرى بيانات طالب ثمّ عاد.
    ========================================================================== */
 
 type Subject = 'circle' | 'students';
 
+const ACTIVITY_KEYS: (keyof ActivityFlags)[] = [
+  'attendance',
+  'recitation',
+  'pages',
+  'serd',
+  'exams',
+];
+
 @Component({
   selector: 'app-report-dialog',
-  imports: [
-    PeriodPickerComponent,
-    ReportExportComponent,
-    ReportCardComponent,
-    OverviewReportCardComponent,
-    StudentReportCardComponent,
-    MarksReportCardComponent,
-  ],
+  imports: [PeriodPickerComponent, ReportExportComponent, SectionsReportCardComponent],
   template: `
     <div class="rd-backdrop" (click)="close.emit()"></div>
 
@@ -125,18 +154,24 @@ type Subject = 'circle' | 'students';
           }
         </section>
 
-        <!-- ٣) محتوى التقرير: النشاط · المقرر · الإنذارات بأيّ تركيبة -->
+        <!-- ٣) محتوى التقرير: يضيف المعلّم ما يريد بأيّ تركيبة -->
         <section class="rd-sec">
           <h3>محتوى التقرير</h3>
+          <div class="rd-sub">من السجلّات</div>
           <div class="chips">
-            <button
-              type="button"
-              class="chip"
-              [class.active]="content().activity"
-              (click)="toggleContent('activity')"
-            >
-              الحضور والتسميع والسجلّ
-            </button>
+            @for (k of activityKeys; track k) {
+              <button
+                type="button"
+                class="chip"
+                [class.active]="content()[k]"
+                (click)="toggleContent(k)"
+              >
+                {{ activityLabels[k] }}
+              </button>
+            }
+          </div>
+          <div class="rd-sub" style="margin-top:12px">علامات تُمسَح بعد إنشاء التقرير</div>
+          <div class="chips">
             <button
               type="button"
               class="chip"
@@ -154,13 +189,88 @@ type Subject = 'circle' | 'students';
               الإنذارات
             </button>
           </div>
-          @if (content().course && !hasCourseMarks()) {
-            <p class="rd-hint">
-              لم تُعلَّم أيّ حالة مقرر بعد — علّمها من تبويب «المقرر والإنذارات».
-            </p>
+          <!-- المقرر: حالة كلّ طالب بحسب حلقته — تظهر هنا فقط حين يختار المعلّم «المقرر» -->
+          @if (content().course) {
+            <div class="rd-mk">
+              <div class="rd-sub">حالة المقرر لكلّ طالب</div>
+              @if (markGroups().length === 0) {
+                <p class="rd-hint">لا طلّاب في الحلقات المختارة.</p>
+              }
+              @for (g of markGroups(); track g.id) {
+                <h4 class="rd-mk-grp">{{ g.title }}</h4>
+                @for (s of g.students; track s.id) {
+                  <div class="mk-row">
+                    <div class="mk-name">
+                      <span>{{ s.name }}</span>
+                      <button type="button" class="mk-prof" (click)="openProfile(s.id)">
+                        بيانات ↗
+                      </button>
+                    </div>
+                    <div class="mk-btns">
+                      @for (st of statusOrder; track st) {
+                        <button
+                          type="button"
+                          class="mk-btn"
+                          [class.on]="courseOf(g.id, s.id) === st"
+                          [class.st-passed]="st === 'passed'"
+                          [class.st-completed]="st === 'completed'"
+                          [class.st-incomplete]="st === 'incomplete'"
+                          (click)="setCourse(g.id, s.id, st)"
+                        >
+                          {{ statusLabels[st] }}
+                        </button>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+              @if (courseCount() === 0 && markGroups().length > 0) {
+                <p class="rd-hint">لم تُعلَّم أيّ حالة بعد — من لا حالة له لا يظهر في التقرير.</p>
+              }
+            </div>
           }
-          @if (content().warnings && !hasWarningMarks()) {
-            <p class="rd-hint">لم يُعلَّم أيّ إنذار بعد — علّمه من تبويب «المقرر والإنذارات».</p>
+
+          <!-- الإنذارات: زرّ لكلّ طالب مع سبب قصير (كلمتان أو ثلاث) -->
+          @if (content().warnings) {
+            <div class="rd-mk">
+              <div class="rd-sub">الإنذارات</div>
+              @if (warnStudents().length === 0) {
+                <p class="rd-hint">لا طلّاب في الحلقات المختارة.</p>
+              }
+              @for (s of warnStudents(); track s.id) {
+                <div class="mk-row">
+                  <div class="mk-name">
+                    <span>{{ s.name }}</span>
+                    <button type="button" class="mk-prof" (click)="openProfile(s.id)">
+                      بيانات ↗
+                    </button>
+                  </div>
+                  <div class="mk-btns">
+                    <button
+                      type="button"
+                      class="mk-btn st-incomplete"
+                      [class.on]="isWarned(s.id)"
+                      (click)="toggleWarning(s.id)"
+                    >
+                      {{ isWarned(s.id) ? '⚠ إنذار' : 'إنذار' }}
+                    </button>
+                  </div>
+                  @if (isWarned(s.id)) {
+                    <input
+                      class="mk-note"
+                      type="text"
+                      placeholder="سبب الإنذار (كلمتان أو ثلاث)"
+                      [attr.maxlength]="noteMax"
+                      [value]="marks().warnings[s.id]"
+                      (input)="setWarningNote(s.id, $event)"
+                    />
+                  }
+                </div>
+              }
+              @if (warnedCount() === 0 && warnStudents().length > 0) {
+                <p class="rd-hint">لم يُعلَّم أيّ إنذار بعد — لن يظهر قسم إنذارات في التقرير.</p>
+              }
+            </div>
           }
         </section>
 
@@ -244,6 +354,24 @@ type Subject = 'circle' | 'students';
               </p>
             }
           }
+
+          <!-- اطّلاع على بيانات الطالب دون فقدان ما ضُبط: تُحفَظ المسودّة ثمّ يُفتَح ملفّه -->
+          @if (studentOptions().length > 0) {
+            <details class="rd-prof">
+              <summary>👤 بيانات الطلّاب — للاطّلاع قبل إنشاء التقرير</summary>
+              <p class="rd-hint" style="margin-top:6px">
+                يُحفَظ التقرير كما هو ويعود إليك بعد أن تنظر في ملفّ الطالب.
+              </p>
+              @for (s of studentOptions(); track s.id) {
+                <div class="rd-prof-row">
+                  <span>{{ s.name }}</span>
+                  <button type="button" class="chip" (click)="openProfile(s.id)">
+                    فتح الملفّ ↗
+                  </button>
+                </div>
+              }
+            </details>
+          }
         </section>
 
         <!-- ٦) المخرَجات -->
@@ -274,37 +402,11 @@ type Subject = 'circle' | 'students';
               [fileName]="fileName()"
               [shareTitle]="shareTitle()"
               [pdfModel]="pdfModel()"
-              (exported)="exported.emit(!!marksOn())"
+              (exported)="exported.emit()"
             >
-              <!-- كتلة المقرر/الإنذار تتقدّم النشاط ليراها وليّ الأمر أوّلًا. -->
-              @if (marksOn(); as mk) {
-                <app-marks-report-card
-                  [report]="mk"
-                  [period]="period.period()"
-                  [teacherName]="teacherName()"
-                />
-              }
-              @if (content().activity) {
-                @if (subject() === 'students') {
-                  @for (tl of studentsReport().students; track tl.studentId) {
-                    <app-student-report-card
-                      [timeline]="tl"
-                      [teacherName]="teacherName()"
-                      [audience]="audience()"
-                    />
-                  }
-                } @else if (singleCircle(); as rep) {
-                  <app-report-card
-                    [report]="rep"
-                    [teacherName]="teacherName()"
-                    [audience]="audience()"
-                  />
-                } @else {
-                  <app-overview-report-card
-                    [overview]="overviewReport()"
-                    [teacherName]="teacherName()"
-                  />
-                }
+              <!-- الصورة تُرسَم من نموذج المستند نفسه الذي يُبنى منه PDF — فيتطابقان. -->
+              @if (pdfModel(); as doc) {
+                <app-sections-report-card [doc]="doc" />
               }
             </app-report-export>
           </section>
@@ -379,6 +481,12 @@ type Subject = 'circle' | 'students';
         font-size: 0.92rem;
         font-weight: 800;
       }
+      .rd-sub {
+        margin-bottom: 6px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-soft, #888);
+      }
       .rd-head-row {
         display: flex;
         align-items: center;
@@ -403,6 +511,89 @@ type Subject = 'circle' | 'students';
         border-color: var(--danger, #b3261e);
         color: #fff;
       }
+      .rd-mk {
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border, #e5e0d3);
+      }
+      .rd-mk-grp {
+        margin: 12px 0 2px;
+        font-size: 0.86rem;
+        font-weight: 800;
+      }
+      .mk-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border, #e5e0d3);
+      }
+      .mk-row:last-child {
+        border-bottom: none;
+      }
+      .mk-name {
+        flex: 1 1 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        font-weight: 700;
+        font-size: 0.88rem;
+      }
+      .mk-prof {
+        padding: 3px 10px;
+        border: 1px solid var(--border, #e5e0d3);
+        border-radius: 14px;
+        background: none;
+        font: inherit;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--text-soft, #888);
+        cursor: pointer;
+      }
+      .mk-btns {
+        display: flex;
+        flex: 1 1 100%;
+        gap: 6px;
+      }
+      .mk-btn {
+        flex: 1;
+        padding: 8px 4px;
+        border: 1px solid var(--border, #e5e0d3);
+        border-radius: 9px;
+        background: var(--surface, #fff);
+        font: inherit;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--text-soft, #888);
+        cursor: pointer;
+      }
+      .mk-btn.on.st-passed {
+        background: #0d5c3f;
+        border-color: #0d5c3f;
+        color: #fff;
+      }
+      .mk-btn.on.st-completed {
+        background: #2f6f8f;
+        border-color: #2f6f8f;
+        color: #fff;
+      }
+      .mk-btn.on.st-incomplete {
+        background: var(--danger, #b3261e);
+        border-color: var(--danger, #b3261e);
+        color: #fff;
+      }
+      .mk-note {
+        flex: 1 1 100%;
+        padding: 8px 10px;
+        border: 1px solid var(--danger, #b3261e);
+        border-radius: 9px;
+        background: var(--surface, #fff);
+        font: inherit;
+        font-size: 0.84rem;
+        color: inherit;
+      }
       .rd-hint {
         margin: 8px 0 0;
         font-size: 0.76rem;
@@ -414,6 +605,27 @@ type Subject = 'circle' | 'students';
         text-align: center;
         font-size: 0.86rem;
         color: var(--text-soft, #888);
+      }
+      .rd-prof {
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border, #e5e0d3);
+        font-size: 0.82rem;
+      }
+      .rd-prof summary {
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .rd-prof-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border, #e5e0d3);
+      }
+      .rd-prof-row:last-child {
+        border-bottom: none;
       }
       .rd-text {
         width: 100%;
@@ -431,8 +643,9 @@ type Subject = 'circle' | 'students';
     `,
   ],
 })
-export class ReportDialogComponent {
+export class ReportDialogComponent implements OnInit {
   private readonly notify = inject(NotifyService);
+  private readonly router = inject(Router);
 
   readonly source = input.required<ReportSource>();
   readonly teacherName = input<string>('');
@@ -441,17 +654,14 @@ export class ReportDialogComponent {
   /** المدى والحلقات اللذان كانت اللوحة تعرضهما — نقطة انطلاق فقط. */
   readonly initialPeriod = input<PeriodState | null>(null);
   readonly initialCircleIds = input<readonly string[]>([]);
-  /** العلامات المؤقّتة (المقرر/الإنذار) التي علّمها المعلّم في الصفحة خلف النافذة. */
-  readonly marks = input<ReportMarks>(EMPTY_MARKS);
-  /** هل يبدأ التقرير بالنشاط؟ يُمرَّر `false` حين تُفتَح النافذة من تبويب المقرر والإنذارات. */
-  readonly initialActivity = input<boolean>(true);
+  /** مسودّة محفوظة تُستعاد بدل الحالة المبدئيّة (عند العودة من ملفّ الطالب مثلًا). */
+  readonly draft = input<DialogDraft | null>(null);
 
   readonly close = output<void>();
-  /**
-   * أُنشئ تقرير فعلًا (نسخ نصّ، أو توليد صورة، أو حفظ PDF). القيمة: هل ضمّ المقرر
-   * أو الإنذار؟ — فالصفحة لا تُسقط العلامات إلّا إن طُبعت في تقرير.
-   */
-  readonly exported = output<boolean>();
+  /** أُنشئ تقرير فعلًا (نسخ نصّ، أو توليد صورة، أو حفظ PDF) — الصفحة تمسح المسودّة بعد إغلاقها. */
+  readonly exported = output<void>();
+  /** تغيّرت حالة النافذة — الصفحة تحفظها في المسودّة. */
+  readonly draftChange = output<DialogDraft>();
 
   readonly period = new PeriodState();
   readonly audience = signal<ReportAudience>('parents');
@@ -459,6 +669,10 @@ export class ReportDialogComponent {
 
   private readonly circleOverride = signal<string[] | null>(null);
   private readonly studentOverride = signal<string[] | null>(null);
+  private armed = false;
+
+  readonly activityKeys = ACTIVITY_KEYS;
+  readonly activityLabels = ACTIVITY_LABELS;
 
   constructor() {
     // النافذة نفسها طبقة: الرجوع يُغلقها ولا يغادر صفحة التقارير.
@@ -466,39 +680,141 @@ export class ReportDialogComponent {
       () => true,
       () => this.close.emit(),
     );
-    // نسخة مبدئيّة من حالة اللوحة، ثمّ تستقلّ النافذة بحالتها.
-    queueMicrotask(() => {
-      const p = this.initialPeriod();
-      if (p) this.period.cloneFrom(p);
+    // أيّ تغيير بعد الفتح يُحفَظ في المسودّة (التشغيل الأوّل للحالة المبدئيّة لا يُحفَظ).
+    effect(() => {
+      const snap = this.snapshot();
+      if (!this.armed) {
+        this.armed = true;
+        return;
+      }
+      untracked(() => this.draftChange.emit(snap));
     });
+  }
+
+  ngOnInit(): void {
+    const d = this.draft();
+    if (d) {
+      this.period.restore(d.period);
+      this.circleOverride.set(d.circleIds);
+      this.studentOverride.set(d.studentIds);
+      this.audience.set(d.audience);
+      this.subject.set(d.subject);
+      this.contentOverride.set(d.content);
+      this.override.set(d.textOverride);
+      this.marks.set({
+        course: d.marks?.course ?? {},
+        warnings: d.marks?.warnings ?? {},
+      });
+      return;
+    }
+    // نسخة مبدئيّة من حالة اللوحة، ثمّ تستقلّ النافذة بحالتها.
+    const p = this.initialPeriod();
+    if (p) this.period.cloneFrom(p);
+  }
+
+  /** حالة النافذة كاملة كما تُحفَظ في المسودّة. */
+  snapshot(): DialogDraft {
+    return {
+      period: this.period.snapshot(),
+      circleIds: this.circleOverride(),
+      studentIds: this.studentOverride(),
+      audience: this.audience(),
+      subject: this.subject(),
+      content: this.contentOverride(),
+      textOverride: this.override(),
+      marks: this.marks(),
+    };
+  }
+
+  /** يحفظ المسودّة فورًا ثمّ يفتح ملفّ الطالب — يعود المعلّم فيجد التقرير كما تركه. */
+  openProfile(studentId: string): void {
+    this.draftChange.emit(this.snapshot());
+    void this.router.navigate(['/student', studentId]);
   }
 
   /* ---------- المحتوى ---------- */
 
   private readonly contentOverride = signal<ReportContent | null>(null);
 
-  readonly hasCourseMarks = computed(() => Object.keys(this.marks().course).length > 0);
-  readonly hasWarningMarks = computed(() => Object.keys(this.marks().warnings).length > 0);
+  /** علامات المقرر والإنذار — مؤقّتة، تُحفَظ في المسودّة وتزول بعد إنشاء التقرير. */
+  readonly marks = signal<ReportMarks>(EMPTY_MARKS);
+  readonly statusOrder = COURSE_STATUS_ORDER;
+  readonly statusLabels = COURSE_STATUS_LABELS;
+  readonly noteMax = WARNING_NOTE_MAX;
 
   /**
-   * بلا اختيار صريح: المقرر/الإنذار يُفعَّلان إن كان قد عُلِّم شيء منهما، والنشاط
-   * يتبع مصدر فتح النافذة. ولا تُترَك النافذة بلا أيّ جزء — يُرجَع للنشاط.
+   * بلا اختيار صريح: النشاط الافتراضيّ (حضور وتسميع وأوجه) والمقرر والإنذارات مطفأة —
+   * يضيفها المعلّم بنفسه بأزرار «محتوى التقرير».
    */
-  readonly content = computed<ReportContent>(() => {
-    const manual = this.contentOverride();
-    if (manual) return manual;
-    const c: ReportContent = {
-      activity: this.initialActivity(),
-      course: this.hasCourseMarks(),
-      warnings: this.hasWarningMarks(),
-    };
-    return c.activity || c.course || c.warnings ? c : { ...c, activity: true };
+  readonly content = computed<ReportContent>(
+    () => this.contentOverride() ?? { ...DEFAULT_ACTIVITY, course: false, warnings: false },
+  );
+
+  readonly courseCount = computed(() => Object.keys(this.marks().course).length);
+  readonly warnedCount = computed(() => Object.keys(this.marks().warnings).length);
+
+  courseOf(circleId: string, studentId: string): CourseStatus | null {
+    return this.marks().course[courseKey(circleId, studentId)] ?? null;
+  }
+
+  /** الضغط على الحالة المفعَّلة يلغيها. */
+  setCourse(circleId: string, studentId: string, status: CourseStatus): void {
+    const key = courseKey(circleId, studentId);
+    const course = { ...this.marks().course };
+    if (course[key] === status) delete course[key];
+    else course[key] = status;
+    this.marks.set({ ...this.marks(), course });
+  }
+
+  isWarned(studentId: string): boolean {
+    return studentId in this.marks().warnings;
+  }
+
+  toggleWarning(studentId: string): void {
+    const warnings = { ...this.marks().warnings };
+    if (studentId in warnings) delete warnings[studentId];
+    else warnings[studentId] = '';
+    this.marks.set({ ...this.marks(), warnings });
+  }
+
+  setWarningNote(studentId: string, e: Event): void {
+    const note = (e.target as HTMLInputElement).value.slice(0, WARNING_NOTE_MAX);
+    this.marks.set({ ...this.marks(), warnings: { ...this.marks().warnings, [studentId]: note } });
+  }
+
+  /** طلّاب كلّ حلقة مختارة (ضمن الطلّاب المحدَّدين إن اختيروا) — أساس قائمة المقرر. */
+  readonly markGroups = computed(() => {
+    const ids = new Set(this.circleIds());
+    const only = this.subject() === 'students' ? new Set(this.studentIds()) : null;
+    return this.circles()
+      .filter((c) => ids.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        title: circleLabel(c),
+        students: this.source()
+          .students.filter(
+            (s) => s.active && studentCircleIds(s).includes(c.id) && (!only || only.has(s.id)),
+          )
+          .sort((a, b) => a.name.localeCompare(b.name, 'ar')),
+      }))
+      .filter((g) => g.students.length > 0);
   });
+
+  /** كلّ طالب مرّة واحدة (الإنذار للطالب لا للحلقة). */
+  readonly warnStudents = computed<Student[]>(() => {
+    const seen = new Map<string, Student>();
+    for (const g of this.markGroups()) for (const s of g.students) seen.set(s.id, s);
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  });
+
+  /** مفاتيح النشاط وحدها، وهل اختير منها شيء. */
+  readonly activityFlags = computed(() => activityOf(this.content()));
+  readonly activityOn = computed(() => hasActivity(this.content()));
 
   toggleContent(key: keyof ReportContent): void {
     const next = { ...this.content(), [key]: !this.content()[key] };
     // جزء واحد على الأقلّ دائمًا — تقرير بلا محتوى لا معنى له.
-    if (!next.activity && !next.course && !next.warnings) return;
+    if (!hasActivity(next) && !hasMarksContent(next)) return;
     this.contentOverride.set(next);
   }
 
@@ -600,14 +916,12 @@ export class ReportDialogComponent {
 
   readonly ready = computed(() => {
     // المقرر/الإنذار وحدهما يكفيهما حلقة مختارة؛ النشاط في وضع الطلّاب يحتاج طالبًا.
-    if (this.content().activity && this.subject() === 'students') {
-      return this.studentIds().length > 0;
-    }
+    if (this.activityOn() && this.subject() === 'students') return this.studentIds().length > 0;
     return this.circleIds().length > 0;
   });
 
   notReadyText(): string {
-    return this.content().activity && this.subject() === 'students'
+    return this.activityOn() && this.subject() === 'students'
       ? 'اختر طالبًا واحدًا على الأقلّ.'
       : 'اختر حلقة واحدة على الأقلّ.';
   }
@@ -621,13 +935,14 @@ export class ReportDialogComponent {
       intro: this.intro(),
       outro: this.outro(),
       marksLines: mk ? marksTextLines(mk) : undefined,
+      flags: this.activityFlags(),
     };
   });
 
   readonly reportText = computed<string>(() => {
     if (!this.ready()) return '';
     const mk = this.marksOn();
-    if (!this.content().activity && mk) {
+    if (!this.activityOn() && mk) {
       return marksReportText(mk, this.period.period(), this.meta(), this.audience());
     }
     if (this.subject() === 'students') {
@@ -662,7 +977,7 @@ export class ReportDialogComponent {
     try {
       await navigator.clipboard.writeText(text);
       this.notify.success('نُسخ نصّ التقرير');
-      this.exported.emit(!!this.marksOn());
+      this.exported.emit();
     } catch {
       this.notify.error('تعذّر النسخ — انسخ النصّ يدويًّا');
     }
@@ -672,7 +987,7 @@ export class ReportDialogComponent {
 
   readonly shareTitle = computed(() => {
     const mk = this.marksOn();
-    if (!this.content().activity && mk) return `تقرير ${marksTitle(mk)}`;
+    if (!this.activityOn() && mk) return `تقرير ${marksTitle(mk)}`;
     if (this.subject() === 'students') {
       const n = this.studentIds().length;
       return n === 1 ? (this.studentsReport().students[0]?.name ?? 'تقرير') : `تقرير ${n} طلّاب`;
@@ -681,16 +996,20 @@ export class ReportDialogComponent {
   });
 
   /**
-   * نموذج مستند PDF النصّيّ — يُبنى من نفس الكائنات المحسوبة التي بُني منها
-   * النصّ والصورة، فالأرقام واحدة في المخرَجات الثلاثة.
+   * نموذج مستند التقرير — يُبنى من نفس الكائنات المحسوبة التي بُني منها النصّ، ومنه يصدر
+   * ملفّ PDF **وصور التقرير** معًا فتتطابق. المقرر/الإنذار أوّلًا ثمّ تفاصيل السجلّات.
    */
   readonly pdfModel = computed<PdfDoc | null>(() => {
     if (!this.ready()) return null;
-    const meta: PdfMeta = { teacherName: this.teacherName(), audience: this.audience() };
     const mk = this.marksOn();
-    if (!this.content().activity && mk) {
+    if (!this.activityOn() && mk) {
       return marksPdf(mk, this.period.period(), this.teacherName());
     }
+    const meta: PdfMeta = {
+      teacherName: this.teacherName(),
+      audience: this.audience(),
+      flags: this.activityFlags(),
+    };
     let doc: PdfDoc;
     if (this.subject() === 'students') doc = buildStudentsPdf(this.studentsReport(), meta);
     else {
@@ -698,12 +1017,11 @@ export class ReportDialogComponent {
       doc = single ? buildCirclePdf(single, meta) : buildOverviewPdf(this.overviewReport(), meta);
     }
     if (!mk) return doc;
-    // المقرر/الإنذار أوّلًا ثمّ النشاط، بعنوان يفصل بينهما.
     return {
       ...doc,
       sections: [
         ...marksPdfSections(mk),
-        { kind: 'heading', text: 'الحضور والنشاط' },
+        { kind: 'heading', text: 'تفاصيل التقرير' },
         ...doc.sections,
       ],
     };
@@ -714,7 +1032,7 @@ export class ReportDialogComponent {
     const tag = p.from === p.to ? p.from : `${p.from}_${p.to}`;
     let raw: string;
     const mk = this.marksOn();
-    if (!this.content().activity && mk) {
+    if (!this.activityOn() && mk) {
       raw = marksTitle(mk);
     } else if (this.subject() === 'students') {
       const list = this.studentsReport().students;
@@ -722,7 +1040,7 @@ export class ReportDialogComponent {
     } else {
       raw = this.singleCircle()?.circleName ?? 'عام';
     }
-    if (mk && this.content().activity) raw += `-${marksTitle(mk)}`;
+    if (mk && this.activityOn()) raw += `-${marksTitle(mk)}`;
     return `تقرير-${raw.replace(/[\\/:*?"<>|\s]+/g, '-')}-${tag}`;
   });
 }

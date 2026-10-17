@@ -1,16 +1,18 @@
 /* ==========================================================================
    تحليل حالة الاختبار لطالب — يُستخدم في لوحة «السرد والاختبار» وصفحة اختبار الطالب.
 
-   التسلسل الدقيق: حفظ الجزء ← سرده ← اجتياز نسبة النجاح في سرده ← عندئذٍ
-   فقط يُفتح اختباره الفرديّ (اختبار جزء مكتمل الحفظ لم يُسرَد وينجح فيه بعدُ
-   يبقى مقفلًا). وبعد اجتياز سرد ٣ أجزاء متتالية كلٍّ على حدة يُفتح السرد
-   المجمّع لتلك الكتلة (في core/sard.ts)؛ وبعد اجتياز ذلك السرد المجمّع نفسه
-   يُفتح اختبارها المجمّع — لا قبل ذلك، وبصرف النظر عن عدد الاختبارات
-   الفرديّة المُنجَزة لأجزائها.
+   **لا ترابط بين الاختبار والسرد**: الشرط الوحيد لاختبار أيّ جزء هو اكتمال حفظه — يُختبَر
+   دون أن يُسرَد. والاختبار المجمّع لكتلة (٣ أجزاء ثابتة: ١–٣، ٤–٦، … ٢٨–٣٠) متاح متى
+   اكتمل حفظ أجزائها الثلاثة، بلا شرط سرد ولا اختبارات فرديّة. وكذلك السرد (core/sard.ts).
    ========================================================================== */
 
 import { SARD_PASS, scoreOf, type ExamRecord, type SerdRecord, type Student } from './models';
-import { JUZ_SURAHS, completedJuz, juzOfBlock } from './quran-data';
+import { juzIndexes, ayahLines } from './mushaf';
+import { completedJuzOf, juzCoverage } from './memorized';
+import { juzOfBlock } from './quran-data';
+
+/** أسطر الجزء بالمصحف — لقياس ما تبقّى منه. */
+const juzLines = (j: number): number => juzIndexes(j).reduce((a, i) => a + ayahLines(i), 0);
 
 /** تصنيف الطالب في لوحة الاختبار (الطلاب بلا أجزاء مكتملة = 'none' فلا يظهرون). */
 export type ExamCategory = 'examined' | 'not_examined' | 'due' | 'none';
@@ -26,13 +28,13 @@ export interface ExamAnalysis {
   completedJuz: number[];
   /** أجزاء مكتملة الحفظ اختُبر كلٌّ منها مرّة على الأقلّ (اختبار فرديّ) */
   examinedJuz: number[];
-  /** أجزاء اجتازت نسبة نجاح السرد — الشرط الوحيد لفتح اختبارها الفرديّ */
+  /** أجزاء اجتازت نسبة نجاح السرد — معلومة للعرض فقط، لا شرط لاختبار الجزء */
   sardPassedJuz: number[];
-  /** أجزاء مكتملة الحفظ لم تجتز السرد بعد — اختبارها يبقى مقفلًا */
+  /** @deprecated لا ترابط بين الاختبار والسرد — فارغ دائمًا (يبقى للتوافق) */
   awaitingSardJuz: number[];
-  /** أجزاء اجتازت السرد ولم تُختبر بعد فرديًّا — اختبارها مفتوح الآن */
+  /** أجزاء مكتملة الحفظ لم تُختبر بعد فرديًّا — اختبارها مفتوح الآن */
   pendingJuz: number[];
-  /** كتل (٣ أجزاء) جاهزة للاختبار المجمّع (اجتاز السرد المجمّع لتلك الكتلة نفسه) */
+  /** كتل (٣ أجزاء) اكتمل حفظها ولم يُنجَز اختبارها المجمّع بعد */
   readyBlocks: number[];
   /** كتل أُنجز اختبارها المجمّع */
   doneBlocks: number[];
@@ -55,16 +57,17 @@ export interface ExamAnalysis {
   currentJuz: { juz: number; fraction: number; pages: number } | null;
 }
 
-const JUZ_PAGES = 20;
-
+/**
+ * @param memorized آيات الطالب المحفوظة (`memorizedAyahs` في core/memorized.ts): بيانات أوّليّة +
+ *   ما نجح فيه من التسميع — اكتمال الجزء بالآيات لا بالسور.
+ */
 export function analyzeExam(
   student: Student,
   allExams: readonly ExamRecord[],
   allSerds: readonly SerdRecord[],
+  memorized: ReadonlySet<number>,
 ): ExamAnalysis {
-  const mem = student.memorizedSurahs ?? [];
-  const memSet = new Set(mem);
-  const completed = completedJuz(mem);
+  const completed = completedJuzOf(memorized);
   const completedSet = new Set(completed);
 
   const mine = allExams.filter((e) => e.studentId === student.id);
@@ -99,22 +102,11 @@ export function analyzeExam(
     if (list.some((r) => scoreOf(r) >= SARD_PASS)) sardPassedSet.add(juz);
   }
   const sardPassedJuz = completed.filter((j) => sardPassedSet.has(j));
-  const awaitingSardJuz = completed.filter((j) => !sardPassedSet.has(j));
-  const pendingJuz = sardPassedJuz.filter((j) => !examinedSet.has(j));
+  // لا ترابط: لا جزء «ينتظر السرد» — يبقى الحقل (فارغًا) لتوافق من يقرؤه.
+  const awaitingSardJuz: number[] = [];
+  const pendingJuz = completed.filter((j) => !examinedSet.has(j));
 
-  // الاختبار المجمّع: يُفتح فقط بعد اجتياز السرد المجمّع لتلك الكتلة نفسه —
-  // بصرف النظر عن عدد الاختبارات الفرديّة المُنجَزة لأجزائها.
-  const sardBlockPassedSet = new Set<number>();
-  const sardBlockAttempts = new Map<number, SerdRecord[]>();
-  for (const s of sardBlockRecords) {
-    const arr = sardBlockAttempts.get(s.juz);
-    if (arr) arr.push(s);
-    else sardBlockAttempts.set(s.juz, [s]);
-  }
-  for (const [block, list] of sardBlockAttempts) {
-    if (list.some((r) => scoreOf(r) >= SARD_PASS)) sardBlockPassedSet.add(block);
-  }
-
+  // الاختبار المجمّع: متاح متى اكتمل حفظ أجزاء الكتلة الثلاثة — لا علاقة له بالسرد.
   const doneBlockSet = new Set(blockExams.map((e) => e.juz));
   const readyBlocks: number[] = [];
   const doneBlocks: number[] = [];
@@ -122,17 +114,17 @@ export function analyzeExam(
     const bj = juzOfBlock(b);
     if (!bj.every((j) => completedSet.has(j))) continue;
     if (doneBlockSet.has(b)) doneBlocks.push(b);
-    else if (sardBlockPassedSet.has(b)) readyBlocks.push(b);
+    else readyBlocks.push(b);
   }
 
+  // «يوشك على الإكمال»: بدأ الجزء ولم يكتمل ويبقى منه ما لا يتجاوز ٣٠ سطرًا (وجهان).
   const nearJuz: { juz: number; have: number; total: number }[] = [];
-  JUZ_SURAHS.forEach((list, i) => {
-    const have = list.filter((n) => memSet.has(n)).length;
-    const missing = list.length - have;
-    if (have > 0 && missing > 0 && missing <= 2) {
-      nearJuz.push({ juz: i + 1, have, total: list.length });
+  for (let j = 1; j <= 30; j++) {
+    const cov = juzCoverage(j, memorized);
+    if (cov.have > 0 && !cov.complete && (1 - cov.fraction) * juzLines(j) <= 30) {
+      nearJuz.push({ juz: j, have: cov.have, total: cov.total });
     }
-  });
+  }
 
   const scores = mine.map((e) => scoreOf(e));
   const avgScore = scores.length
@@ -149,15 +141,15 @@ export function analyzeExam(
   // الجزء الجاري: أقرب جزء جزئيّ إلى الاكتمال (١ = مكتمل)، والتقدّم بصيغة صفحات من ٢٠.
   let currentJuz: ExamAnalysis['currentJuz'] = null;
   let bestFraction = -1;
-  JUZ_SURAHS.forEach((list, i) => {
-    const have = list.filter((n) => memSet.has(n)).length;
-    if (have === 0 || have === list.length) return;
-    const fraction = have / list.length;
-    if (fraction > bestFraction) {
-      bestFraction = fraction;
-      currentJuz = { juz: i + 1, fraction, pages: Math.round(fraction * JUZ_PAGES) };
+  for (let j = 1; j <= 30; j++) {
+    const cov = juzCoverage(j, memorized);
+    if (cov.have === 0 || cov.complete) continue;
+    // بوزن أسطر الآيات في مصحف المدينة لا بعدد السور (راجع juzProgress).
+    if (cov.fraction > bestFraction) {
+      bestFraction = cov.fraction;
+      currentJuz = { juz: j, fraction: cov.fraction, pages: cov.pages };
     }
-  });
+  }
 
   return {
     completedJuz: completed,

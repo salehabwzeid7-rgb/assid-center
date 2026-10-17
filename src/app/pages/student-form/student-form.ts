@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { circleLabel, studentCircleIds } from '../../core/models';
-import { completedJuz } from '../../core/quran-data';
+import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
@@ -65,7 +65,7 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
         <div class="field">
           <label>المقرر الحالي (المحفوظ من القرآن)</label>
-          <app-quran-tracker [(value)]="m.memorizedSurahs" />
+          <app-quran-tracker [(value)]="m.memorizedSurahs" [(juz)]="m.memorizedJuz" />
         </div>
 
         <div class="field">
@@ -183,6 +183,7 @@ export class StudentFormPage implements OnInit {
     guardianPhone: '',
     currentPlan: '',
     memorizedSurahs: [] as number[],
+    memorizedJuz: [] as number[],
     active: true,
   };
 
@@ -205,6 +206,7 @@ export class StudentFormPage implements OnInit {
           guardianPhone: s.guardianPhone ?? '',
           currentPlan: s.currentPlan ?? '',
           memorizedSurahs: [...(s.memorizedSurahs ?? [])],
+          memorizedJuz: [...(s.memorizedJuz ?? [])],
           active: s.active,
         };
       } else {
@@ -237,6 +239,7 @@ export class StudentFormPage implements OnInit {
       guardianPhone: this.m.guardianPhone.trim() || undefined,
       currentPlan: this.m.currentPlan.trim() || undefined,
       memorizedSurahs: [...this.m.memorizedSurahs].sort((a, b) => a - b),
+      memorizedJuz: [...this.m.memorizedJuz].sort((a, b) => a - b),
       active: this.m.active,
     };
     const editing = this.editing() && this.id;
@@ -251,7 +254,7 @@ export class StudentFormPage implements OnInit {
     if (!targetId) return;
 
     // طالب جديد لديه أجزاء محفوظة مسبقًا → شاشة إعداد سجلّ السرد
-    if (!editing && completedJuz(this.m.memorizedSurahs).length > 0) {
+    if (!editing && completedJuzOf(memorizedAyahs(this.m)).length > 0) {
       await this.router.navigate(['/student', targetId, 'serd'], { queryParams: { setup: 1 } });
       return;
     }

@@ -14,7 +14,7 @@ import { Router, RouterLink } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { NotifyService } from '../../core/notify.service';
 import { circleLabel, studentCircleIds, type Student } from '../../core/models';
-import { completedJuz } from '../../core/quran-data';
+import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
@@ -156,7 +156,7 @@ import { QuranTrackerComponent } from '../../shared/quran-tracker';
 
             <div class="field">
               <label>المقرّر الحالي (المحفوظ من القرآن)</label>
-              <app-quran-tracker [(value)]="m.memorizedSurahs" />
+              <app-quran-tracker [(value)]="m.memorizedSurahs" [(juz)]="m.memorizedJuz" />
             </div>
 
             <div class="field">
@@ -258,6 +258,7 @@ export class StudentsPage {
     guardianPhone: '',
     currentPlan: '',
     memorizedSurahs: [] as number[],
+    memorizedJuz: [] as number[],
   };
 
   toggleCircle(id: string): void {
@@ -297,6 +298,7 @@ export class StudentsPage {
       guardianPhone: '',
       currentPlan: '',
       memorizedSurahs: [],
+      memorizedJuz: [],
     };
     this.error.set('');
     this.adding.set(true);
@@ -325,6 +327,7 @@ export class StudentsPage {
           guardianPhone: this.m.guardianPhone.trim() || undefined,
           currentPlan: this.m.currentPlan.trim() || undefined,
           memorizedSurahs: [...this.m.memorizedSurahs].sort((a, b) => a - b),
+          memorizedJuz: [...this.m.memorizedJuz].sort((a, b) => a - b),
           active: true,
         }),
       { success: 'أُضيف الطالب', error: 'تعذّر إضافة الطالب' },
@@ -333,7 +336,7 @@ export class StudentsPage {
     if (!id) return;
     this.adding.set(false);
     // طالب لديه أجزاء محفوظة مسبقًا → شاشة إعداد سجلّ السرد
-    if (completedJuz(this.m.memorizedSurahs).length > 0) {
+    if (completedJuzOf(memorizedAyahs(this.m)).length > 0) {
       void this.router.navigate(['/student', id, 'serd'], { queryParams: { setup: 1 } });
     }
   }

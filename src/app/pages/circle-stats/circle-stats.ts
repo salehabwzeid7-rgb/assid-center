@@ -3,6 +3,8 @@ import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { TASMIE_PASS, isActualRecitation, scoreOf } from '../../core/models';
 import { fracText, lifetimeAttFrac, sumFrac } from '../../core/reports';
+import { pagesFromLines, pagesText } from '../../core/mushaf';
+import { creditNewPages } from '../../core/new-memorization';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 @Component({
@@ -33,8 +35,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="label">جلسات تسميع</div>
           </div>
           <div class="stat">
-            <div class="num">{{ totalPages() }}</div>
-            <div class="label">مجموع الأوجه المسمَّعة</div>
+            <div class="num">{{ pagesText(totalPages()) }}</div>
+            <div class="label">أوجه الحفظ الجديد</div>
           </div>
           <div class="stat">
             <div class="num">{{ avgScore() === null ? '—' : avgScore() + '٪' }}</div>
@@ -70,7 +72,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
               <span class="grow">
                 <span class="primary">{{ row.name }}</span>
                 <span class="secondary">
-                  حضور {{ row.att }} · تسميع {{ row.recites }} · {{ row.pages }} وجه
+                  حضور {{ row.att }} · تسميع {{ row.recites }} · {{ pagesText(row.pages, true) }}
                 </span>
               </span>
             </div>
@@ -110,6 +112,9 @@ export class CircleStatsPage {
   private readonly sessions = this.data.sessionsByCircle(this.id, this.destroyRef);
   private readonly attendance = this.data.circleAttendance(this.id, this.destroyRef);
   private readonly recitations = this.data.circleRecitations(this.id, this.destroyRef);
+  /** كلّ تسميعات الأقسام — لمعرفة ما سبق حفظه (ولو في حلقة أخرى) فلا يُحسب مرّتين. */
+  private readonly allRecs = this.data.allRecitations(this.destroyRef);
+  readonly pagesText = pagesText;
   /** تسميعات فعليّة فقط — تستثني سجلّات «لم يسمّع» من كلّ الإحصائيّات. */
   private readonly actualRecitations = computed(() =>
     (this.recitations() ?? []).filter(isActualRecitation),
@@ -120,16 +125,17 @@ export class CircleStatsPage {
       this.students() === undefined ||
       this.sessions() === undefined ||
       this.attendance() === undefined ||
-      this.recitations() === undefined,
+      this.recitations() === undefined ||
+      this.allRecs() === undefined,
   );
 
   readonly sessionCount = computed(() => this.sessions()?.length ?? 0);
   readonly studentCount = computed(() => this.students()?.filter((s) => s.active).length ?? 0);
   readonly recitationCount = computed(() => this.actualRecitations().length);
-  readonly totalPages = computed(() => {
-    const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
-    return Math.round(sum * 10) / 10;
-  });
+  /** أوجه الحفظ الجديد للحلقة: من مجموع أسطر طلّابها لا من مجموع أرقامهم المقرَّبة. */
+  readonly totalPages = computed(() =>
+    pagesFromLines(this.perStudent().reduce((a, r) => a + r.pageLines, 0)),
+  );
   /** مجموع كسور حضور الطلّاب «١٤٢/١٦٠» — نفس منطق التقارير. */
   readonly attendanceText = computed(() => fracText(sumFrac(this.perStudent().map((r) => r.frac))));
   readonly avgScore = computed<number | null>(() => {
@@ -156,7 +162,11 @@ export class CircleStatsPage {
         // حضر من الحصص المنعقدة في الحلقة منذ التحاقه (الصفحة بلا فترة).
         const frac = lifetimeAttFrac(s, mine, this.sessions() ?? [], [this.id]);
         const myRec = rec.filter((r) => r.studentId === s.id);
-        const pages = myRec.reduce((t, r) => t + (Number(r.pages) || 0), 0);
+        // أوجه الحفظ الجديد الناجح بلا تكرار — تاريخ الطالب كلّه يحدّد ما سبق حفظه.
+        const credit = creditNewPages(
+          (this.allRecs() ?? []).filter((r) => r.studentId === s.id),
+          (r) => r.circleId === this.id,
+        );
         return {
           id: s.id,
           name: s.name,
@@ -164,9 +174,10 @@ export class CircleStatsPage {
           att: fracText(frac),
           rate: frac.total ? frac.attended / frac.total : 0,
           recites: myRec.length,
-          pages: Math.round(pages * 10) / 10,
+          pages: credit.pages,
+          pageLines: credit.lines,
         };
       })
-      .sort((a, b) => b.rate - a.rate || b.pages - a.pages);
+      .sort((a, b) => b.rate - a.rate || b.pageLines - a.pageLines);
   });
 }

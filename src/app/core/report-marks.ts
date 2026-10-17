@@ -6,7 +6,7 @@
    بالكامل (بلا Angular ولا Firestore): تستقبل العلامات من الواجهة وتُخرِج
    كائنًا واحدًا تستهلكه المخرَجات الثلاثة (نصّ · PDF · صورة)، فلا تتباين.
 
-   تُبنى المخرَجات من ثلاثة مفاتيح مستقلّة (`ReportContent`): النشاط (الحضور
+   تُبنى المخرَجات من مفاتيح مستقلّة (`ReportContent`، راجع report-content.ts): النشاط (الحضور
    والتسميع والسجلّ)، المقرر، الإنذارات — بأيّ تركيبة. حين يُختار النشاط معهما
    تتقدّم كتلة المقرر/الإنذار على كتلة النشاط ليراها وليّ الأمر أوّلًا.
    ========================================================================== */
@@ -15,6 +15,7 @@ import { NOTE_MAX, studentCircleIds } from './models';
 import { periodLabel, type Period } from './report-period';
 import type { PdfCell, PdfDoc, PdfSection } from './report-pdf';
 import type { ReportAudience } from './report-text';
+import type { ReportContent } from './report-content';
 import { circleTitleOf, type ReportSource } from './reports';
 
 /** حالة المقرر — من الأعلى إلى الأدنى: اجتاز (زاد على المطلوب) · أنهى (أدّى المطلوب) · لم ينهِ. */
@@ -41,15 +42,6 @@ export const EMPTY_MARKS: ReportMarks = { course: {}, warnings: {} };
 
 export const courseKey = (circleId: string, studentId: string): string =>
   `${circleId}|${studentId}`;
-
-/** ما يدخل التقرير: أيّ تركيبة من المفاتيح الثلاثة (واحد على الأقلّ). */
-export interface ReportContent {
-  activity: boolean;
-  course: boolean;
-  warnings: boolean;
-}
-
-export const hasMarksContent = (c: ReportContent): boolean => c.course || c.warnings;
 
 /* --------------------------------------------------------------------------
    البناء

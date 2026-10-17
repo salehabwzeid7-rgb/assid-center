@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Capacitor } from '@capacitor/core';
 import {
   signInWithEmailAndPassword,
@@ -11,9 +11,12 @@ import {
 import { doc, getDoc, getDocFromServer, setDoc, updateDoc, increment } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { TEACHERS, PLATFORM_COL, OWNER_EMAIL, type Teacher } from './models';
+import { ReportDraftService } from './report-draft.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private readonly drafts = inject(ReportDraftService);
+
   /** المستخدم الحالي من Firebase Auth (أو null) */
   readonly user = signal<User | null>(null);
   /** ملف المعلّم من Firestore */
@@ -144,6 +147,8 @@ export class AuthService {
     await signOut(auth);
     this.teacher.set(null);
     this.clearOwnerSessionFlag();
+    // مسودّة التقرير تحمل أسماء طلّاب هذا الحساب — لا تبقى لحساب يدخل بعده على الجهاز نفسه.
+    this.drafts.clear();
   }
 
   /**

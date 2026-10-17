@@ -3,7 +3,12 @@
    ========================================================================== */
 
 import { SARD_PASS, scoreOf, type SerdRecord, type Student } from './models';
-import { JUZ_SURAHS, completedJuz, juzOfBlock } from './quran-data';
+import { juzIndexes, ayahLines } from './mushaf';
+import { completedJuzOf, juzCoverage } from './memorized';
+import { juzOfBlock } from './quran-data';
+
+/** أسطر الجزء بالمصحف — لقياس ما تبقّى منه. */
+const juzLines = (j: number): number => juzIndexes(j).reduce((a, i) => a + ayahLines(i), 0);
 
 /** تصنيف الطالب في لوحة السرد (الطلاب بلا أجزاء مكتملة = 'none' فلا يظهرون). */
 export type SardCategory = 'revised' | 'not_revised' | 'due' | 'none';
@@ -41,12 +46,16 @@ export interface SardAnalysis {
   currentJuz: { juz: number; fraction: number; pages: number } | null;
 }
 
-const JUZ_PAGES = 20;
-
-export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): SardAnalysis {
-  const mem = student.memorizedSurahs ?? [];
-  const memSet = new Set(mem);
-  const completed = completedJuz(mem);
+/**
+ * @param memorized آيات الطالب المحفوظة (`memorizedAyahs` في core/memorized.ts): بيانات أوّليّة +
+ *   ما نجح فيه من التسميع — اكتمال الجزء بالآيات لا بالسور.
+ */
+export function analyzeSard(
+  student: Student,
+  allSerds: readonly SerdRecord[],
+  memorized: ReadonlySet<number>,
+): SardAnalysis {
+  const completed = completedJuzOf(memorized);
   const completedSet = new Set(completed);
 
   const mine = allSerds.filter((s) => s.studentId === student.id);
@@ -79,17 +88,17 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
     const bj = juzOfBlock(b);
     if (!bj.every((j) => completedSet.has(j))) continue;
     if (doneBlockSet.has(b)) doneBlocks.push(b);
-    else if (bj.every((j) => revisedSet.has(j))) readyBlocks.push(b);
+    else readyBlocks.push(b);
   }
 
+  // «يوشك على الإكمال»: بدأ الجزء ولم يكتمل ويبقى منه ما لا يتجاوز ٣٠ سطرًا (وجهان).
   const nearJuz: { juz: number; have: number; total: number }[] = [];
-  JUZ_SURAHS.forEach((list, i) => {
-    const have = list.filter((n) => memSet.has(n)).length;
-    const missing = list.length - have;
-    if (have > 0 && missing > 0 && missing <= 2) {
-      nearJuz.push({ juz: i + 1, have, total: list.length });
+  for (let j = 1; j <= 30; j++) {
+    const cov = juzCoverage(j, memorized);
+    if (cov.have > 0 && !cov.complete && (1 - cov.fraction) * juzLines(j) <= 30) {
+      nearJuz.push({ juz: j, have: cov.have, total: cov.total });
     }
-  });
+  }
 
   const scores = mine.map((s) => scoreOf(s));
   const avgScore = scores.length
@@ -106,15 +115,15 @@ export function analyzeSard(student: Student, allSerds: readonly SerdRecord[]): 
   // الجزء الجاري: أقرب جزء جزئيّ إلى الاكتمال (١ = مكتمل)، والتقدّم بصيغة صفحات من ٢٠.
   let currentJuz: SardAnalysis['currentJuz'] = null;
   let bestFraction = -1;
-  JUZ_SURAHS.forEach((list, i) => {
-    const have = list.filter((n) => memSet.has(n)).length;
-    if (have === 0 || have === list.length) return;
-    const fraction = have / list.length;
-    if (fraction > bestFraction) {
-      bestFraction = fraction;
-      currentJuz = { juz: i + 1, fraction, pages: Math.round(fraction * JUZ_PAGES) };
+  for (let j = 1; j <= 30; j++) {
+    const cov = juzCoverage(j, memorized);
+    if (cov.have === 0 || cov.complete) continue;
+    // بوزن أسطر الآيات في مصحف المدينة لا بعدد السور (راجع juzProgress).
+    if (cov.fraction > bestFraction) {
+      bestFraction = cov.fraction;
+      currentJuz = { juz: j, fraction: cov.fraction, pages: cov.pages };
     }
-  });
+  }
 
   return {
     completedJuz: completed,

@@ -10,6 +10,7 @@ import {
   weekPeriod,
   type Period,
   type PeriodKind,
+  type PeriodSnapshot,
 } from '../core/report-period';
 
 /* ==========================================================================
@@ -47,6 +48,22 @@ export class PeriodState {
 
   step(delta: number): void {
     this.anchor.set(shiftPeriod(this.period(), delta).from);
+  }
+
+  /** لقطة قابلة للحفظ (مسودّة التقرير). */
+  snapshot(): PeriodSnapshot {
+    return { kind: this.kind(), anchor: this.anchor(), from: this.from(), to: this.to() };
+  }
+
+  /** يستعيد لقطة محفوظة — يتجاهل أيّ حقل غير صالح بدل أن يكسر الواجهة. */
+  restore(s: Partial<PeriodSnapshot> | null | undefined): void {
+    if (!s) return;
+    const kinds: PeriodKind[] = ['day', 'week', 'month', 'year', 'custom'];
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    if (s.kind && kinds.includes(s.kind)) this.kind.set(s.kind);
+    if (s.anchor && iso.test(s.anchor)) this.anchor.set(s.anchor);
+    if (s.from && iso.test(s.from)) this.from.set(s.from);
+    if (s.to && iso.test(s.to)) this.to.set(s.to);
   }
 
   /** نسخة مستقلّة بنفس الحالة — لفتح النافذة مبدئيًّا على مدى اللوحة. */

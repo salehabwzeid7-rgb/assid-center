@@ -1,18 +1,21 @@
 import { Component, computed, model, signal } from '@angular/core';
 import { closeOnBack } from '../core/back-stack.service';
+import { memorizedAyahs } from '../core/memorized';
+import { juzProgress } from '../core/mushaf';
 import { JUZ_SURAHS, surahName } from '../core/quran-data';
 
 /**
  * متتبّع المقرّر القرآنيّ — شبكة الأجزاء الثلاثين مع تفصيل السور داخل كل جزء.
- * الربط ثنائيّ الاتجاه عبر [(value)] = مصفوفة أرقام السور المحفوظة (1..114).
- * التقدّم الجزئيّ مدعوم: أيّ مجموعة جزئيّة من سور الجزء تُحفظ وتُعرض كما هي.
+ * الربط ثنائيّ الاتجاه عبر [(value)] = مصفوفة أرقام السور المحفوظة كاملةً (1..114)، و[(juz)] =
+ * أرقام الأجزاء المحفوظة كاملةً (1..30). «الجزء كاملًا» يُسجَّل جزءًا (بآياته) لا سورًا،
+ * فجزء يمتدّ بين سورتين (كالأوّل) لا يستلزم حفظ سورة الحدّ كلّها. اكتمال الجزء بالآيات.
  */
 @Component({
   selector: 'app-quran-tracker',
   template: `
     <button type="button" class="qt-trigger" (click)="open.set(true)">
       <span class="qt-label">المقرّر القرآنيّ — المحفوظ</span>
-      <span class="qt-value" [class.empty]="value().length === 0">{{ summaryText() }}</span>
+      <span class="qt-value" [class.empty]="isEmpty()">{{ summaryText() }}</span>
       <span class="qt-go">تحديد ›</span>
     </button>
 
@@ -26,6 +29,7 @@ import { JUZ_SURAHS, surahName } from '../core/quran-data';
             </div>
             <p class="qt-summary">
               <b>{{ fullJuzCount() }}</b> جزءًا كاملًا · <b>{{ value().length }}</b> سورة محفوظة
+              كاملةً
             </p>
             <div class="qt-body">
               <div class="qt-grid">
@@ -38,7 +42,7 @@ import { JUZ_SURAHS, surahName } from '../core/quran-data';
                     (click)="openJuz(j)"
                   >
                     <span class="qt-cell-n">{{ j }}</span>
-                    <span class="qt-cell-f">{{ haveOf(j) }}/{{ totalOf(j) }}</span>
+                    <span class="qt-cell-f">{{ pagesOf(j) }}/20</span>
                   </button>
                 }
               </div>
@@ -47,7 +51,7 @@ import { JUZ_SURAHS, surahName } from '../core/quran-data';
               <span><i class="sw full"></i> جزء كامل</span>
               <span><i class="sw partial"></i> جزئيّ</span>
               <span><i class="sw"></i> لم يُحفظ</span>
-              @if (value().length) {
+              @if (!isEmpty()) {
                 <button type="button" class="qt-clear" (click)="clearAll()">مسح الكلّ</button>
               }
             </div>
@@ -62,8 +66,9 @@ import { JUZ_SURAHS, surahName } from '../core/quran-data';
             </div>
             <p class="qt-summary">{{ juzRangeLabel() }}</p>
             <button type="button" class="btn btn-block qt-selall" (click)="toggleJuz()">
-              {{ juzAllSelected() ? '✓ إلغاء تحديد الجزء كاملًا' : 'تحديد كلّ سور الجزء' }}
+              {{ juzSelected() ? '✓ إلغاء تحديد الجزء كاملًا' : 'تحديد الجزء كاملًا (بآياته)' }}
             </button>
+            <p class="qt-summary" style="margin-top:6px">أو حدّد السور الكاملة منه:</p>
             <div class="qt-body">
               <div class="qt-surahs">
                 @for (n of surahsOfActiveJuz(); track n) {
@@ -304,6 +309,8 @@ import { JUZ_SURAHS, surahName } from '../core/quran-data';
 export class QuranTrackerComponent {
   /** أرقام السور المحفوظة (1..114) — مربوطة ثنائيًّا مع النموذج الأب. */
   readonly value = model<number[]>([]);
+  /** أرقام الأجزاء المحفوظة كاملةً (1..30) — مربوطة ثنائيًّا مع النموذج الأب. */
+  readonly juz = model<number[]>([]);
 
   readonly open = signal(false);
   /** زرّ الرجوع يُغلق النافذة أوّلًا بدل مغادرة الصفحة. */
@@ -318,37 +325,34 @@ export class QuranTrackerComponent {
   readonly surahName = surahName;
 
   private selected = computed(() => new Set(this.value()));
+  /** كلّ الآيات المحفوظة من المدخلات الأوّليّة (سور + أجزاء) — أساس حالة كلّ جزء. */
+  private readonly ayahs = computed(() =>
+    memorizedAyahs({ memorizedSurahs: this.value(), memorizedJuz: this.juz() }),
+  );
 
   has(n: number): boolean {
     return this.selected().has(n);
   }
-  haveOf(juz: number): number {
-    const s = this.selected();
-    return JUZ_SURAHS[juz - 1].filter((n) => s.has(n)).length;
-  }
-  totalOf(juz: number): number {
-    return JUZ_SURAHS[juz - 1].length;
+  pagesOf(juz: number): number {
+    return juzProgress(juz, this.ayahs()).pages;
   }
   stateOf(juz: number): 'none' | 'partial' | 'full' {
-    const have = this.haveOf(juz);
-    if (have === 0) return 'none';
-    return have === this.totalOf(juz) ? 'full' : 'partial';
+    const p = juzProgress(juz, this.ayahs());
+    if (p.have === 0) return 'none';
+    return p.have === p.total ? 'full' : 'partial';
   }
+  readonly isEmpty = computed(() => this.value().length === 0 && this.juz().length === 0);
 
   readonly fullJuzCount = computed(
     () => this.juzList.filter((j) => this.stateOf(j) === 'full').length,
   );
   readonly summaryText = computed(() =>
-    this.value().length
-      ? `${this.fullJuzCount()} جزءًا · ${this.value().length} سورة`
-      : 'لم يُحدَّد بعد',
+    this.isEmpty() ? 'لم يُحدَّد بعد' : `${this.fullJuzCount()} جزءًا كاملًا`,
   );
 
   readonly surahsOfActiveJuz = computed(() => [...JUZ_SURAHS[this.activeJuz() - 1]]);
-  readonly juzAllSelected = computed(() => {
-    const s = this.selected();
-    return JUZ_SURAHS[this.activeJuz() - 1].every((n) => s.has(n));
-  });
+  /** هل الجزء المعروض مسجَّل «كاملًا» يدويًّا؟ */
+  readonly juzSelected = computed(() => this.juz().includes(this.activeJuz()));
   readonly juzRangeLabel = computed(() => {
     const list = JUZ_SURAHS[this.activeJuz() - 1];
     return list.length === 1
@@ -374,13 +378,12 @@ export class QuranTrackerComponent {
     this.commit(s);
   }
   toggleJuz(): void {
-    const list = JUZ_SURAHS[this.activeJuz() - 1];
-    const s = new Set(this.value());
-    const all = list.every((n) => s.has(n));
-    list.forEach((n) => (all ? s.delete(n) : s.add(n)));
-    this.commit(s);
+    const j = this.activeJuz();
+    const cur = this.juz();
+    this.juz.set(cur.includes(j) ? cur.filter((x) => x !== j) : [...cur, j].sort((a, b) => a - b));
   }
   clearAll(): void {
     this.value.set([]);
+    this.juz.set([]);
   }
 }

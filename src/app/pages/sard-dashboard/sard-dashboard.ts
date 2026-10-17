@@ -7,7 +7,9 @@ import {
   studentCircleIds,
   type Circle,
   type Student,
+  type RecitationRecord,
 } from '../../core/models';
+import { memorizedAyahs } from '../../core/memorized';
 import { analyzeSard, type SardAnalysis } from '../../core/sard';
 import { analyzeExam, type ExamAnalysis } from '../../core/exam';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -275,6 +277,8 @@ export class SardDashboardPage {
   readonly circles = this.data.circles(this.destroyRef);
   readonly serds = this.data.allSerds(this.destroyRef);
   readonly exams = this.data.allExams(this.destroyRef);
+  /** كلّ التسميعات — من نجاح الطالب فيها يُحسب اكتمال أجزائه بالآيات. */
+  private readonly recs = this.data.allRecitations(this.destroyRef);
   readonly showStats = signal(false);
 
   private readonly circleMap = computed(() => {
@@ -288,17 +292,24 @@ export class SardDashboardPage {
     const serds = this.serds() ?? [];
     const exams = this.exams() ?? [];
     const cm = this.circleMap();
+    const recsByStudent = new Map<string, RecitationRecord[]>();
+    for (const r of this.recs() ?? []) {
+      const list = recsByStudent.get(r.studentId);
+      if (list) list.push(r);
+      else recsByStudent.set(r.studentId, [r]);
+    }
     return (this.students() ?? [])
       .filter((s) => s.active)
       .map((student) => {
+        const memorized = memorizedAyahs(student, recsByStudent.get(student.id) ?? []);
         const cs = studentCircleIds(student)
           .map((id) => cm.get(id))
           .filter((c): c is Circle => !!c);
         return {
           student,
           cs,
-          a: analyzeSard(student, serds),
-          e: analyzeExam(student, exams, serds),
+          a: analyzeSard(student, serds, memorized),
+          e: analyzeExam(student, exams, serds, memorized),
         };
       })
       .filter(({ cs }) => cs.length === 0 || cs.some((c) => isHifzCircle(c)))

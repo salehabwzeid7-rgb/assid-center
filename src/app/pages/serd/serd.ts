@@ -13,7 +13,8 @@ import {
   type SerdRecord,
   type Student,
 } from '../../core/models';
-import { completedJuz, juzOfBlock } from '../../core/quran-data';
+import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
+import { juzOfBlock } from '../../core/quran-data';
 import { dmy } from '../../core/format';
 import { ScoreInputComponent } from '../../shared/score-input';
 import { PageHeaderComponent } from '../../shared/page-header';
@@ -135,7 +136,7 @@ interface Recording {
           @if (blockRows().length) {
             <div class="section-title">السرد المجمّع — كلّ ٣ أجزاء متتالية</div>
             @for (b of blockRows(); track b.block) {
-              <div class="card" [class.milestone]="b.ready" [class.locked]="!b.ready && !b.done">
+              <div class="card" [class.milestone]="b.ready">
                 <div class="row-between">
                   <span>
                     الأجزاء {{ b.juz[0] }} · {{ b.juz[1] }} · {{ b.juz[2] }}
@@ -154,22 +155,16 @@ interface Recording {
                     <button class="btn btn-primary" type="button" (click)="openBlock(b.block)">
                       ＋ سرد مجمّع
                     </button>
-                  } @else if (b.done) {
+                  } @else {
                     <button class="btn btn-ghost" type="button" (click)="openBlock(b.block)">
                       دورة أخرى
                     </button>
-                  } @else {
-                    <span class="lock-pill">🔒 مقفل</span>
                   }
                 </div>
                 @if (b.ready) {
                   <p class="muted" style="margin:6px 0 0">
-                    اكتمل حفظ الأجزاء الثلاثة وسُرِد كلٌّ منها — السرد المجمّع مطلوب الآن.
-                  </p>
-                } @else if (!b.done) {
-                  <p class="muted" style="margin:6px 0 0">
-                    {{ b.revisedCount }}/3 أجزاء سُرِدت — يُفتح السرد المجمّع بعد حفظ وسرد الأجزاء
-                    الثلاثة كلٌّ على حدة.
+                    اكتمل حفظ الأجزاء الثلاثة — السرد المجمّع متاح الآن ({{ b.revisedCount }}/3
+                    سُرِدت منفردة، وهذا لا يُشترط).
                   </p>
                 }
               </div>
@@ -343,7 +338,12 @@ export class SerdPage {
   date = today();
   notes = '';
 
-  readonly completed = computed(() => completedJuz(this.student()?.memorizedSurahs ?? []));
+  /** تسميعات الطالب — من نجاحه فيها يُحسب المحفوظ بالآيات (مع البيانات الأوّليّة). */
+  private readonly recs = this.data.studentRecitations(this.id, this.destroyRef);
+  /** الأجزاء المكتملة حفظًا: كلّ آياتها محفوظة (لا سورها). */
+  readonly completed = computed(() =>
+    completedJuzOf(memorizedAyahs(this.student(), this.recs() ?? [])),
+  );
 
   private groupByJuz(scope: 'juz' | 'block'): Map<number, SerdRecord[]> {
     const map = new Map<number, SerdRecord[]>();
@@ -387,15 +387,14 @@ export class SerdPage {
       const juz = juzOfBlock(b);
       // شرط الظهور: حفظ الأجزاء الثلاثة كاملةً
       if (!juz.every((j) => done.has(j))) continue;
-      // شرط الفتح: اجتياز سرد كلّ جزء منها منفردًا (وليس مجرّد محاولة)
+      // متاح متى حُفِظت أجزاء الكتلة الثلاثة — لا يُشترط سرد كلّ جزء منفردًا.
       const revisedCount = juz.filter((j) => passedSet.has(j)).length;
-      const eachRevised = revisedCount === 3;
       const bs = this.blockSerdMap().get(b) ?? [];
       out.push({
         block: b,
         juz,
         revisedCount,
-        ready: eachRevised && bs.length === 0,
+        ready: bs.length === 0,
         done: bs.length > 0,
         cycles: bs.length,
         lastScore: bs[0] ? scoreOf(bs[0]) : null,

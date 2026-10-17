@@ -1,12 +1,17 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { Component, DestroyRef, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { ReportDataService } from '../../core/report-data.service';
+import {
+  ReportDraftService,
+  type DialogDraft,
+  type ReportDraft,
+} from '../../core/report-draft.service';
+import { pagesText } from '../../core/mushaf';
 import { dmy } from '../../core/format';
 import {
   ATTENDANCE_LABELS,
   DEFAULT_PERIOD_REPORT_INTRO,
-  circleLabel,
   DEFAULT_REPORT_OUTRO,
   isTajweedCircle,
   studentCircleIds,
@@ -27,15 +32,6 @@ import {
   type TajweedExamCell,
   type TajweedStudentRow,
 } from '../../core/reports';
-import {
-  COURSE_STATUS_LABELS,
-  COURSE_STATUS_ORDER,
-  EMPTY_MARKS,
-  WARNING_NOTE_MAX,
-  courseKey,
-  type CourseStatus,
-  type ReportMarks,
-} from '../../core/report-marks';
 import { PageHeaderComponent } from '../../shared/page-header';
 import { PeriodPickerComponent, PeriodState } from '../../shared/period-picker';
 import { ReportDialogComponent } from '../../shared/report-dialog';
@@ -58,30 +54,6 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
     <app-page-header title="التقارير" />
 
     <div class="page">
-      <div class="tabs" role="tablist">
-        <button
-          type="button"
-          class="tab"
-          role="tab"
-          [class.active]="tab() === 'dash'"
-          (click)="tab.set('dash')"
-        >
-          اللوحة
-        </button>
-        <button
-          type="button"
-          class="tab"
-          role="tab"
-          [class.active]="tab() === 'marks'"
-          (click)="tab.set('marks')"
-        >
-          المقرر والإنذارات
-          @if (marksCount() > 0) {
-            <span class="tab-badge">{{ marksCount() }}</span>
-          }
-        </button>
-      </div>
-
       <!-- ============ المرشّحات ============ -->
       <div class="card">
         <h3 class="sec-title">المدى الزمنيّ</h3>
@@ -166,252 +138,162 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
         </div>
       }
 
-      @if (tab() === 'marks') {
-        <!-- ============ المقرر والإنذارات ============ -->
-        @if (loading()) {
-          <div class="card"><p class="muted">جارٍ تحميل البيانات…</p></div>
-        } @else if (circleIds().length === 0) {
-          <div class="card"><p class="muted">اختر حلقة واحدة على الأقلّ.</p></div>
-        } @else {
-          <div class="card">
-            <div class="head-row">
-              <div class="chips">
-                <button
-                  type="button"
-                  class="chip"
-                  [class.active]="marksMode() === 'course'"
-                  (click)="marksMode.set('course')"
-                >
-                  المقرر
-                </button>
-                <button
-                  type="button"
-                  class="chip chip-danger"
-                  [class.active]="marksMode() === 'warning'"
-                  (click)="marksMode.set('warning')"
-                >
-                  إنذار
-                </button>
-              </div>
-              @if (marksCount() > 0) {
-                <button type="button" class="chip" (click)="clearMarks()">مسح العلامات</button>
-              }
-            </div>
-            <p class="muted small" style="margin:10px 0 0">
-              علامات مؤقّتة: تُطبَع في التقرير الذي تُنشئه ثمّ تزول، ولا تُحفَظ في السجلّ.
-            </p>
-          </div>
-
-          @if (markGroups().length === 0) {
-            <div class="card"><p class="muted">لا طلّاب في الحلقات المختارة.</p></div>
-          }
-          @for (g of markGroups(); track g.id) {
-            <div class="card">
-              <h4 class="grp" style="margin-top:0">{{ g.title }}</h4>
-              @for (s of g.students; track s.id) {
-                <div class="mk-row">
-                  <div class="mk-name">{{ s.name }}</div>
-                  @if (marksMode() === 'course') {
-                    <div class="mk-btns">
-                      @for (st of statusOrder; track st) {
-                        <button
-                          type="button"
-                          class="mk-btn"
-                          [class.on]="courseOf(g.id, s.id) === st"
-                          [class.st-passed]="st === 'passed'"
-                          [class.st-completed]="st === 'completed'"
-                          [class.st-incomplete]="st === 'incomplete'"
-                          (click)="setCourse(g.id, s.id, st)"
-                        >
-                          {{ statusLabels[st] }}
-                        </button>
-                      }
-                    </div>
-                  } @else {
-                    <div class="mk-btns">
-                      <button
-                        type="button"
-                        class="mk-btn st-incomplete"
-                        [class.on]="isWarned(s.id)"
-                        (click)="toggleWarning(s.id)"
-                      >
-                        {{ isWarned(s.id) ? '⚠ إنذار' : 'إنذار' }}
-                      </button>
-                    </div>
-                    @if (isWarned(s.id)) {
-                      <input
-                        class="mk-note"
-                        type="text"
-                        placeholder="سبب الإنذار (كلمتان أو ثلاث)"
-                        [attr.maxlength]="noteMax"
-                        [value]="marks().warnings[s.id]"
-                        (input)="setWarningNote(s.id, $event)"
-                      />
-                    }
-                  }
-                </div>
-              }
-            </div>
-          }
-        }
+      <!-- ============ اللوحة ============ -->
+      @if (loading()) {
+        <div class="card"><p class="muted">جارٍ تحميل البيانات…</p></div>
+      } @else if (circleIds().length === 0) {
+        <div class="card"><p class="muted">اختر حلقة واحدة على الأقلّ.</p></div>
       } @else {
-        <!-- ============ اللوحة ============ -->
-        @if (loading()) {
-          <div class="card"><p class="muted">جارٍ تحميل البيانات…</p></div>
-        } @else if (circleIds().length === 0) {
-          <div class="card"><p class="muted">اختر حلقة واحدة على الأقلّ.</p></div>
-        } @else {
-          <!-- ملخّص التحفيظ -->
-          @if (hifzReports().length > 0) {
-            <div class="card">
-              <h3 class="sec-title">حلقات التحفيظ — {{ period.label() }}</h3>
-              <div class="stat-grid">
-                <div class="stat">
-                  <div class="num">{{ ov().hifzTotals.heldSessions }}</div>
-                  <div class="label">جلسة</div>
-                </div>
-                <div class="stat">
-                  <div class="num">{{ frac(ov().hifzTotals.attFrac) }}</div>
-                  <div class="label">الحضور</div>
-                </div>
-                <div class="stat">
-                  <div class="num">{{ ov().hifzTotals.pages }}</div>
-                  <div class="label">وجه</div>
-                </div>
-                <div class="stat">
-                  <div class="num">{{ pct(ov().hifzTotals.avgScore) }}</div>
-                  <div class="label">متوسّط التسميع</div>
-                </div>
+        <!-- ملخّص التحفيظ -->
+        @if (hifzReports().length > 0) {
+          <div class="card">
+            <h3 class="sec-title">حلقات التحفيظ — {{ period.label() }}</h3>
+            <div class="stat-grid">
+              <div class="stat">
+                <div class="num">{{ ov().hifzTotals.heldSessions }}</div>
+                <div class="label">جلسة</div>
               </div>
+              <div class="stat">
+                <div class="num">{{ frac(ov().hifzTotals.attFrac) }}</div>
+                <div class="label">الحضور</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ pagesOf(ov().hifzTotals.pages) }}</div>
+                <div class="label">أوجه الحفظ الجديد</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ pct(ov().hifzTotals.avgScore) }}</div>
+                <div class="label">متوسّط التسميع</div>
+              </div>
+            </div>
 
-              @for (rep of hifzReports(); track rep.circleId) {
-                @if (hifzRows(rep).length > 0) {
-                  <h4 class="grp">{{ rep.circleName }}</h4>
-                  <div class="table-wrap">
-                    <table class="rep-table">
-                      <thead>
-                        <tr>
-                          <th>الطالب</th>
-                          <th>الحضور</th>
-                          <th>الأوجه</th>
-                          <th>المتوسّط</th>
-                          <th>سرد/اختبار</th>
+            @for (rep of hifzReports(); track rep.circleId) {
+              @if (hifzRows(rep).length > 0) {
+                <h4 class="grp">{{ rep.circleName }}</h4>
+                <div class="table-wrap">
+                  <table class="rep-table">
+                    <thead>
+                      <tr>
+                        <th>الطالب</th>
+                        <th>الحضور</th>
+                        <th>الأوجه</th>
+                        <th>المتوسّط</th>
+                        <th>سرد/اختبار</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (r of hifzRows(rep); track r.studentId) {
+                        <tr class="row-click" (click)="toggle(r.studentId)">
+                          <td class="c-name">{{ r.name }}</td>
+                          <td>{{ fraction(r) }}</td>
+                          <td>{{ pagesOf(r.pages) }}</td>
+                          <td>{{ pct(r.avgScore) }}</td>
+                          <td>{{ r.sardCount }} / {{ r.examCount }}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        @for (r of hifzRows(rep); track r.studentId) {
-                          <tr class="row-click" (click)="toggle(r.studentId)">
-                            <td class="c-name">{{ r.name }}</td>
-                            <td>{{ fraction(r) }}</td>
-                            <td>{{ r.pages }}</td>
-                            <td>{{ pct(r.avgScore) }}</td>
-                            <td>{{ r.sardCount }} / {{ r.examCount }}</td>
-                          </tr>
-                          @if (expanded() === r.studentId) {
-                            <tr>
-                              <td colspan="5" class="c-detail">
-                                @if (timeline(); as tl) {
-                                  @if (tl.days.length === 0) {
-                                    <p class="muted">لا سجلّات في هذه الفترة.</p>
-                                  } @else {
-                                    @for (d of tl.days; track d.date) {
-                                      <div class="day">
-                                        <span class="day-date">{{ dmy(d.date) }}</span>
-                                        <span class="day-state">{{ dayStatus(d) }}</span>
-                                        <span class="day-out" [class.gap]="isGap(d)">{{
-                                          dayDetail(d)
-                                        }}</span>
-                                      </div>
-                                    }
+                        @if (expanded() === r.studentId) {
+                          <tr>
+                            <td colspan="5" class="c-detail">
+                              @if (timeline(); as tl) {
+                                @if (tl.days.length === 0) {
+                                  <p class="muted">لا سجلّات في هذه الفترة.</p>
+                                } @else {
+                                  @for (d of tl.days; track d.date) {
+                                    <div class="day">
+                                      <span class="day-date">{{ dmy(d.date) }}</span>
+                                      <span class="day-state">{{ dayStatus(d) }}</span>
+                                      <span class="day-out" [class.gap]="isGap(d)">{{
+                                        dayDetail(d)
+                                      }}</span>
+                                    </div>
                                   }
                                 }
-                              </td>
-                            </tr>
-                          }
-                        }
-                      </tbody>
-                    </table>
-                  </div>
-
-                  @if (gapsOf(rep).length > 0) {
-                    <p class="alert">⚠ {{ gapsOf(rep).join(' · ') }}</p>
-                  }
-                }
-              }
-            </div>
-          }
-
-          <!-- ملخّص التجويد -->
-          @if (tajweedReports().length > 0) {
-            <div class="card">
-              <h3 class="sec-title">حلقات التجويد — {{ period.label() }}</h3>
-              <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr">
-                <div class="stat">
-                  <div class="num">{{ ov().tajweedTotals.heldSessions }}</div>
-                  <div class="label">جلسة</div>
-                </div>
-                <div class="stat">
-                  <div class="num">{{ frac(ov().tajweedTotals.attFrac) }}</div>
-                  <div class="label">الحضور</div>
-                </div>
-                <div class="stat">
-                  <div class="num">{{ ov().tajweedTotals.exams }}</div>
-                  <div class="label">اختبار</div>
-                </div>
-              </div>
-
-              @for (rep of tajweedReports(); track rep.circleId) {
-                @if (tajweedRows(rep).length > 0) {
-                  <h4 class="grp">{{ rep.circleName }}</h4>
-                  @if (rep.exams.length === 0) {
-                    <p class="muted small">لا اختبارات في هذه الفترة — الحضور فقط.</p>
-                  }
-                  <div class="table-wrap">
-                    <table class="rep-table">
-                      <thead>
-                        <tr>
-                          <th>الطالب</th>
-                          <th>الحضور</th>
-                          @for (e of rep.exams; track e.id) {
-                            <th>{{ e.name }}</th>
-                          }
-                          @if (rep.exams.length > 0) {
-                            <th>المجموع</th>
-                          }
-                        </tr>
-                      </thead>
-                      <tbody>
-                        @for (r of tajweedRows(rep); track r.studentId) {
-                          <tr>
-                            <td class="c-name">{{ r.name }}</td>
-                            <td>{{ fraction(r) }}</td>
-                            @for (e of rep.exams; track e.id) {
-                              @let cell = cellOf(r, e.id);
-                              <td
-                                [class.fail]="!!cell && cell.score !== null && !cell.passed"
-                                [class.na]="!cell"
-                              >
-                                {{
-                                  !cell
-                                    ? '·'
-                                    : cell.score === null
-                                      ? '—'
-                                      : cell.score + ' / ' + cell.totalScore
-                                }}
-                              </td>
-                            }
-                            @if (rep.exams.length > 0) {
-                              <td class="c-total">{{ r.achieved }} / {{ r.maxScore }}</td>
-                            }
+                              }
+                            </td>
                           </tr>
                         }
-                      </tbody>
-                    </table>
-                  </div>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+
+                @if (gapsOf(rep).length > 0) {
+                  <p class="alert">⚠ {{ gapsOf(rep).join(' · ') }}</p>
                 }
               }
+            }
+          </div>
+        }
+
+        <!-- ملخّص التجويد -->
+        @if (tajweedReports().length > 0) {
+          <div class="card">
+            <h3 class="sec-title">حلقات التجويد — {{ period.label() }}</h3>
+            <div class="stat-grid" style="grid-template-columns:1fr 1fr 1fr">
+              <div class="stat">
+                <div class="num">{{ ov().tajweedTotals.heldSessions }}</div>
+                <div class="label">جلسة</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ frac(ov().tajweedTotals.attFrac) }}</div>
+                <div class="label">الحضور</div>
+              </div>
+              <div class="stat">
+                <div class="num">{{ ov().tajweedTotals.exams }}</div>
+                <div class="label">اختبار</div>
+              </div>
             </div>
-          }
+
+            @for (rep of tajweedReports(); track rep.circleId) {
+              @if (tajweedRows(rep).length > 0) {
+                <h4 class="grp">{{ rep.circleName }}</h4>
+                @if (rep.exams.length === 0) {
+                  <p class="muted small">لا اختبارات في هذه الفترة — الحضور فقط.</p>
+                }
+                <div class="table-wrap">
+                  <table class="rep-table">
+                    <thead>
+                      <tr>
+                        <th>الطالب</th>
+                        <th>الحضور</th>
+                        @for (e of rep.exams; track e.id) {
+                          <th>{{ e.name }}</th>
+                        }
+                        @if (rep.exams.length > 0) {
+                          <th>المجموع</th>
+                        }
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (r of tajweedRows(rep); track r.studentId) {
+                        <tr>
+                          <td class="c-name">{{ r.name }}</td>
+                          <td>{{ fraction(r) }}</td>
+                          @for (e of rep.exams; track e.id) {
+                            @let cell = cellOf(r, e.id);
+                            <td
+                              [class.fail]="!!cell && cell.score !== null && !cell.passed"
+                              [class.na]="!cell"
+                            >
+                              {{
+                                !cell
+                                  ? '·'
+                                  : cell.score === null
+                                    ? '—'
+                                    : cell.score + ' / ' + cell.totalScore
+                              }}
+                            </td>
+                          }
+                          @if (rep.exams.length > 0) {
+                            <td class="c-total">{{ r.achieved }} / {{ r.maxScore }}</td>
+                          }
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            }
+          </div>
         }
       }
     </div>
@@ -419,13 +301,18 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
     <!-- شريط إنشاء التقرير — مُرسى مباشرةً فوق الشريط السفليّ بلا فراغ -->
     @if (!loading()) {
       <div class="report-bar">
+        @if (hasDraft()) {
+          <button type="button" class="draft-chip" (click)="clearDraft()">
+            🗑 مسح المسودّة المحفوظة
+          </button>
+        }
         <button type="button" class="btn btn-primary btn-block" (click)="dialogOpen.set(true)">
           🖨️ إنشاء تقرير
         </button>
       </div>
     }
 
-    @if (dialogOpen()) {
+    @if (dialogOpen() && !loading()) {
       <app-report-dialog
         [source]="source()"
         [teacherName]="teacherName()"
@@ -433,9 +320,9 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
         [outro]="outro()"
         [initialPeriod]="period"
         [initialCircleIds]="circleIds()"
-        [marks]="marks()"
-        [initialActivity]="tab() === 'dash'"
-        (exported)="onExported($event)"
+        [draft]="dialogDraft()"
+        (draftChange)="onDialogDraft($event)"
+        (exported)="onExported()"
         (close)="onDialogClose()"
       />
     }
@@ -568,105 +455,6 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
         فراغًا ميّتًا تحت الشريط (كان 78px سابقًا)، وهو ما بدا كزرّ معلّق في
         الهواء. الحشو السفليّ يحترم المنطقة الآمنة وحدها (شريط الإيماءات).
       */
-      .tabs {
-        display: flex;
-        gap: 6px;
-        margin-bottom: 12px;
-        padding: 4px;
-        border-radius: 12px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-      }
-      .tab {
-        flex: 1;
-        padding: 9px 6px;
-        border: none;
-        border-radius: 9px;
-        background: none;
-        font: inherit;
-        font-size: 0.86rem;
-        font-weight: 700;
-        color: var(--text-soft);
-        cursor: pointer;
-      }
-      .tab.active {
-        background: var(--primary, #0d5c3f);
-        color: #fff;
-      }
-      .tab-badge {
-        display: inline-block;
-        min-width: 18px;
-        margin-inline-start: 4px;
-        padding: 0 5px;
-        border-radius: 9px;
-        background: var(--danger);
-        color: #fff;
-        font-size: 0.7rem;
-        line-height: 18px;
-      }
-      .chip-danger.active {
-        background: var(--danger);
-        border-color: var(--danger);
-        color: #fff;
-      }
-      .mk-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 0;
-        border-bottom: 1px solid var(--border);
-      }
-      .mk-row:last-child {
-        border-bottom: none;
-      }
-      .mk-name {
-        flex: 1 1 100%;
-        font-weight: 700;
-        font-size: 0.9rem;
-      }
-      .mk-btns {
-        display: flex;
-        flex: 1 1 100%;
-        gap: 6px;
-      }
-      .mk-btn {
-        flex: 1;
-        padding: 8px 4px;
-        border: 1px solid var(--border);
-        border-radius: 9px;
-        background: var(--surface);
-        font: inherit;
-        font-size: 0.78rem;
-        font-weight: 700;
-        color: var(--text-soft);
-        cursor: pointer;
-      }
-      .mk-btn.on.st-passed {
-        background: #0d5c3f;
-        border-color: #0d5c3f;
-        color: #fff;
-      }
-      .mk-btn.on.st-completed {
-        background: #2f6f8f;
-        border-color: #2f6f8f;
-        color: #fff;
-      }
-      .mk-btn.on.st-incomplete {
-        background: var(--danger);
-        border-color: var(--danger);
-        color: #fff;
-      }
-      .mk-note {
-        flex: 1 1 100%;
-        padding: 8px 10px;
-        border: 1px solid var(--danger);
-        border-radius: 9px;
-        background: var(--surface);
-        font: inherit;
-        font-size: 0.84rem;
-        color: inherit;
-      }
       .report-bar {
         position: fixed;
         inset-inline: 0;
@@ -680,6 +468,18 @@ import { ReportDialogComponent } from '../../shared/report-dialog';
       .report-bar .btn {
         margin: 0;
       }
+      .draft-chip {
+        display: block;
+        margin: 0 auto 8px;
+        padding: 3px 12px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: none;
+        font: inherit;
+        font-size: 0.74rem;
+        color: var(--text-soft);
+        cursor: pointer;
+      }
     `,
   ],
 })
@@ -688,6 +488,8 @@ export class ReportsPage {
   private readonly reportData = inject(ReportDataService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly drafts = inject(ReportDraftService);
 
   private readonly bundle = this.reportData.bundle(this.destroyRef);
   readonly loading = this.bundle.loading;
@@ -696,88 +498,61 @@ export class ReportsPage {
   readonly dmy = dmy;
   readonly dialogOpen = signal(false);
 
-  /* ---------- المقرر والإنذارات (علامات مؤقّتة في الذاكرة) ---------- */
+  /* ---------- المسودّة المحفوظة ---------- */
 
-  readonly tab = signal<'dash' | 'marks'>('dash');
-  readonly marksMode = signal<'course' | 'warning'>('course');
-  readonly statusOrder = COURSE_STATUS_ORDER;
-  readonly statusLabels = COURSE_STATUS_LABELS;
-  readonly noteMax = WARNING_NOTE_MAX;
+  /** حالة النافذة الأخيرة — تُستعاد عند فتحها من جديد أو العودة من ملفّ الطالب. */
+  readonly dialogDraft = signal<DialogDraft | null>(null);
+
+  /** هل يوجد ما يستحقّ المسح؟ (علامات أو ضبط للنافذة) */
+  readonly hasDraft = computed(() => this.dialogDraft() !== null);
+
+  /** هل أُنشئ تقرير فعلًا أثناء فتح النافذة؟ — يُسقِط المسودّة عند إغلاقها. */
+  private exportedFlag = false;
+
+  /** أوجه الحفظ الجديد: «10 وربع» / «نصف» / «0». */
+  pagesOf(p: number): string {
+    return pagesText(p);
+  }
+
+  private draftSnapshot(): ReportDraft {
+    return {
+      v: 1,
+      period: this.period.snapshot(),
+      circleIds: this.circleOverride(),
+      studentIds: this.studentOverride(),
+      dialogOpen: this.dialogOpen(),
+      dialog: this.dialogDraft(),
+      savedAt: Date.now(),
+    };
+  }
+
+  onDialogDraft(d: DialogDraft): void {
+    this.dialogDraft.set(d);
+    // حفظ فوريّ: قد ينتقل المعلّم إلى ملفّ الطالب في اللحظة نفسها.
+    this.drafts.save(this.draftSnapshot());
+  }
+
+  /** بزرّ صريح: يمسح ضبط النافذة (وعلاماتها)، ويُبقي مرشّحات الصفحة كما هي. */
+  clearDraft(): void {
+    this.dialogDraft.set(null);
+    this.dialogOpen.set(false);
+  }
+
+  onExported(): void {
+    this.exportedFlag = true;
+  }
 
   /**
-   * لا تُحفَظ في قاعدة البيانات عمدًا: تُطبَع في التقرير الذي يُنشئه المعلّم ثمّ
-   * تزول (`onDialogClose`). المقرر لكلّ (حلقة، طالب)، والإنذار لكلّ طالب.
+   * بعد إنشاء تقرير تُمسَح المسودّة (ضبط النافذة وعلاماتها) ليبدأ المعلّم تقريرًا نظيفًا.
+   * وإن أغلقها بلا إنشاء تبقى كلّها محفوظة.
    */
-  readonly marks = signal<ReportMarks>(EMPTY_MARKS);
-  readonly marksCount = computed(
-    () => Object.keys(this.marks().course).length + Object.keys(this.marks().warnings).length,
-  );
-
-  /** هل التقرير الذي في النافذة ضمّ علامات وأُنشئ فعلًا؟ */
-  private marksPrinted = false;
-
-  courseOf(circleId: string, studentId: string): CourseStatus | null {
-    return this.marks().course[courseKey(circleId, studentId)] ?? null;
-  }
-
-  /** الضغط على الحالة المفعَّلة يلغيها. */
-  setCourse(circleId: string, studentId: string, status: CourseStatus): void {
-    const key = courseKey(circleId, studentId);
-    const course = { ...this.marks().course };
-    if (course[key] === status) delete course[key];
-    else course[key] = status;
-    this.marks.set({ ...this.marks(), course });
-  }
-
-  isWarned(studentId: string): boolean {
-    return studentId in this.marks().warnings;
-  }
-
-  toggleWarning(studentId: string): void {
-    const warnings = { ...this.marks().warnings };
-    if (studentId in warnings) delete warnings[studentId];
-    else warnings[studentId] = '';
-    this.marks.set({ ...this.marks(), warnings });
-  }
-
-  setWarningNote(studentId: string, e: Event): void {
-    const note = (e.target as HTMLInputElement).value.slice(0, WARNING_NOTE_MAX);
-    this.marks.set({ ...this.marks(), warnings: { ...this.marks().warnings, [studentId]: note } });
-  }
-
-  clearMarks(): void {
-    this.marks.set(EMPTY_MARKS);
-  }
-
-  onExported(withMarks: boolean): void {
-    if (withMarks) this.marksPrinted = true;
-  }
-
-  /** بعد إنشاء تقرير ضمّ علامات تزول العلامات ليبدأ المعلّم تقريرًا نظيفًا. */
   onDialogClose(): void {
     this.dialogOpen.set(false);
-    if (this.marksPrinted) {
-      this.marksPrinted = false;
-      this.clearMarks();
+    if (this.exportedFlag) {
+      this.exportedFlag = false;
+      this.dialogDraft.set(null);
     }
   }
-
-  /** الطلّاب النشطون في كلّ حلقة مختارة (ضمن مرشّح الطلّاب) — أساس قوائم التعليم. */
-  readonly markGroups = computed(() => {
-    const ids = new Set(this.circleIds());
-    return this.circles()
-      .filter((c) => ids.has(c.id))
-      .map((c) => ({
-        id: c.id,
-        title: circleLabel(c),
-        students: this.source()
-          .students.filter(
-            (s) => s.active && studentCircleIds(s).includes(c.id) && this.inScope(s.id),
-          )
-          .sort((a, b) => a.name.localeCompare(b.name, 'ar')),
-      }))
-      .filter((g) => g.students.length > 0);
-  });
 
   /** الشهر الجاري افتراضًا — اللوحة تفتح على ملخّص مفيد بلا أيّ ضبط. */
   readonly period = new PeriodState();
@@ -948,5 +723,22 @@ export class ReportsPage {
         .join(' · ');
     }
     return d.note || DAY_OUTCOME_LABELS[d.outcome];
+  }
+
+  constructor() {
+    // استعادة المسودّة المحفوظة (إن وُجدت) قبل أوّل رسم.
+    const d = this.drafts.load();
+    if (d) {
+      this.period.restore(d.period);
+      this.circleOverride.set(d.circleIds);
+      this.studentOverride.set(d.studentIds);
+      this.dialogDraft.set(d.dialog);
+      if (d.dialogOpen) this.dialogOpen.set(true);
+    }
+    // كلّ تغيير في حالة الصفحة يُحفَظ.
+    effect(() => {
+      const snap = this.draftSnapshot();
+      untracked(() => this.drafts.save(snap));
+    });
   }
 }

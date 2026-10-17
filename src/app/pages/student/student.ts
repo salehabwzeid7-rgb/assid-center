@@ -15,8 +15,11 @@ import {
   type SerdRecord,
 } from '../../core/models';
 import { dmy } from '../../core/format';
-import { JUZ_SURAHS, completedJuz } from '../../core/quran-data';
+import { juzIndexes } from '../../core/mushaf';
+import { completedJuzOf, memorizedAyahs } from '../../core/memorized';
 import { fracText, lifetimeAttFrac } from '../../core/reports';
+import { pagesText } from '../../core/mushaf';
+import { creditNewPages } from '../../core/new-memorization';
 import { PageHeaderComponent } from '../../shared/page-header';
 
 /**
@@ -129,7 +132,7 @@ import { PageHeaderComponent } from '../../shared/page-header';
           }
           @if (pendingExamJuz().length) {
             <a class="serd-alert exam-alert" [routerLink]="['/student', s.id, 'exam']">
-              📝 اجتاز الطالب سرد {{ pendingExamJuz().length }} جزءًا ولم يُسجَّل اختبارها — سجّل
+              📝 أكمل الطالب حفظ {{ pendingExamJuz().length }} جزءًا ولم يُسجَّل اختبارها — سجّل
               الاختبار ›
             </a>
           }
@@ -150,8 +153,8 @@ import { PageHeaderComponent } from '../../shared/page-header';
             <div class="label">لم يسمّع</div>
           </div>
           <div class="stat">
-            <div class="num">{{ totalPages() }}</div>
-            <div class="label">مجموع الأوجه</div>
+            <div class="num">{{ pagesText(totalPages()) }}</div>
+            <div class="label">أوجه الحفظ الجديد</div>
           </div>
           <div class="stat">
             <div class="num">{{ attFrac() }}</div>
@@ -482,17 +485,23 @@ export class StudentPage {
     if (done !== undefined) this.cancelWipe();
   }
 
-  private readonly memorized = computed(() => new Set(this.student()?.memorizedSurahs ?? []));
-  readonly memoCount = computed(() => this.memorized().size);
+  /** كلّ الآيات المحفوظة: البيانات الأوّليّة (سور/أجزاء) + ما نجح فيه الطالب في الحلقات. */
+  private readonly memorizedSet = computed(() =>
+    memorizedAyahs(this.student(), this.recitations() ?? []),
+  );
+  /** الأجزاء المكتملة حفظًا — كلّ آياتها محفوظة. */
+  private readonly completedJuzList = computed(() => completedJuzOf(this.memorizedSet()));
+  readonly memoCount = computed(() => (this.student()?.memorizedSurahs ?? []).length);
   readonly juzCells = computed(() => {
-    const set = this.memorized();
-    return JUZ_SURAHS.map((list, i) => {
-      const have = list.filter((n) => set.has(n)).length;
+    const set = this.memorizedSet();
+    return Array.from({ length: 30 }, (_, i) => {
+      const idx = juzIndexes(i + 1);
+      const have = idx.filter((n) => set.has(n)).length;
       return {
         juz: i + 1,
         have,
-        total: list.length,
-        state: have === 0 ? 'none' : have === list.length ? 'full' : 'partial',
+        total: idx.length,
+        state: have === 0 ? 'none' : have === idx.length ? 'full' : 'partial',
       };
     });
   });
@@ -517,13 +526,11 @@ export class StudentPage {
     return passed;
   });
   readonly revisedJuzCount = computed(
-    () =>
-      completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => this.revisedJuzSet().has(j))
-        .length,
+    () => this.completedJuzList().filter((j) => this.revisedJuzSet().has(j)).length,
   );
   /** أجزاء مكتملة الحفظ ولم تجتز السرد بعد — مصدر تنبيه السرد. */
   readonly unrevisedJuz = computed(() =>
-    completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) => !this.revisedJuzSet().has(j)),
+    this.completedJuzList().filter((j) => !this.revisedJuzSet().has(j)),
   );
 
   /**
@@ -536,19 +543,14 @@ export class StudentPage {
       new Set((this.exams() ?? []).filter((e) => (e.scope ?? 'juz') === 'juz').map((e) => e.juz)),
   );
   readonly examinedJuzCount = computed(
-    () =>
-      completedJuz(this.student()?.memorizedSurahs ?? []).filter((j) =>
-        this.examinedJuzSet().has(j),
-      ).length,
+    () => this.completedJuzList().filter((j) => this.examinedJuzSet().has(j)).length,
   );
   /**
-   * أجزاء اجتازت السرد ولم تُختبر بعد — مصدر تنبيه الاختبار (كلّ جزء مستقلّ).
-   * اختبار جزء مكتمل الحفظ لم يجتز سرده بعدُ يبقى مقفلًا فلا يظهر هنا.
+   * أجزاء مكتملة الحفظ لم تُختبر بعد — مصدر تنبيه الاختبار (كلّ جزء مستقلّ). لا علاقة
+   * للسرد: الشرط الوحيد للاختبار هو الحفظ.
    */
   readonly pendingExamJuz = computed(() =>
-    completedJuz(this.student()?.memorizedSurahs ?? []).filter(
-      (j) => this.revisedJuzSet().has(j) && !this.examinedJuzSet().has(j),
-    ),
+    this.completedJuzList().filter((j) => !this.examinedJuzSet().has(j)),
   );
 
   /** تسميعات فعليّة فقط — تستثني سجلّات «لم يسمّع». */
@@ -560,10 +562,12 @@ export class StudentPage {
   readonly notRecitedCount = computed(
     () => (this.recitations() ?? []).filter((r) => r.notRecited).length,
   );
-  readonly totalPages = computed(() => {
-    const sum = this.actualRecitations().reduce((t, r) => t + (Number(r.pages) || 0), 0);
-    return Math.round(sum * 10) / 10;
-  });
+  readonly pagesText = pagesText;
+  /**
+   * أوجه الحفظ الجديد منذ أوّل يوم في البرنامج: الناجح (٩٠٪ فأكثر) للآيات الجديدة فقط بلا
+   * تكرار، على مصحف المدينة. المحفوظ الأوّليّ والمراجعة لا يدخلان.
+   */
+  readonly totalPages = computed(() => creditNewPages(this.recitations() ?? []).pages);
   readonly sessionsCount = computed(() => this.attendance()?.length ?? 0);
   /** حصص الحلقات كلّها — مقام كسر الحضور (حلقات الطالب وحدها، من يوم التحاقه). */
   private readonly sessions = this.data.allSessions(this.destroyRef);

@@ -81,14 +81,26 @@ export const WEEKDAY_LABELS: Record<number, string> = {
 
 export const WEEKDAY_ORDER = [6, 0, 1, 2, 3, 4, 5];
 
-/** نوع التسميع */
-export type RecitationKind = 'new' | 'near_review' | 'far_review';
+/** نوع التسميع: حفظ جديد، أو مراجعة (خانة واحدة — دُمجت المراجعة القريبة والبعيدة). */
+export type RecitationKind = 'new' | 'review';
 
-export const RECITATION_KIND_LABELS: Record<RecitationKind, string> = {
+/**
+ * القيم المخزَّنة في سجلّات قديمة قبل دمج المراجعة القريبة والبعيدة. لا يكتبها
+ * التطبيق بعد اليوم، لكنّها تُقرأ كما هي من قاعدة البيانات فتُوحَّد عبر `kindOf`.
+ */
+export type StoredRecitationKind = RecitationKind | 'near_review' | 'far_review';
+
+export const RECITATION_KIND_LABELS: Record<StoredRecitationKind, string> = {
   new: 'حفظ جديد',
-  near_review: 'مراجعة قريبة',
-  far_review: 'مراجعة بعيدة',
+  review: 'مراجعة',
+  near_review: 'مراجعة',
+  far_review: 'مراجعة',
 };
+
+/** نوع التسميع الموحَّد: كلّ ما ليس «حفظ جديد» مراجعة (يشمل القيم القديمة). */
+export function kindOf(r: { kind: StoredRecitationKind }): RecitationKind {
+  return r.kind === 'new' ? 'new' : 'review';
+}
 
 /* ==========================================================================
    التقييم بالنسبة المئويّة (٠..١٠٠) — بلا تقديرات نصّيّة.
@@ -285,8 +297,17 @@ export interface Student extends Owned {
   level?: string;
   /** المقرر الحالي (وصف حر) */
   currentPlan?: string;
-  /** أرقام السور المحفوظة (1..114) — سجلّ المقرّر القرآنيّ للطالب */
+  /**
+   * أرقام السور المحفوظة كاملةً (1..114) — **بيانات أوّليّة** للمقرّر القرآنيّ، تُضاف إليها
+   * السور التي يكمل الطالب حفظها في الحلقات. اكتمال الجزء يُحسب بالآيات لا بهذه السور
+   * (راجع core/memorized.ts).
+   */
   memorizedSurahs?: number[];
+  /**
+   * أرقام الأجزاء المحفوظة كاملةً (1..30) — **بيانات أوّليّة** للطالب الذي حفظ جزءًا يمتدّ
+   * بين سورتين (كالجزء الأوّل: الفاتحة + البقرة حتى ١٤١) دون أن تكتمل سورة الحدّ.
+   */
+  memorizedJuz?: number[];
   active: boolean;
   createdAt: number;
 }
@@ -342,6 +363,13 @@ export interface AttendanceRecord extends Owned {
   createdAt: number;
 }
 
+/** مقطع داخل سورة واحدة — آيات تصاعديّة من `from` إلى `to` شاملتين. */
+export interface AyahSegment {
+  surah: number;
+  from: number;
+  to: number;
+}
+
 /** سجل التسميع (مقدار الحفظ وما سُمِع) */
 export interface RecitationRecord extends Owned {
   id: string;
@@ -350,13 +378,30 @@ export interface RecitationRecord extends Owned {
   /** الجلسة المرتبطة (إن وُجدت) */
   sessionId?: string;
   date: string;
-  kind: RecitationKind;
+  kind: StoredRecitationKind;
   fromSurah: number;
   fromAyah: number;
   toSurah: number;
   toAyah: number;
-  /** عدد الأوجه (الصفحات) المسمَّعة */
+  /**
+   * مقاطع بحسب السور — تُحفَظ **حين يكون ترتيب السور عكسيًّا** (من النبأ إلى الإنسان:
+   * النبأ ثمّ المرسلات ثمّ الإنسان) أو عدّلها المعلّم سورةً سورة. غيابها يعني مقطعًا متّصلًا
+   * تصاعديًّا من (`fromSurah`،`fromAyah`) إلى (`toSurah`،`toAyah`). عند وجودها تكون
+   * `fromSurah/fromAyah` بداية أوّل مقطع و`toSurah/toAyah` نهاية آخر مقطع (للعرض والتوافق).
+   * الآيات داخل كلّ سورة تصاعديّة دائمًا؛ ما بين المقاطع من فراغ لا يُحسب مسمَّعًا.
+   */
+  segments?: AyahSegment[];
+  /**
+   * أوجه **المؤقّت** (٤ دقائق لكلّ وجه) — تضبط زمن التسميع المتوقّع فقط، ولا علاقة لها
+   * بعدد الأوجه المحسوبة في التقارير (راجع `recitedPages`).
+   */
   pages: number;
+  /**
+   * أوجه الحفظ الجديد كما حدّدها المعلّم بنفسه — تُحفَظ **فقط** حين يعدّل الرقم المقترح،
+   * ولرقمه الأولويّة القصوى. غيابها يعني: يُحسب العدد تلقائيًّا من الآيات الجديدة وفق
+   * مصحف المدينة (راجع core/new-memorization.ts). لا تُعتمَد إلّا للحفظ الجديد الناجح.
+   */
+  recitedPages?: number;
   /** درجة التسميع ٠..١٠٠ (عتبة النجاح ٩٠٪) */
   score: number;
   /** @deprecated تقدير نصّيّ قديم — للقراءة فقط */
@@ -470,12 +515,11 @@ export const EXAM_SCOPE_LABELS: Record<ExamScope, string> = {
 };
 
 /**
- * سجلّ اختبار — اختبار جزء مفرد فور اكتمال حفظه، أو اختبار مجمّع لكتلة ٣
- * أجزاء متتالية بعد اختبار كلٍّ منها منفردًا (مثل السرد تمامًا).
+ * سجلّ اختبار — اختبار جزء مفرد، أو اختبار مجمّع لكتلة ٣ أجزاء ثابتة (مثل السرد تمامًا).
  *
- * الشرط الأساسيّ: لا يُفتح اختبار جزء إلّا بعد اكتمال حفظه (`completedJuz`)،
- * ولا يُفتح الاختبار المجمّع لكتلة إلّا بعد اختبار أجزائها الثلاثة فرديًّا —
- * يُحسَب هذا كلّه في `analyzeExam()` (core/exam.ts)، لا يُخزَّن كحقل مباشر.
+ * الشرط الوحيد: اكتمال حفظ الجزء (`completedJuz`) — أو أجزاء الكتلة الثلاثة للمجمّع. لا
+ * ترابط مع السرد ولا مع الاختبارات الفرديّة: يُحسَب ما هو متاح في `analyzeExam()`
+ * (core/exam.ts)، ولا يُخزَّن كحقل مباشر.
  */
 export interface ExamRecord extends Owned {
   id: string;

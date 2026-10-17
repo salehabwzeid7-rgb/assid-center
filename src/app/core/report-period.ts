@@ -22,6 +22,14 @@ export interface Period {
   to: string;
 }
 
+/** حالة المدى كما تُحفَظ في المسودّة. */
+export interface PeriodSnapshot {
+  kind: PeriodKind;
+  anchor: string;
+  from: string;
+  to: string;
+}
+
 /** `Date` → «YYYY-MM-DD» بتوقيت الجهاز المحلّيّ (لا UTC — تاريخ الجلسة محلّيّ). */
 export function isoOf(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
