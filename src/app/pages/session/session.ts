@@ -1311,8 +1311,7 @@ export class SessionPage {
           const r = e.rec;
           // أوجه الحفظ الجديد المعتمدة لهذه المحاولة فقط (الناجحة وللآيات الجديدة).
           const credited = this.sessionCredit().byRecord.get(r.id);
-          const pagesTxt =
-            credited === undefined ? '' : ` — ${pagesText(credited, true)}`;
+          const pagesTxt = credited === undefined ? '' : ` — ${pagesText(credited, true)}`;
           lines.push(
             `• ${n}التسميع (${e.label}): ${e.score}٪ (${e.verdict}) (${e.detail})${pagesTxt}${note}`,
           );
